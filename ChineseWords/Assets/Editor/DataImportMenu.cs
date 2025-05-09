@@ -8,7 +8,7 @@ public static class DataImportMenu
     public static void ImportFromText()
     {
         // 1) 读文件
-        string path = Application.dataPath + "/Resources/Questions/words.txt";
+        string path = Application.dataPath + "/StreamingAssets/words.txt";
         if (!File.Exists(path))
         {
             Debug.LogError("找不到词表文件：" + path);
