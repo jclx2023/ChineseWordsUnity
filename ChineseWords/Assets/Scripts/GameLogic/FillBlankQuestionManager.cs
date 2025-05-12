@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -9,48 +9,96 @@ using Core;
 namespace GameLogic
 {
     /// <summary>
-    /// Ìî¿ÕÌâ¹ÜÀíÆ÷£¬¼Ì³Ğ»ùÀà²¢¸´ÓÃÔ­ÓĞµÄ DB ²éÑ¯ÓëÌâ¸ÉÉú³É/Ğ£ÑéÂß¼­
+    /// å¡«ç©ºé¢˜ç®¡ç†å™¨ï¼Œç»§æ‰¿åŸºç±»å¹¶å¤ç”¨åŸæœ‰çš„ DB æŸ¥è¯¢ä¸é¢˜å¹²ç”Ÿæˆ/æ ¡éªŒé€»è¾‘
     /// </summary>
     public class FillBlankQuestionManager : QuestionManagerBase
     {
-        [Header("Êı¾İ¿âÂ·¾¶£¨StreamingAssets/Temp.db£©")]
+        [Header("æ•°æ®åº“è·¯å¾„ï¼ˆStreamingAssets/Temp.dbï¼‰")]
         private string dbPath;
 
-        [Header("UI Components")]
-        [SerializeField] private TMP_Text questionText;    // ¡°_¹«__¡±ĞÎÊ½
-        [SerializeField] private TMP_InputField answerInput;     // Íæ¼ÒÊäÈë
-        [SerializeField] private Button submitButton;    // Ìá½»
-        [SerializeField] private Button surrenderButton; // Í¶½µ
-        [SerializeField] private TMP_Text feedbackText;    // ÕıÎó/Í¶½µÌáÊ¾
+        private GameObject uiRoot;
 
-        // µ±Ç°Ìâ²ÎÊı£¬ÓÃÓÚÉú³ÉÌâ¸ÉºÍĞ£Ñé´ğ°¸
+        [Header("UI Components")]
+        [SerializeField] private TMP_Text questionText;    // â€œ_å…¬__â€å½¢å¼
+        [SerializeField] private TMP_InputField answerInput;     // ç©å®¶è¾“å…¥
+        [SerializeField] private Button submitButton;    // æäº¤
+        [SerializeField] private Button surrenderButton; // æŠ•é™
+        [SerializeField] private TMP_Text feedbackText;    // æ­£è¯¯/æŠ•é™æç¤º
+
+        // å½“å‰é¢˜å‚æ•°ï¼Œç”¨äºç”Ÿæˆé¢˜å¹²å’Œæ ¡éªŒç­”æ¡ˆ
         private string selectedChar;
         private int selectedPos;
         private int selectedLen;
 
         void Awake()
         {
-            // ¹¹Ôì DB Â·¾¶
-            dbPath = Application.streamingAssetsPath + "/Temp.db";
+
         }
 
         void Start()
         {
-            // 1. °ó¶¨°´Å¥ÊÂ¼ş
+            // 1. æ„é€  DB è·¯å¾„
+            dbPath = Application.streamingAssetsPath + "/Temp.db";
+
+            // 2. åŠ è½½ Prefab
+            var prefab = Resources.Load<GameObject>("Prefabs/InGame/FillBlankUI");
+
+            // 3. å®ä¾‹åŒ–
+            uiRoot = Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            if (uiRoot == null)
+            {
+                Debug.LogError("ã€FillBlankã€‘Instantiate å¤±è´¥ï¼Œè¿”å›äº† null");
+                return;
+            }
+
+            // 4. æ‰¾åˆ° UI æ ¹èŠ‚ç‚¹ï¼ˆå‡è®¾ä½ çš„ Prefab é‡Œæœ‰ä¸€ä¸ªåä¸º â€œUIâ€ çš„å­ç‰©ä½“ï¼‰
+            var uiTrans = uiRoot.transform.Find("UI");
+            if (uiTrans == null)
+            {
+                Debug.LogError($"ã€FillBlankã€‘åœ¨ {uiRoot.name} ä¸‹æ‰¾ä¸åˆ°åä¸º UI çš„å­ç‰©ä½“ï¼Œå­ç‰©ä½“åˆ—è¡¨å¦‚ä¸‹ï¼š");
+                foreach (Transform t in uiRoot.transform)
+                    Debug.Log($"    â€¢ {t.name}");
+                return;
+            }
+
+            // 5. åœ¨ UI æ ¹èŠ‚ç‚¹ä¸‹ï¼Œå†æŒ‰åç§°æŸ¥æ‰¾å„ç»„ä»¶
+            questionText = uiTrans.Find("QuestionText")?.GetComponent<TMP_Text>();
+            answerInput = uiTrans.Find("AnswerInput")?.GetComponent<TMP_InputField>();
+            submitButton = uiTrans.Find("SubmitButton")?.GetComponent<Button>();
+            surrenderButton = uiTrans.Find("SurrenderButton")?.GetComponent<Button>();
+            feedbackText = uiTrans.Find("Feedback")?.GetComponent<TMP_Text>();
+
+            // 6. æ£€æŸ¥æ¯ä¸ªç»„ä»¶æ˜¯å¦éƒ½ç»‘å®šåˆ°äº†
+            if (questionText == null) Debug.LogError("æ‰¾ä¸åˆ° QuestionText æˆ– æ²¡æŒ‚ TMP_Text ç»„ä»¶");
+            if (answerInput == null) Debug.LogError("æ‰¾ä¸åˆ° AnswerInput æˆ– æ²¡æŒ‚ TMP_InputField ç»„ä»¶");
+            if (submitButton == null) Debug.LogError("æ‰¾ä¸åˆ° SubmitButton æˆ– æ²¡æŒ‚ Button ç»„ä»¶");
+            if (surrenderButton == null) Debug.LogError("æ‰¾ä¸åˆ° SurrenderButton æˆ– æ²¡æŒ‚ Button ç»„ä»¶");
+            if (feedbackText == null) Debug.LogError("æ‰¾ä¸åˆ° FeedbackText æˆ– æ²¡æŒ‚ TMP_Text ç»„ä»¶");
+            // å¦‚æœæœ‰ä»»æ„ä¸€ä¸ª nullï¼Œå°±ç›´æ¥ returnï¼Œé¿å…åç»­ OnClick ç»‘å®šä¹ŸæŠ¥é”™
+            if (questionText == null || answerInput == null || submitButton == null || surrenderButton == null || feedbackText == null)
+                return;
+
+            // 7. ç»‘å®šæŒ‰é’®äº‹ä»¶
+            // åœ¨ Start() é‡Œï¼ŒAddListener ä¹‹å‰ï¼š
+            submitButton.onClick.RemoveAllListeners();
+            surrenderButton.onClick.RemoveAllListeners();
+
+            // å†ç»‘å®š
             submitButton.onClick.AddListener(OnSubmit);
             surrenderButton.onClick.AddListener(OnSurrender);
-            // 2. Çå¿ÕÌáÊ¾
-            feedbackText.text = string.Empty;
-            // 3. µÚÒ»µÀÌâ
+
+
+            // 8. åˆå§‹åŒ–æ˜¾ç¤º
+            feedbackText.text = "";
             LoadQuestion();
         }
 
         /// <summary>
-        /// ÖØĞ´£º¼ÓÔØÒ»µÀĞÂÌâ
+        /// é‡å†™ï¼šåŠ è½½ä¸€é“æ–°é¢˜
         /// </summary>
         public override void LoadQuestion()
         {
-            // 1. Ëæ»úÑ¡´Ê
+            // 1. éšæœºé€‰è¯
             string connStr = "URI=file:" + dbPath;
             string wordText = null;
             int wordLen = 0;
@@ -75,7 +123,7 @@ namespace GameLogic
                 conn.Close();
             }
 
-            // 2. Ëæ»úÌôÒ»¸ö×ÖµÄÎ»ÖÃ
+            // 2. éšæœºæŒ‘ä¸€ä¸ªå­—çš„ä½ç½®
             int pos = Random.Range(0, wordLen);
             string ch = wordText.Substring(pos, 1);
 
@@ -83,67 +131,66 @@ namespace GameLogic
             selectedPos = pos;
             selectedLen = wordLen;
 
-            // 3. Éú³É²¢ÏÔÊ¾Ìâ¸É
+            // 3. ç”Ÿæˆå¹¶æ˜¾ç¤ºé¢˜å¹²
             questionText.text = GeneratePattern(selectedChar, selectedPos, selectedLen);
 
-            // ÖØÖÃÊäÈë¿òÓëÌáÊ¾
+            // é‡ç½®è¾“å…¥æ¡†ä¸æç¤º
             answerInput.text = string.Empty;
             answerInput.ActivateInputField();
             feedbackText.text = string.Empty;
         }
 
         /// <summary>
-        /// ÖØĞ´£ºĞ£ÑéÍæ¼Ò´ğ°¸
+        /// é‡å†™ï¼šæ ¡éªŒç©å®¶ç­”æ¡ˆ
         /// </summary>
         public override void CheckAnswer(string answer)
         {
-            // µ÷ÓÃÔ­ÓĞµÄ SQL ÑéÖ¤Âß¼­
+            // è°ƒç”¨åŸæœ‰çš„ SQL éªŒè¯é€»è¾‘
             bool isRight = ValidateAnswer(answer.Trim());
-            // Í¨ÖªÍâ²¿£¨Èç¹ûÓĞ¶©ÔÄ£©
+            // é€šçŸ¥å¤–éƒ¨ï¼ˆå¦‚æœæœ‰è®¢é˜…ï¼‰
             OnAnswerResult?.Invoke(isRight);
-            // ÏÔÊ¾·´À¡²¢ÑÓ³Ù»»Ìâ
+            // æ˜¾ç¤ºåé¦ˆå¹¶å»¶è¿Ÿæ¢é¢˜
             StartCoroutine(ShowFeedbackThenNext(isRight));
         }
 
-        // µã»÷¡°Ìá½»¡±
+        // ç‚¹å‡»â€œæäº¤â€
         private void OnSubmit()
         {
             var ans = answerInput.text.Trim();
             if (string.IsNullOrEmpty(ans)) return;
-            // Í£Ö¹Ö®Ç°µÄÇĞÌâĞ­³Ì
+            // åœæ­¢ä¹‹å‰çš„åˆ‡é¢˜åç¨‹
             StopAllCoroutines();
             CheckAnswer(ans);
         }
 
-        // µã»÷¡°Í¶½µ¡±
+        // ç‚¹å‡»â€œæŠ•é™â€
         private void OnSurrender()
         {
             StopAllCoroutines();
-            // Í¶½µµ±×÷´íÎó´¦Àí
+            // æŠ•é™å½“ä½œé”™è¯¯å¤„ç†
             OnAnswerResult?.Invoke(false);
             StartCoroutine(ShowSurrenderThenNext());
         }
 
-        // ÕıÎó·´À¡Ğ­³Ì
+        // æ­£è¯¯åé¦ˆåç¨‹
         private IEnumerator ShowFeedbackThenNext(bool isRight)
         {
-            feedbackText.text = isRight ? "»Ø´ğÕıÈ·!" : "»Ø´ğ´íÎó!";
+            feedbackText.text = isRight ? "å›ç­”æ­£ç¡®!" : "å›ç­”é”™è¯¯!";
             feedbackText.color = isRight ? Color.green : Color.red;
             yield return new WaitForSeconds(1f);
             LoadQuestion();
         }
 
-        // Í¶½µ·´À¡Ğ­³Ì
+        // æŠ•é™åé¦ˆåç¨‹
         private IEnumerator ShowSurrenderThenNext()
         {
-            feedbackText.text = "ÒÑÍ¶½µ£¬½øÈëÏÂÒ»Ìâ";
+            feedbackText.text = "å·²æŠ•é™ï¼Œè¿›å…¥ä¸‹ä¸€é¢˜";
             feedbackText.color = Color.yellow;
             yield return new WaitForSeconds(0.5f);
-            LoadQuestion();
         }
 
         /// <summary>
-        /// Ô­Ê¼µÄ SQL Ğ£Ñé£º¼ì²é WordChar+Word ±íÖĞÊÇ·ñ´æÔÚ¸Ã´ÊÔÚ¸ÃÎ»ÖÃ°üº¬¸Ã×Ö
+        /// åŸå§‹çš„ SQL æ ¡éªŒï¼šæ£€æŸ¥ WordChar+Word è¡¨ä¸­æ˜¯å¦å­˜åœ¨è¯¥è¯åœ¨è¯¥ä½ç½®åŒ…å«è¯¥å­—
         /// </summary>
         private bool ValidateAnswer(string answer)
         {
@@ -178,7 +225,7 @@ namespace GameLogic
         }
 
         /// <summary>
-        /// Ô­Ê¼µÄÌâ¸ÉÉú³É£º°ÑËùÓĞÎ»ÖÃÌî¡°_¡±£¬Ö»ÓĞÑ¡ÖĞÎ»ÖÃÏÔÊ¾¸Ã×Ö
+        /// åŸå§‹çš„é¢˜å¹²ç”Ÿæˆï¼šæŠŠæ‰€æœ‰ä½ç½®å¡«â€œ_â€ï¼Œåªæœ‰é€‰ä¸­ä½ç½®æ˜¾ç¤ºè¯¥å­—
         /// </summary>
         private string GeneratePattern(string ch, int pos, int len)
         {
