@@ -21,3 +21,4 @@ sysinfo.txt
 # OS files
 .DS_Store
 *.swp
+ChineseWords/Assets/StreamingAssets/dictionary.db
