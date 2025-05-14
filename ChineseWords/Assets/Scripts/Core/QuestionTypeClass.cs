@@ -8,5 +8,6 @@ namespace Core
         HandWriting,
         IdiomChain,
         TextPinyin,
+        HardFill,
     }
 }

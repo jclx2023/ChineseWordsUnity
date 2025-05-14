@@ -39,6 +39,11 @@ public class MainMenuManager : MonoBehaviour
         GameManager.Instance.SetQuestionType(QuestionType.TextPinyin);
         SceneManager.LoadScene("Game");
     }
+    public void OnClick_HardFill()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.HardFill);
+        SceneManager.LoadScene("Game");
+    }
 
     public void OnClick_Exit()
     {

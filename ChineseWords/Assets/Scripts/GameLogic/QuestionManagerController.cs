@@ -31,6 +31,10 @@ public class QuestionManagerController : MonoBehaviour
             case QuestionType.TextPinyin:
                 manager = gameObject.AddComponent<TextPinyinQuestionManager>();
                 break;
+            case QuestionType.HardFill:
+                manager = gameObject.AddComponent<HardFillQuestionManager>();
+                break;
+
             default:
                 Debug.LogError("未实现的题型：" + GameManager.Instance.SelectedType);
                 return;
