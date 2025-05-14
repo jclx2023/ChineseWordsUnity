@@ -5,9 +5,15 @@ using System.Collections;
 using System.Data;
 using Mono.Data.Sqlite;
 using Core;
+using System.Runtime.InteropServices;
+using System;
+
+
 
 namespace GameLogic
+
 {
+
     /// <summary>
     /// 填空题管理器，继承基类并复用原有的 DB 查询与题干生成/校验逻辑
     /// </summary>
@@ -39,6 +45,32 @@ namespace GameLogic
         {
             // 1. 构造 DB 路径
             dbPath = Application.streamingAssetsPath + "/Temp.db";
+#if UNITY_STANDALONE_WIN
+            // 检查数据库文件是否存在
+            if (!System.IO.File.Exists(dbPath))
+            {
+                MessageBox(System.IntPtr.Zero, "找不到题库文件 Temp.db，请检查游戏目录下 StreamingAssets 是否包含该文件。", "无法启动游戏", 0);
+                Application.Quit();
+                return;
+            }
+
+            // 尝试连接数据库
+            try
+            {
+                using (var conn = new Mono.Data.Sqlite.SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    Debug.Log("✅ 数据库连接成功！");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                MessageBox(System.IntPtr.Zero, "数据库连接失败：" + ex.Message, "数据库错误", 0);
+                Application.Quit();
+                return;
+            }
+#endif
+
 
             // 2. 加载 Prefab
             var prefab = Resources.Load<GameObject>("Prefabs/InGame/FillBlankUI");
@@ -124,7 +156,7 @@ namespace GameLogic
             }
 
             // 2. 随机挑一个字的位置
-            int pos = Random.Range(0, wordLen);
+            int pos = UnityEngine.Random.Range(0, wordLen);
             string ch = wordText.Substring(pos, 1);
 
             selectedChar = ch;
@@ -234,5 +266,8 @@ namespace GameLogic
             arr[pos] = ch[0];
             return new string(arr);
         }
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern int MessageBox(IntPtr hWnd, String text, String caption, int options);
+
     }
 }
