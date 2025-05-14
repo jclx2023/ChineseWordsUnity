@@ -2,6 +2,7 @@ using UnityEngine;
 using Core;    // QuestionType, GameManager
 using GameLogic;
 using GameLogic.FillBlank;
+using GameLogic.TorF;
 
 public class QuestionManagerController : MonoBehaviour
 {
@@ -34,7 +35,15 @@ public class QuestionManagerController : MonoBehaviour
             case QuestionType.HardFill:
                 manager = gameObject.AddComponent<HardFillQuestionManager>();
                 break;
-
+            case QuestionType.SoftFill:
+                manager = gameObject.AddComponent<SoftFillQuestionManager>();
+                break;
+            case QuestionType.AbbrFill:
+                manager = gameObject.AddComponent<AbbrFillQuestionManager>();
+                break;
+            case QuestionType.SentimentTorF:
+                manager = gameObject.AddComponent<SentimentTorFQuestionManager>();
+                break;
             default:
                 Debug.LogError("未实现的题型：" + GameManager.Instance.SelectedType);
                 return;

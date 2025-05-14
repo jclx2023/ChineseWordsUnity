@@ -9,5 +9,8 @@ namespace Core
         IdiomChain,
         TextPinyin,
         HardFill,
+        SoftFill,
+        AbbrFill,
+        SentimentTorF,
     }
 }

@@ -45,7 +45,7 @@ namespace GameLogic
         private void Start()
         {
             Debug.Log("[TextPinyin] Start: ≥ı ºªØ UI");
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/TextPinyinUI");
+            var prefab = Resources.Load<GameObject>("Prefabs/InGame/HardFillUI");
             var uiRoot = Instantiate(prefab);
             var uiTrans = uiRoot.transform.Find("UI");
 

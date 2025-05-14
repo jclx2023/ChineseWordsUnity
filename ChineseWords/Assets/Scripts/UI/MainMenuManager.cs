@@ -44,6 +44,21 @@ public class MainMenuManager : MonoBehaviour
         GameManager.Instance.SetQuestionType(QuestionType.HardFill);
         SceneManager.LoadScene("Game");
     }
+    public void OnClick_SoftFill()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.SoftFill);
+        SceneManager.LoadScene("Game");
+    }
+    public void OnClick_AbbrFill()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.AbbrFill);
+        SceneManager.LoadScene("Game");
+    }
+    public void OnClick_SentimentTorF()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.SentimentTorF);
+        SceneManager.LoadScene("Game");
+    }
 
     public void OnClick_Exit()
     {

@@ -64,7 +64,7 @@ namespace GameLogic.FillBlank
         private void Start()
         {
             // 实例化 UI Prefab 并绑定组件（与你原代码一致）
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/IdiomChainUI");
+            var prefab = Resources.Load<GameObject>("Prefabs/InGame/HardFillUI");
             var uiRoot = Instantiate(prefab);
             var uiTrans = uiRoot.transform.Find("UI");
             questionText = uiTrans.Find("QuestionText").GetComponent<TMP_Text>();
