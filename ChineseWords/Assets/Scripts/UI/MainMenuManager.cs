@@ -29,6 +29,17 @@ public class MainMenuManager : MonoBehaviour
         GameManager.Instance.SetQuestionType(QuestionType.HandWriting);
         SceneManager.LoadScene("Game");
     }
+    public void OnClick_IdiomChain()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.IdiomChain);
+        SceneManager.LoadScene("Game");
+    }
+    public void OnClick_TextPinyin()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.TextPinyin);
+        SceneManager.LoadScene("Game");
+    }
+
     public void OnClick_Exit()
     {
         // 如果是在编辑器里，直接停止播放

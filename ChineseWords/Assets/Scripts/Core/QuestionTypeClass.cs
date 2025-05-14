@@ -6,5 +6,7 @@ namespace Core
         Choose, // ักิ๑ฬโ
         TorF,
         HandWriting,
+        IdiomChain,
+        TextPinyin,
     }
 }

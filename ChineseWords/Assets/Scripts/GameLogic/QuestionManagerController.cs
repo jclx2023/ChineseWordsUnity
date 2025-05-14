@@ -1,6 +1,7 @@
 using UnityEngine;
 using Core;    // QuestionType, GameManager
 using GameLogic;
+using GameLogic.FillBlank;
 
 public class QuestionManagerController : MonoBehaviour
 {
@@ -23,6 +24,12 @@ public class QuestionManagerController : MonoBehaviour
                 break;
             case QuestionType.HandWriting:
                 manager = gameObject.AddComponent<HandWritingQuestionManager>();
+                break;
+            case QuestionType.IdiomChain:
+                manager = gameObject.AddComponent<IdiomChainQuestionManager>();
+                break;
+            case QuestionType.TextPinyin:
+                manager = gameObject.AddComponent<TextPinyinQuestionManager>();
                 break;
             default:
                 Debug.LogError("未实现的题型：" + GameManager.Instance.SelectedType);
