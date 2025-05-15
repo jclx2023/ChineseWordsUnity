@@ -10,6 +10,7 @@ public class QuestionManagerController : MonoBehaviour
 {
     private QuestionManagerBase manager;
     private TimerManager timerManager;
+    [SerializeField] private PlayerHealthManager hpManager;
 
     [Header("超时后延迟下一题时长")]
     [Tooltip("答题超时或回答后，等待多长时间再出下一题")]
@@ -55,6 +56,12 @@ public class QuestionManagerController : MonoBehaviour
             case QuestionType.SimularWordChoice:
                 manager = gameObject.AddComponent<SimularWordChoiceQuestionManager>();
                 break;
+            case QuestionType.UsageTorF:
+                manager = gameObject.AddComponent<UsageTorFQuestionManager>();
+                break;
+            case QuestionType.ExplanationChoice:
+                manager = gameObject.AddComponent<ExplanationChoiceQuestionManager>();
+                break;
             default:
                 Debug.LogError("未实现的题型：" + GameManager.Instance.SelectedType);
                 return;
@@ -64,14 +71,11 @@ public class QuestionManagerController : MonoBehaviour
         manager.OnAnswerResult += HandleAnswerResult;
 
         // 3. 获取并订阅 TimerManager 的超时事件
+        hpManager = GetComponent<PlayerHealthManager>();
         timerManager = GetComponent<TimerManager>();
-        if (timerManager == null)
-            Debug.LogError("QuestionManagerController：缺少 TimerManager 组件，请挂在同一物体上");
-        else
-            timerManager.OnTimeUp += HandleTimeUp;
+        timerManager.OnTimeUp += HandleTimeUp;            // ② 订阅超时
+
         StartCoroutine(DelayedFirstQuestion());
-        // 4. 首次出题并启动计时
-        //LoadNextQuestion();
     }
     private IEnumerator DelayedFirstQuestion()
     {
@@ -84,25 +88,23 @@ public class QuestionManagerController : MonoBehaviour
     /// </summary>
     private void HandleAnswerResult(bool isCorrect)
     {
-        // 回答后立刻停止计时
+        Debug.Log($"[QMC] HandleAnswerResult 收到 isCorrect={isCorrect}");
         timerManager.StopTimer();
-
-        if (isCorrect)
-            Debug.Log("回答正确，扣血逻辑放这里");
-        else
-            Debug.Log("回答错误，扣血逻辑放这里");
-
-        // 延迟一会再出下一题
+        if (!isCorrect) hpManager.HPHandleAnswerResult(false);
         Invoke(nameof(LoadNextQuestion), timeUpDelay);
     }
+
 
     /// <summary>
     /// 当计时器倒计时结束时，视为答错
     /// </summary>
     private void HandleTimeUp()
     {
-        Debug.Log("倒计时结束，视为回答错误");
-        HandleAnswerResult(false);
+        timerManager.StopTimer();
+
+        manager.OnAnswerResult?.Invoke(false);           // 走答题错误的统一通道
+
+        Invoke(nameof(LoadNextQuestion), timeUpDelay);
     }
 
     /// <summary>

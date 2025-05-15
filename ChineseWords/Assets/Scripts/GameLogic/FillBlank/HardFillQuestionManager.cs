@@ -66,7 +66,7 @@ namespace GameLogic
             surrenderButton.onClick.AddListener(OnSurrender);
 
             feedbackText.text = string.Empty;
-            LoadQuestion();
+            //LoadQuestion();
         }
 
         private void OnSurrender()

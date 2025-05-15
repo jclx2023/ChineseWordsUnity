@@ -44,7 +44,7 @@ public class PlayerHealthManager : MonoBehaviour
         questionManager = GetComponent<QuestionManagerBase>();
         if (questionManager != null)
         {
-            questionManager.OnAnswerResult += HandleAnswerResult;
+            //questionManager.OnAnswerResult += HPHandleAnswerResult;
         }
         else
         {
@@ -52,11 +52,12 @@ public class PlayerHealthManager : MonoBehaviour
         }
     }
 
-    private void HandleAnswerResult(bool isCorrect)
+    public void HPHandleAnswerResult(bool isCorrect)
     {
         // 4. 如果答错则扣血并更新 UI
         if (!isCorrect)
         {
+            Debug.LogError("掉血了");
             currentHealth -= damagePerWrong;
             UpdateHealthUI();
 
@@ -64,6 +65,7 @@ public class PlayerHealthManager : MonoBehaviour
             if (currentHealth <= 0)
                 GameOver();
         }
+        return;
     }
 
     private void UpdateHealthUI()

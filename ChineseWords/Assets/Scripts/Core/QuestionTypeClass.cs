@@ -13,5 +13,7 @@ namespace Core
         AbbrFill,
         SentimentTorF,
         SimularWordChoice,
+        UsageTorF,
+        ExplanationChoice,
     }
 }

@@ -18,6 +18,7 @@ namespace GameLogic.FillBlank
         [SerializeField] private Button submitButton;
         [SerializeField] private TMP_Text feedbackText;
         [SerializeField] private Button surrenderButton;
+        [SerializeField] private TimerManager timerManager;
 
         [Header("成语频率区间")]
         [SerializeField] private int minFreq = 0;
@@ -73,13 +74,15 @@ namespace GameLogic.FillBlank
             feedbackText = uiTrans.Find("FeedbackText").GetComponent<TMP_Text>();
             surrenderButton = uiTrans.Find("SurrenderButton").GetComponent<Button>();
             surrenderButton.onClick.AddListener(() => {
-                feedbackText.text = "";   // 可选：清空提示
-                LoadQuestion();           // 重新加载新题
+                StopAllCoroutines();                     // 取消任何正在进行的反馈协程
+                feedbackText.text = "超时！";
+                OnAnswerResult?.Invoke(false);           // 通知外层：回答错误
             });
             submitButton.onClick.AddListener(OnSubmit);
+            timerManager = GetComponent<TimerManager>();
             feedbackText.text = "";
 
-            LoadQuestion();  // 只在这里调用一次
+            //LoadQuestion();  // 只在这里调用一次
         }
 
         /// <summary>
@@ -87,6 +90,7 @@ namespace GameLogic.FillBlank
         /// </summary>
         public override void LoadQuestion()
         {
+            Debug.Log("加载一次");
             // 随机选一个
             int idx = Random.Range(0, firstCandidates.Count);
             currentIdiom = firstCandidates[idx];
@@ -146,6 +150,8 @@ namespace GameLogic.FillBlank
                 feedbackText.text = "回答正确！";
                 currentIdiom = answer;
                 // 直接复用 ShowQuestion，无需再次 LoadQuestion()
+                timerManager.StopTimer();
+                timerManager.StartTimer();
                 Invoke(nameof(ShowNext), 0.5f);
             }
             else

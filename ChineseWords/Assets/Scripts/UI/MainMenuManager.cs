@@ -64,6 +64,16 @@ public class MainMenuManager : MonoBehaviour
         GameManager.Instance.SetQuestionType(QuestionType.SimularWordChoice);
         SceneManager.LoadScene("Game");
     }
+    public void OnClick_UsageTorF()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.UsageTorF);
+        SceneManager.LoadScene("Game");
+    }
+    public void OnClick_ExplanationChoice()
+    {
+        GameManager.Instance.SetQuestionType(QuestionType.ExplanationChoice);
+        SceneManager.LoadScene("Game");
+    }
 
     public void OnClick_Exit()
     {

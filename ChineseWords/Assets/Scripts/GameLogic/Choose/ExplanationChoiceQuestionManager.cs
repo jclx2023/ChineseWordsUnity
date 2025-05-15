@@ -9,17 +9,20 @@ using Core;
 namespace GameLogic.Choice
 {
     /// <summary>
-    /// 词语选择填空（近义词/同义/造句等通用）题管理器：
-    /// - 从自定义表随机读取一条记录
-    /// - 将 stem 显示在題干
-    /// - 将 True, 1, 2, 3 四个选项随机打乱，分别赋给四个按钮
-    /// - 玩家点击按钮判定正误，通过 OnAnswerResult 通知外层
+    /// 词语解释选择题管理器：
+    /// - 从 WordExplanationChoice 表随机取一条记录
+    /// - 显示 stem
+    /// - 将 true、false1、false2、false3 四个选项随机打乱后分配给 OptionButton1-4
+    /// - 玩家选择后判定是否等于正确选项
+    /// - 通过 OnAnswerResult 通知外层统一处理
     /// </summary>
-    public class SimularWordChoiceQuestionManager : QuestionManagerBase
+    public class ExplanationChoiceQuestionManager : QuestionManagerBase
     {
         private string dbPath;
 
-        // UI 引用
+        [Header("UI Prefab (Resources/Prefabs/InGame/ExplanationChoiceUI)")]
+        [SerializeField] private string uiPrefabPath = "Prefabs/InGame/ChooseUI";
+
         private TMP_Text questionText;
         private Button[] optionButtons;
         private TMP_Text feedbackText;
@@ -33,16 +36,16 @@ namespace GameLogic.Choice
 
         private void Start()
         {
-            // 实例化 UI Prefab（确保路径和名称一致）
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/ChooseUI");
+            // 实例化 UI
+            var prefab = Resources.Load<GameObject>(uiPrefabPath);
             var uiRoot = Instantiate(prefab);
             var ui = uiRoot.transform.Find("UI");
 
-            // 绑定 UI 组件引用
+            // 绑定 UI
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             feedbackText = ui.Find("FeedbackText").GetComponent<TMP_Text>();
 
-            // 假设四个按钮命名为 OptionButton1-4
+            // option buttons
             optionButtons = new Button[4];
             for (int i = 0; i < 4; i++)
             {
@@ -58,9 +61,9 @@ namespace GameLogic.Choice
 
         public override void LoadQuestion()
         {
+            Debug.Log("加载一题");
             string stem = null;
-            var choices = new List<string>(4);
-            Debug.Log("加载一次");
+            List<string> choices = new List<string>(4);
 
             using (var conn = new SqliteConnection("URI=file:" + dbPath))
             {
@@ -68,8 +71,8 @@ namespace GameLogic.Choice
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"
-SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
-  FROM simular_usage_questions
+SELECT stem, [true], false1, false2, false3
+  FROM WordExplanationChoice
  ORDER BY RANDOM()
     LIMIT 1";
                     using (var reader = cmd.ExecuteReader())
@@ -78,6 +81,7 @@ SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
                         {
                             stem = reader.GetString(0);
                             correctOption = reader.GetString(1);
+                            choices.Add(reader.GetString(1));
                             choices.Add(reader.GetString(2));
                             choices.Add(reader.GetString(3));
                             choices.Add(reader.GetString(4));
@@ -92,11 +96,11 @@ SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
                 return;
             }
 
+            // 显示题干
             questionText.text = stem;
             feedbackText.text = string.Empty;
 
-            // 添加正确选项并打乱
-            choices.Add(correctOption);
+            // 随机打乱选项
             for (int i = choices.Count - 1; i > 0; i--)
             {
                 int j = Random.Range(0, i + 1);
@@ -113,13 +117,14 @@ SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
 
         public override void CheckAnswer(string answer)
         {
-            // 通过按钮回调，不使用此方法
+            // 本题通过按钮回调处理，不使用文本输入
+            Debug.Log("CheckAnswer 未被使用");
         }
 
         private void OnOptionClicked(int index)
         {
-            var txt = optionButtons[index].GetComponentInChildren<TMP_Text>();
-            bool isRight = txt.text == correctOption;
+            var selected = optionButtons[index].GetComponentInChildren<TMP_Text>().text;
+            bool isRight = selected == correctOption;
             StartCoroutine(ShowFeedbackThenNext(isRight));
             OnAnswerResult?.Invoke(isRight);
         }
@@ -129,7 +134,7 @@ SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
             feedbackText.color = isRight ? Color.green : Color.red;
             feedbackText.text = isRight ? "回答正确！" : $"回答错误，正确答案是：{correctOption}";
             yield return new WaitForSeconds(1f);
-            // 由外层监听 OnAnswerResult 进行下一题
+            // 下一题由外层监听 OnAnswerResult 进行
         }
     }
 }

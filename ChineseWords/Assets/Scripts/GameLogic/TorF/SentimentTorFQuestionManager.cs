@@ -64,11 +64,12 @@ namespace GameLogic.TorF
             buttonB.onClick.AddListener(() => OnSelect(choiceBPolarParty));
 
             feedbackText.text = string.Empty;
-            LoadQuestion();
+            //LoadQuestion();
         }
 
         public override void LoadQuestion()
         {
+            Debug.Log("加载一次");
             // 随机选 sentiment
             int sid = -1; string source = null; int wid = -1;
             using (var conn = new SqliteConnection("URI=file:" + dbPath))

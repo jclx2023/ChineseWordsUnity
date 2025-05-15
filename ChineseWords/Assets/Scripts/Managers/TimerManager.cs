@@ -45,7 +45,7 @@ public class TimerManager : MonoBehaviour
         while (remaining > 0f)
         {
             // œ‘ æ»°’˚√Î
-            timerText.text = Mathf.CeilToInt(remaining).ToString();
+            timerText.text = "Countdown: "+ Mathf.CeilToInt(remaining).ToString();
             yield return new WaitForSeconds(1f);
             remaining -= 1f;
         }

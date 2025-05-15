@@ -62,7 +62,7 @@ namespace GameLogic
             surrenderButton.onClick.AddListener(OnSurrender);
 
             feedbackText.text = "";
-            LoadQuestion();
+            //LoadQuestion();
         }
 
         private void OnSurrender()
@@ -211,6 +211,7 @@ namespace GameLogic
             }
             yield return new WaitForSeconds(1f);
             // 不再直接 LoadQuestion，由监听 OnAnswerResult 的逻辑处理换题
+
         }
     }
 }
