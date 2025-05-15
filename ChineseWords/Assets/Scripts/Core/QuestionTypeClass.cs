@@ -12,5 +12,6 @@ namespace Core
         SoftFill,
         AbbrFill,
         SentimentTorF,
+        SimularWordChoice,
     }
 }
