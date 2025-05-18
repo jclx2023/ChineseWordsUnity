@@ -45,9 +45,8 @@ namespace GameLogic
         private void Start()
         {
             Debug.Log("[TextPinyin] Start: 初始化 UI");
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/HardFillUI");
-            var uiRoot = Instantiate(prefab);
-            var uiTrans = uiRoot.transform.Find("UI");
+            var uiTrans = UIManager.Instance.LoadUI("Prefabs/InGame/HardFillUI");
+
 
             questionText = uiTrans.Find("QuestionText").GetComponent<TMP_Text>();
             answerInput = uiTrans.Find("AnswerInput").GetComponent<TMP_InputField>();
@@ -62,7 +61,6 @@ namespace GameLogic
             surrenderButton.onClick.AddListener(OnSurrender);
 
             feedbackText.text = "";
-            //LoadQuestion();
         }
 
         private void OnSurrender()
@@ -210,8 +208,6 @@ namespace GameLogic
                 Debug.Log($"[TextPinyin] ShowFeedback: 错误，正确拼音={correctPinyinTone}");
             }
             yield return new WaitForSeconds(1f);
-            // 不再直接 LoadQuestion，由监听 OnAnswerResult 的逻辑处理换题
-
         }
     }
 }

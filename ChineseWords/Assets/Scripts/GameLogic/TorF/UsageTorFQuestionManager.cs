@@ -37,8 +37,8 @@ namespace GameLogic.TorF
 
         private void Start()
         {
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/TorFUI");
-            var ui = Instantiate(prefab).transform.Find("UI");
+            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/TorFUI");
+
 
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             trueButton = ui.Find("TrueButton").GetComponent<Button>();
@@ -54,7 +54,6 @@ namespace GameLogic.TorF
             falseButton.onClick.AddListener(() => OnSelect(false));
 
             feedbackText.text = string.Empty;
-            LoadQuestion();
         }
 
         public override void LoadQuestion()
@@ -137,7 +136,6 @@ SELECT [stem], [True], [1], [2], [3]
             feedbackText.color = isRight ? Color.green : Color.red;
             feedbackText.text = isRight ? "回答正确！" : "回答错误！";
             yield return new WaitForSeconds(1f);
-            // 下一题由外层监听 OnAnswerResult
         }
     }
 }

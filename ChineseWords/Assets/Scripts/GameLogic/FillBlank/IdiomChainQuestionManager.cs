@@ -64,39 +64,29 @@ namespace GameLogic.FillBlank
 
         private void Start()
         {
-            // 实例化 UI Prefab 并绑定组件（与你原代码一致）
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/HardFillUI");
-            var uiRoot = Instantiate(prefab);
-            var uiTrans = uiRoot.transform.Find("UI");
+            var uiTrans = UIManager.Instance.LoadUI("Prefabs/InGame/HardFillUI");
+
             questionText = uiTrans.Find("QuestionText").GetComponent<TMP_Text>();
             answerInput = uiTrans.Find("AnswerInput").GetComponent<TMP_InputField>();
             submitButton = uiTrans.Find("SubmitButton").GetComponent<Button>();
             feedbackText = uiTrans.Find("FeedbackText").GetComponent<TMP_Text>();
             surrenderButton = uiTrans.Find("SurrenderButton").GetComponent<Button>();
             surrenderButton.onClick.AddListener(() => {
-                StopAllCoroutines();                     // 取消任何正在进行的反馈协程
+                StopAllCoroutines();
                 feedbackText.text = "超时！";
-                OnAnswerResult?.Invoke(false);           // 通知外层：回答错误
+                OnAnswerResult?.Invoke(false);
             });
             submitButton.onClick.AddListener(OnSubmit);
             timerManager = GetComponent<TimerManager>();
             feedbackText.text = "";
-
-            //LoadQuestion();  // 只在这里调用一次
         }
-
-        /// <summary>
-        /// 只在第一次执行，从内存列表里随机抽一个首题
-        /// </summary>
         public override void LoadQuestion()
         {
             Debug.Log("加载一次");
             // 随机选一个
             int idx = Random.Range(0, firstCandidates.Count);
             currentIdiom = firstCandidates[idx];
-            // 可选：如果不想重复首题，移除已用项
             firstCandidates.RemoveAt(idx);
-
             ShowQuestion(currentIdiom);
         }
 
@@ -149,7 +139,6 @@ namespace GameLogic.FillBlank
             {
                 feedbackText.text = "回答正确！";
                 currentIdiom = answer;
-                // 直接复用 ShowQuestion，无需再次 LoadQuestion()
                 timerManager.StopTimer();
                 timerManager.StartTimer();
                 Invoke(nameof(ShowNext), 0.5f);

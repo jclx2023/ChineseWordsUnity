@@ -49,8 +49,8 @@ namespace GameLogic.FillBlank
 
         private void Start()
         {
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/HardFillUI");
-            var ui = Instantiate(prefab).transform.Find("UI");
+            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/HardFillUI");
+
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             answerInput = ui.Find("AnswerInput").GetComponent<TMP_InputField>();
             submitButton = ui.Find("SubmitButton").GetComponent<Button>();

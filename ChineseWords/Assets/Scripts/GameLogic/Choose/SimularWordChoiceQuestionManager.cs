@@ -19,7 +19,6 @@ namespace GameLogic.Choice
     {
         private string dbPath;
 
-        // UI 引用
         private TMP_Text questionText;
         private Button[] optionButtons;
         private TMP_Text feedbackText;
@@ -33,16 +32,12 @@ namespace GameLogic.Choice
 
         private void Start()
         {
-            // 实例化 UI Prefab（确保路径和名称一致）
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/ChooseUI");
-            var uiRoot = Instantiate(prefab);
-            var ui = uiRoot.transform.Find("UI");
+            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/ChooseUI");
 
-            // 绑定 UI 组件引用
+
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             feedbackText = ui.Find("FeedbackText").GetComponent<TMP_Text>();
 
-            // 假设四个按钮命名为 OptionButton1-4
             optionButtons = new Button[4];
             for (int i = 0; i < 4; i++)
             {
@@ -52,8 +47,6 @@ namespace GameLogic.Choice
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => OnOptionClicked(idx));
             }
-
-            //LoadQuestion();
         }
 
         public override void LoadQuestion()
@@ -129,7 +122,6 @@ SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
             feedbackText.color = isRight ? Color.green : Color.red;
             feedbackText.text = isRight ? "回答正确！" : $"回答错误，正确答案是：{correctOption}";
             yield return new WaitForSeconds(1f);
-            // 由外层监听 OnAnswerResult 进行下一题
         }
     }
 }

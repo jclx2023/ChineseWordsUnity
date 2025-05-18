@@ -48,8 +48,9 @@ namespace GameLogic.TorF
 
         private void Start()
         {
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/TorFUI");
-            var ui = Instantiate(prefab).transform.Find("UI");
+            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/TorFUI");
+
+
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             buttonA = ui.Find("TrueButton").GetComponent<Button>();
             buttonB = ui.Find("FalseButton").GetComponent<Button>();
@@ -64,7 +65,6 @@ namespace GameLogic.TorF
             buttonB.onClick.AddListener(() => OnSelect(choiceBPolarParty));
 
             feedbackText.text = string.Empty;
-            //LoadQuestion();
         }
 
         public override void LoadQuestion()
@@ -115,6 +115,7 @@ namespace GameLogic.TorF
             if (string.IsNullOrEmpty(currentWord))
             {
                 questionText.text = "找不到对应词条。";
+                Debug.Log("找不到对应词条所以再次查找");
                 LoadQuestion();
             }
 

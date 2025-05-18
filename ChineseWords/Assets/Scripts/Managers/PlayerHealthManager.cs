@@ -8,14 +8,6 @@ using Core;  // 如果 QuestionManagerBase 在 Core 命名空间下
 /// </summary>
 public class PlayerHealthManager : MonoBehaviour
 {
-    [Header("初始血量 (a)")]
-    [Tooltip("玩家初始血量")]
-    public int initialHealth = 5;
-
-    [Header("每次答错扣血 (b)")]
-    [Tooltip("每次回答错误时扣除的血量")]
-    public int damagePerWrong = 1;
-
     [Header("血量显示 (TextMeshPro)")]
     [Tooltip("用于显示当前血量的 TMP_Text")]
     public TMP_Text healthText;
@@ -25,43 +17,38 @@ public class PlayerHealthManager : MonoBehaviour
     public GameObject gameOverPanel;
 
     private int currentHealth;
+    private int damagePerWrong;
     private QuestionManagerBase questionManager;
 
     void Awake()
     {
-        // 1. 初始化血量
-        currentHealth = initialHealth;
-        UpdateHealthUI();
-
-        // 2. 确保 Game Over 面板一开始隐藏
+        // 确保 Game Over 面板一开始隐藏
         if (gameOverPanel != null)
             gameOverPanel.SetActive(false);
     }
 
-    void Start()
+    public void ApplyConfig(int initialHealth, int damage)
     {
-        // 3. 获取题目管理器，并订阅答题结果
-        questionManager = GetComponent<QuestionManagerBase>();
-        if (questionManager != null)
-        {
-            //questionManager.OnAnswerResult += HPHandleAnswerResult;
-        }
-        else
-        {
-            Debug.LogError("PlayerHealthManager：找不到 QuestionManagerBase，请确保此脚本与 QuestionManagerController 挂在同一 GameObject 上");
-        }
+        currentHealth = initialHealth;
+        damagePerWrong = damage;
+        UpdateHealthUI();
+    }
+
+    public void BindManager(QuestionManagerBase m)
+    {
+        questionManager = m;
     }
 
     public void HPHandleAnswerResult(bool isCorrect)
     {
-        // 4. 如果答错则扣血并更新 UI
+        // 如果答错则扣血并更新 UI
         if (!isCorrect)
         {
             Debug.LogError("掉血了");
             currentHealth -= damagePerWrong;
             UpdateHealthUI();
 
-            // 5. 血量<=0 时触发游戏结束
+            // 血量<=0 时触发游戏结束
             if (currentHealth <= 0)
                 GameOver();
         }

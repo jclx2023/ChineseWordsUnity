@@ -51,8 +51,8 @@ namespace GameLogic
 
         private void Start()
         {
-            var prefab = Resources.Load<GameObject>("Prefabs/InGame/HardFillUI");
-            var ui = Instantiate(prefab).transform.Find("UI");
+            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/HardFillUI");
+
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             answerInput = ui.Find("AnswerInput").GetComponent<TMP_InputField>();
             submitButton = ui.Find("SubmitButton").GetComponent<Button>();
@@ -66,7 +66,6 @@ namespace GameLogic
             surrenderButton.onClick.AddListener(OnSurrender);
 
             feedbackText.text = string.Empty;
-            //LoadQuestion();
         }
 
         private void OnSurrender()
@@ -216,7 +215,6 @@ SELECT COUNT(*) FROM (
                 feedbackText.color = Color.red;
             }
             yield return new WaitForSeconds(1f);
-            // 切题由 OnAnswerResult 监听端统一处理
         }
     }
 }

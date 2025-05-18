@@ -1,22 +1,29 @@
 using UnityEngine;
 using TMPro;
+using Core;  // 如果 QuestionManagerBase 在 Core 命名空间下
 using System;
 using System.Collections;
 
+/// <summary>
+/// 管理倒计时逻辑，可通过外部配置设置时长
+/// </summary>
 public class TimerManager : MonoBehaviour
 {
-    [Header("倒计时时长（秒）")]
-    public float timeLimit = 10f;
-
     [Header("倒计时显示文本")]
     public TMP_Text timerText;
 
-    /// <summary>
-    /// 倒计时结束时触发
-    /// </summary>
     public event Action OnTimeUp;
 
+    private float timeLimit = 10f;
     private Coroutine countdownCoroutine;
+
+    /// <summary>
+    /// 注入外部配置的时间限制
+    /// </summary>
+    public void ApplyConfig(float newTimeLimit)
+    {
+        timeLimit = newTimeLimit;
+    }
 
     /// <summary>
     /// 开始或重置倒计时
@@ -44,8 +51,7 @@ public class TimerManager : MonoBehaviour
         float remaining = timeLimit;
         while (remaining > 0f)
         {
-            // 显示取整秒
-            timerText.text = "Countdown: "+ Mathf.CeilToInt(remaining).ToString();
+            timerText.text = "Countdown: " + Mathf.CeilToInt(remaining).ToString();
             yield return new WaitForSeconds(1f);
             remaining -= 1f;
         }

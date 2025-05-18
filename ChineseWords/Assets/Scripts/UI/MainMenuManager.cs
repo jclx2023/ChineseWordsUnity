@@ -8,22 +8,6 @@ using Core; // 引用 QuestionType
 
 public class MainMenuManager : MonoBehaviour
 {
-    public void OnClick_FillBlank()
-    {
-        GameManager.Instance.SetQuestionType(QuestionType.FillBlank);
-        SceneManager.LoadScene("Game");
-    }
-
-    public void OnClick_Choose()
-    {
-        GameManager.Instance.SetQuestionType(QuestionType.Choose);
-        SceneManager.LoadScene("Game");
-    }
-    public void OnClick_TorF()
-    {
-        GameManager.Instance.SetQuestionType(QuestionType.TorF);
-        SceneManager.LoadScene("Game");
-    }
     public void OnClick_HandWriting()
     {
         GameManager.Instance.SetQuestionType(QuestionType.HandWriting);
@@ -72,6 +56,12 @@ public class MainMenuManager : MonoBehaviour
     public void OnClick_ExplanationChoice()
     {
         GameManager.Instance.SetQuestionType(QuestionType.ExplanationChoice);
+        SceneManager.LoadScene("Game");
+    }
+    public void OnClick_FreeMode()
+    {
+        // 不设置 SelectedType，让 QMC 自动走随机权重逻辑
+        GameManager.Instance.SetQuestionType((QuestionType)(-1));  // 标记为无效
         SceneManager.LoadScene("Game");
     }
 

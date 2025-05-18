@@ -25,6 +25,7 @@ namespace Core
             }
         }
 
+
         public void SetQuestionType(QuestionType type)
         {
             SelectedType = type;

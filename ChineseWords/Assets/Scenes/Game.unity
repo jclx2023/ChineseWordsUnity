@@ -154,7 +154,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   hpManager: {fileID: 0}
-  timeUpDelay: 1
+  timeUpDelay: 0.5
 --- !u!4 &436724798
 Transform:
   m_ObjectHideFlags: 0
@@ -182,8 +182,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 17c781f05cf01cc4e84ea5abb7c12e50, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initialHealth: 2
-  damagePerWrong: 1
   healthText: {fileID: 1742541637}
   gameOverPanel: {fileID: 0}
 --- !u!114 &436724800
@@ -198,7 +196,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e72c46d9e1e7fe848a4f6caec199f9cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeLimit: 10
   timerText: {fileID: 1730502305}
 --- !u!1 &575308858
 GameObject:

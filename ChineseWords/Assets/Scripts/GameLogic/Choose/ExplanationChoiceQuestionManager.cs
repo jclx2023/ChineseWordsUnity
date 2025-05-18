@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -9,12 +9,12 @@ using Core;
 namespace GameLogic.Choice
 {
     /// <summary>
-    /// ´ÊÓï½âÊÍÑ¡ÔñÌâ¹ÜÀíÆ÷£º
-    /// - ´Ó WordExplanationChoice ±íËæ»úÈ¡Ò»Ìõ¼ÇÂ¼
-    /// - ÏÔÊ¾ stem
-    /// - ½« true¡¢false1¡¢false2¡¢false3 ËÄ¸öÑ¡ÏîËæ»ú´òÂÒºó·ÖÅä¸ø OptionButton1-4
-    /// - Íæ¼ÒÑ¡ÔñºóÅĞ¶¨ÊÇ·ñµÈÓÚÕıÈ·Ñ¡Ïî
-    /// - Í¨¹ı OnAnswerResult Í¨ÖªÍâ²ãÍ³Ò»´¦Àí
+    /// è¯è¯­è§£é‡Šé€‰æ‹©é¢˜ç®¡ç†å™¨ï¼š
+    /// - ä» WordExplanationChoice è¡¨éšæœºå–ä¸€æ¡è®°å½•
+    /// - æ˜¾ç¤º stem
+    /// - å°† trueã€false1ã€false2ã€false3 å››ä¸ªé€‰é¡¹éšæœºæ‰“ä¹±ååˆ†é…ç»™ OptionButton1-4
+    /// - ç©å®¶é€‰æ‹©ååˆ¤å®šæ˜¯å¦ç­‰äºæ­£ç¡®é€‰é¡¹
+    /// - é€šè¿‡ OnAnswerResult é€šçŸ¥å¤–å±‚ç»Ÿä¸€å¤„ç†
     /// </summary>
     public class ExplanationChoiceQuestionManager : QuestionManagerBase
     {
@@ -36,16 +36,13 @@ namespace GameLogic.Choice
 
         private void Start()
         {
-            // ÊµÀı»¯ UI
-            var prefab = Resources.Load<GameObject>(uiPrefabPath);
-            var uiRoot = Instantiate(prefab);
-            var ui = uiRoot.transform.Find("UI");
+            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/ChooseUI");
 
-            // °ó¶¨ UI
+
+
             questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
             feedbackText = ui.Find("FeedbackText").GetComponent<TMP_Text>();
 
-            // option buttons
             optionButtons = new Button[4];
             for (int i = 0; i < 4; i++)
             {
@@ -55,13 +52,11 @@ namespace GameLogic.Choice
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => OnOptionClicked(idx));
             }
-
-            //LoadQuestion();
         }
 
         public override void LoadQuestion()
         {
-            Debug.Log("¼ÓÔØÒ»Ìâ");
+            Debug.Log("åŠ è½½ä¸€é¢˜");
             string stem = null;
             List<string> choices = new List<string>(4);
 
@@ -92,22 +87,22 @@ SELECT stem, [true], false1, false2, false3
 
             if (string.IsNullOrEmpty(stem))
             {
-                questionText.text = "ÔİÎŞÌâÄ¿Êı¾İ";
+                questionText.text = "æš‚æ— é¢˜ç›®æ•°æ®";
                 return;
             }
 
-            // ÏÔÊ¾Ìâ¸É
+            // æ˜¾ç¤ºé¢˜å¹²
             questionText.text = stem;
             feedbackText.text = string.Empty;
 
-            // Ëæ»ú´òÂÒÑ¡Ïî
+            // éšæœºæ‰“ä¹±é€‰é¡¹
             for (int i = choices.Count - 1; i > 0; i--)
             {
                 int j = Random.Range(0, i + 1);
                 var tmp = choices[i]; choices[i] = choices[j]; choices[j] = tmp;
             }
 
-            // ¸³Öµ°´Å¥ÎÄ±¾
+            // èµ‹å€¼æŒ‰é’®æ–‡æœ¬
             for (int i = 0; i < optionButtons.Length; i++)
             {
                 var txt = optionButtons[i].GetComponentInChildren<TMP_Text>();
@@ -117,8 +112,8 @@ SELECT stem, [true], false1, false2, false3
 
         public override void CheckAnswer(string answer)
         {
-            // ±¾ÌâÍ¨¹ı°´Å¥»Øµ÷´¦Àí£¬²»Ê¹ÓÃÎÄ±¾ÊäÈë
-            Debug.Log("CheckAnswer Î´±»Ê¹ÓÃ");
+            // æœ¬é¢˜é€šè¿‡æŒ‰é’®å›è°ƒå¤„ç†ï¼Œä¸ä½¿ç”¨æ–‡æœ¬è¾“å…¥
+            Debug.Log("CheckAnswer æœªè¢«ä½¿ç”¨");
         }
 
         private void OnOptionClicked(int index)
@@ -132,9 +127,8 @@ SELECT stem, [true], false1, false2, false3
         private IEnumerator ShowFeedbackThenNext(bool isRight)
         {
             feedbackText.color = isRight ? Color.green : Color.red;
-            feedbackText.text = isRight ? "»Ø´ğÕıÈ·£¡" : $"»Ø´ğ´íÎó£¬ÕıÈ·´ğ°¸ÊÇ£º{correctOption}";
+            feedbackText.text = isRight ? "å›ç­”æ­£ç¡®ï¼" : $"å›ç­”é”™è¯¯ï¼Œæ­£ç¡®ç­”æ¡ˆæ˜¯ï¼š{correctOption}";
             yield return new WaitForSeconds(1f);
-            // ÏÂÒ»ÌâÓÉÍâ²ã¼àÌı OnAnswerResult ½øĞĞ
         }
     }
 }
