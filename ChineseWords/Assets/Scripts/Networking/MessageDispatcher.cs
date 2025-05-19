@@ -35,14 +35,16 @@ namespace Networking
             }
 
             // 获取或创建 Transport
-            if (TransportComponent is INetworkTransport custom)
+            if (TransportComponent is INetworkTransport existing)
             {
-                _transport = custom;
+                _transport = existing;
                 Debug.Log($"[MessageDispatcher] 使用注入 Transport: {TransportComponent.GetType().Name}");
             }
             else
             {
-                _transport = new SimulatedTransport();
+                var simTransport = gameObject.AddComponent<SimulatedTransport>();
+                _transport = simTransport;
+
                 Debug.Log("[MessageDispatcher] 未指定 Transport，已创建 SimulatedTransport");
             }
         }
@@ -50,7 +52,7 @@ namespace Networking
         private void Start()
         {
             Debug.Log($"[MessageDispatcher] 启动，DispatchInterval={DispatchInterval}s");
-            _transport.Initialize();
+            //_transport.Initialize();
             _transport.OnConnected += () => Debug.Log("[MessageDispatcher] Transport 已连接");
             _transport.OnDisconnected += () => Debug.Log("[MessageDispatcher] Transport 已断开");
             _transport.OnError += ex => Debug.LogError($"[MessageDispatcher] 传输错误: {ex}");
@@ -122,7 +124,7 @@ namespace Networking
                     bool isCorrect = false;
                     try { isCorrect = (bool)msg.Payload; }
                     catch { Debug.LogWarning("[MessageDispatcher] 无法解析 Payload 为 bool"); }
-                    QuestionController.OnRemoteAnswerResult(isCorrect);
+                    QuestionController.OnRemoteAnswerResult(isCorrect, msg.SenderId);
                     break;
 
                 default:

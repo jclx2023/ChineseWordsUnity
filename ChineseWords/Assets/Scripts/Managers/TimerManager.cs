@@ -1,6 +1,6 @@
 using UnityEngine;
 using TMPro;
-using Core;  // 如果 QuestionManagerBase 在 Core 命名空间下
+using Core;
 using System;
 using System.Collections;
 

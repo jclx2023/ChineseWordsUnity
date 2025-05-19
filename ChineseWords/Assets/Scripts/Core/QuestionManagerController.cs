@@ -19,8 +19,8 @@ public class QuestionManagerController : MonoBehaviour
     [Header("网络传输组件，可拖入 PhotonTransport/CustomTransport，否则使用 SimulatedTransport")]
     public MonoBehaviour TransportComponent;
 
-    [Header("远端玩家血量管理")]
-    public RemoteHealthManager remoteHealthManager;
+    [SerializeField] private RemoteHealthManager remoteHealthManager;
+
 
     private INetworkTransport _transport;
     private string _localPlayerId;
@@ -48,6 +48,12 @@ public class QuestionManagerController : MonoBehaviour
         { QuestionType.ExplanationChoice, 1f },
     };
 
+    public void OverrideLocalPlayerId(string id)
+    {
+        _localPlayerId = id;
+        Debug.Log($"[QMC] Overrode LocalPlayerId to {id}");
+    }
+
     void Awake()
     {
         // 唯一标识本机玩家
@@ -65,28 +71,39 @@ public class QuestionManagerController : MonoBehaviour
             _transport = new SimulatedTransport();
             Debug.Log("[QMC] No transport injected, created SimulatedTransport");
         }
+        remoteHealthManager = GetComponent<RemoteHealthManager>();
+        Debug.Log($"[QMC {_localPlayerId}] remoteHealthManager = {remoteHealthManager}");
     }
 
     void Start()
     {
-        // --- 网络初始化 ---
-
-        //_transport.Initialize();
-        _transport.OnConnected += () => Debug.Log("[QMC] Transport connected");
-        _transport.OnError += ex => Debug.LogError($"[QMC] Transport error: {ex}");
+        // --- 1. 网络事件订阅 ---
+        // 先绑定事件，再初始化 transport
+        _transport.OnConnected += () =>
+            Debug.Log($"[QMC {_localPlayerId}] Transport connected");
+        _transport.OnError += ex =>
+            Debug.LogError($"[QMC {_localPlayerId}] Transport error: {ex}");
         _transport.OnMessageReceived += OnNetworkMessageReceived;
 
-        // --- 本地逻辑初始化 ---
+        // 真正建立“连接”，触发所有实例的 OnConnected
+        _transport.Initialize();
+
+        // --- 2. 本地逻辑初始化 ---
         timerManager = GetComponent<TimerManager>();
         hpManager = GetComponent<PlayerHealthManager>();
-        var cfg = ConfigManager.Instance.Config;
+        remoteHealthManager = GetComponent<RemoteHealthManager>();
 
+        var cfg = ConfigManager.Instance.Config;
+        Debug.Log($"[QMC {_localPlayerId}] timeLimit={cfg.timeLimit}, initialHealth={cfg.initialHealth}");
+        Debug.Assert(remoteHealthManager != null, "[QMC] remoteHealthManager 仍然为 null，请检查组件挂载位置");
         timerManager.ApplyConfig(cfg.timeLimit);
         hpManager.ApplyConfig(cfg.initialHealth, cfg.damagePerWrong);
-        int initHp = ConfigManager.Instance.Config.initialHealth;
-        remoteHealthManager.Initialize(initHp);
+        remoteHealthManager.Initialize(cfg.initialHealth);
+
+        // 超时事件
         timerManager.OnTimeUp += HandleTimeUp;
 
+        // 首次出题要延迟，等 transport 初始化完毕
         StartCoroutine(DelayedFirstQuestion());
     }
 
@@ -116,7 +133,7 @@ public class QuestionManagerController : MonoBehaviour
                 try { isCorrect = (bool)msg.Payload; }
                 catch { Debug.LogWarning("[QMC] Cannot parse Payload as bool"); }
                 Debug.Log($"[QMC][NetRecv] AnswerResult received isCorrect={isCorrect}");
-                HandleRemoteAnswerResult(isCorrect);
+                HandleRemoteAnswerResult(isCorrect, msg.SenderId);
                 break;
 
             default:
@@ -128,11 +145,12 @@ public class QuestionManagerController : MonoBehaviour
     /// <summary>
     /// Dispatcher 调用：处理远程判题结果
     /// </summary>
-    public void OnRemoteAnswerResult(bool isCorrect)
+    public void OnRemoteAnswerResult(bool isCorrect, string senderId)
     {
-        Debug.Log($"[QMC] OnRemoteAnswerResult invoked isCorrect={isCorrect}");
-        HandleRemoteAnswerResult(isCorrect);
+        Debug.Log($"[QMC] OnRemoteAnswerResult invoked isCorrect={isCorrect}, senderId={senderId}");
+        HandleRemoteAnswerResult(isCorrect, senderId);
     }
+
 
     private IEnumerator DelayedFirstQuestion()
     {
@@ -200,7 +218,7 @@ public class QuestionManagerController : MonoBehaviour
     /// <summary>
     /// 处理远程判题结果（复用本地逻辑）
     /// </summary>
-    private void HandleRemoteAnswerResult(bool isCorrect)
+    private void HandleRemoteAnswerResult(bool isCorrect, string senderId)
     {
         Debug.Log($"[QMC] HandleRemoteAnswerResult isCorrect={isCorrect}");
 
