@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Core;
+using Networking;
 using GameLogic;
 using GameLogic.FillBlank;
 using GameLogic.TorF;
@@ -69,6 +70,7 @@ public class QuestionManagerController : MonoBehaviour
     void Start()
     {
         // --- ÍøÂç³õÊ¼»¯ ---
+
         //_transport.Initialize();
         _transport.OnConnected += () => Debug.Log("[QMC] Transport connected");
         _transport.OnError += ex => Debug.LogError($"[QMC] Transport error: {ex}");

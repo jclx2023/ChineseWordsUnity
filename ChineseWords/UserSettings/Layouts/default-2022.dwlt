@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 2560
     height: 1349
   m_ShowMode: 4
-  m_Title: Hierarchy
+  m_Title: Inspector
   m_RootView: {fileID: 2}
   m_MinSize: {x: 875, y: 492}
   m_MaxSize: {x: 10000, y: 10000}
@@ -121,7 +121,7 @@ MonoBehaviour:
   m_MinSize: {x: 400, y: 100}
   m_MaxSize: {x: 32384, y: 16192}
   vertical: 0
-  controlID: 70
+  controlID: 122
   draggingID: 0
 --- !u!114 &6
 MonoBehaviour:
@@ -825,7 +825,7 @@ MonoBehaviour:
   m_Rotation:
     m_Target: {x: 0.014689009, y: 0.0125957085, z: 0.00018581905, w: -0.9998174}
     speed: 2
-    m_Value: {x: 0.014688941, y: 0.01259565, z: 0.0001858182, w: -0.9998127}
+    m_Value: {x: 0.014689008, y: 0.0125957085, z: 0.00018581905, w: -0.9998174}
   m_Size:
     m_Target: 660.3328
     speed: 2
@@ -961,9 +961,9 @@ MonoBehaviour:
   m_SceneHierarchy:
     m_TreeViewState:
       scrollPos: {x: 0, y: 0}
-      m_SelectedIDs: 
+      m_SelectedIDs: fa180000
       m_LastClickedID: 0
-      m_ExpandedIDs: 9413fffff82fffff9440ffff5648ffff0e5ffffffa5fffffc889ffff548bffffecd8ffff8cdbffffe8fafffff4ffffffb45a0000c45a0000265b0000885b0000d66d0000
+      m_ExpandedIDs: dcfaffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1032,7 +1032,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 0
     m_Folders:
-    - Assets/Scripts/GameLogic/TorF
+    - Assets/Scripts/Networking
     m_Globs: []
     m_OriginalText: 
     m_ImportLogFlags: 0
@@ -1048,7 +1048,7 @@ MonoBehaviour:
     scrollPos: {x: 0, y: 0}
     m_SelectedIDs: d25d0000
     m_LastClickedID: 24018
-    m_ExpandedIDs: 00000000ee1e0000365a00003c5a0000725a0000845a0000f85b0000fa5b0000fc5b0000fe5b0000005c0000025c0000045c0000065c0000085c00000a5c00000c5c00000e5c0000105c0000125c0000145c0000165c0000185c00001a5c00001c5c00001e5c0000205c0000225c0000245c0000265c0000285c00002a5c00002c5c00002e5c0000305c0000325c0000345c0000365c0000385c00003a5c00003c5c00003e5c0000405c0000425c0000445c0000465c0000485c00004a5c00004c5c00004e5c0000505c0000525c0000545c0000565c0000585c00005a5c00005c5c00005e5c0000605c0000625c0000645c0000
+    m_ExpandedIDs: 00000000405a0000465a00007c5a00008e5a0000045c0000065c0000085c00000a5c00000c5c00000e5c0000105c0000125c0000145c0000165c0000185c00001a5c00001c5c00001e5c0000205c0000225c0000245c0000265c0000285c00002a5c00002c5c00002e5c0000305c0000325c0000345c0000365c0000385c00003a5c00003c5c00003e5c0000405c0000425c0000445c0000465c0000485c00004a5c00004c5c00004e5c0000505c0000525c0000545c0000565c0000585c00005a5c00005c5c00005e5c0000605c0000625c0000645c0000665c0000685c00006a5c00006c5c00006e5c0000705c0000
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1073,24 +1073,24 @@ MonoBehaviour:
       m_Icon: {fileID: 0}
       m_ResourceFile: 
   m_AssetTreeState:
-    scrollPos: {x: 0, y: 16}
+    scrollPos: {x: 0, y: 32}
     m_SelectedIDs: 
     m_LastClickedID: 0
-    m_ExpandedIDs: ffffffff00000000ee1e0000365a00003c5a0000725a0000845a0000f85b0000fa5b0000fc5b0000fe5b0000005c0000025c0000045c0000065c0000085c00000a5c00000c5c00000e5c0000105c0000125c0000145c0000165c0000185c00001a5c00001c5c00001e5c0000205c0000225c0000245c0000265c0000285c00002a5c00002c5c0000305c0000325c0000345c0000365c0000385c00003a5c00003c5c00003e5c0000405c0000425c0000445c0000465c0000485c00004a5c00004c5c00004e5c0000505c0000525c0000545c0000565c0000585c00005a5c00005c5c00005e5c0000605c0000645c000044690000
+    m_ExpandedIDs: ffffffff00000000405a0000465a00007c5a00008e5a0000045c0000065c0000085c00000a5c00000c5c00000e5c0000105c0000125c0000145c0000165c0000185c00001a5c00001c5c00001e5c0000205c0000225c0000245c0000265c0000285c00002a5c00002c5c00002e5c0000305c0000325c0000345c0000365c0000385c00003a5c00003c5c00003e5c0000405c0000425c0000445c0000465c0000485c00004a5c00004c5c00004e5c0000505c0000525c0000545c0000565c0000585c00005a5c00005c5c00005e5c0000605c0000625c0000645c0000665c0000685c00006a5c00006c5c00006e5c0000705c0000
     m_RenameOverlay:
       m_UserAcceptedRename: 0
-      m_Name: HardFillQuestionManager
-      m_OriginalName: HardFillQuestionManager
+      m_Name: 
+      m_OriginalName: 
       m_EditFieldRect:
         serializedVersion: 2
         x: 0
         y: 0
         width: 0
         height: 0
-      m_UserData: 1536
+      m_UserData: 0
       m_IsWaitingForDelay: 0
       m_IsRenaming: 0
-      m_OriginalEventType: 0
+      m_OriginalEventType: 11
       m_IsRenamingFilename: 1
       m_ClientGUIView: {fileID: 10}
     m_SearchString: 
