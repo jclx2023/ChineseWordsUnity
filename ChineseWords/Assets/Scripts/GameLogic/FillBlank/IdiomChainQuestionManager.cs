@@ -82,7 +82,7 @@ namespace GameLogic.FillBlank
         }
         public override void LoadQuestion()
         {
-            Debug.Log("加载一次");
+            Debug.Log("加载一次IdiomChain");
             // 随机选一个
             int idx = Random.Range(0, firstCandidates.Count);
             currentIdiom = firstCandidates[idx];
