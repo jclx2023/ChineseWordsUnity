@@ -61,7 +61,7 @@ namespace GameLogic.TorF
             string stem = null;
             string correctFill = null;
             List<string> wrongFills = new List<string>(3);
-            Debug.Log("加载一次");
+            Debug.Log("加载一次Usage");
             using (var conn = new SqliteConnection("URI=file:" + dbPath))
             {
                 conn.Open();

@@ -56,7 +56,7 @@ namespace GameLogic.Choice
 
         public override void LoadQuestion()
         {
-            Debug.Log("加载一题");
+            Debug.Log("加载一次Explanation");
             string stem = null;
             List<string> choices = new List<string>(4);
 

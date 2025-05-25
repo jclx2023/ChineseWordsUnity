@@ -123,7 +123,7 @@ namespace GameLogic
                     }
                 }
             }
-            Debug.Log($"[TextPinyin] Raw Tpinyin JSON={rawTpinyin}");
+            //Debug.Log($"[TextPinyin] Raw Tpinyin JSON={rawTpinyin}");
             string parsed = rawTpinyin;
             if (!string.IsNullOrEmpty(rawTpinyin) && rawTpinyin.StartsWith("["))
             {
@@ -132,7 +132,7 @@ namespace GameLogic
                 parsed = parts[0].Trim().Trim('"');
             }
             correctPinyinNoTone = (parsed ?? "").ToLower();
-            Debug.Log($"[TextPinyin] Parsed TpinyinNoTone={correctPinyinNoTone}");
+            //Debug.Log($"[TextPinyin] Parsed TpinyinNoTone={correctPinyinNoTone}");
             if (string.IsNullOrEmpty(correctPinyinNoTone))
             {
                 questionText.text = $"词库中找不到 '{ch}' 的拼音！";
@@ -156,7 +156,7 @@ namespace GameLogic
                     }
                 }
             }
-            Debug.Log($"[TextPinyin] Full word pinyin tone={fullTone}");
+            //Debug.Log($"[TextPinyin] Full word pinyin tone={fullTone}");
             var toneParts = fullTone?.Trim().Split(' ');
             if (toneParts == null || pos < 0 || pos >= toneParts.Length)
             {
@@ -165,7 +165,7 @@ namespace GameLogic
                 return;
             }
             correctPinyinTone = toneParts[pos];
-            Debug.Log($"[TextPinyin] CorrectTone={correctPinyinTone}");
+            //Debug.Log($"[TextPinyin] CorrectTone={correctPinyinTone}");
 
             // 构造题干
             questionText.text = $"题目：{word}\n“<color=red>{ch}</color>” 的读音是？";
@@ -176,9 +176,9 @@ namespace GameLogic
 
         public override void CheckAnswer(string answer)
         {
-            Debug.Log($"[TextPinyin] CheckAnswer: rawAnswer=\"{answer}\"");
+            //Debug.Log($"[TextPinyin] CheckAnswer: rawAnswer=\"{answer}\"");
             var processed = answer.Replace("\"", "").Replace("“", "").Replace("”", "").Trim().ToLower();
-            Debug.Log($"[TextPinyin] CheckAnswer: processed=\"{processed}\"");
+            //Debug.Log($"[TextPinyin] CheckAnswer: processed=\"{processed}\"");
             bool isRight = processed == correctPinyinNoTone;
             Debug.Log($"[TextPinyin] CheckAnswer: isRight={isRight}");
             // 先反馈，再通过事件触发下一题

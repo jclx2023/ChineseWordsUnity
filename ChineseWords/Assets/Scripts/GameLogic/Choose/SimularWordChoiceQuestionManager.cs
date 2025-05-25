@@ -53,7 +53,7 @@ namespace GameLogic.Choice
         {
             string stem = null;
             var choices = new List<string>(4);
-            Debug.Log("加载一次");
+            Debug.Log("加载一次SimularWord");
 
             using (var conn = new SqliteConnection("URI=file:" + dbPath))
             {

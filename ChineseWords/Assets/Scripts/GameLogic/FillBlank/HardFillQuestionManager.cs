@@ -77,6 +77,7 @@ namespace GameLogic
 
         public override void LoadQuestion()
         {
+            Debug.Log("加载一次HardFill");
             // 1. 根据权重确定目标词长
             float r = Random.value;
             int targetLength;

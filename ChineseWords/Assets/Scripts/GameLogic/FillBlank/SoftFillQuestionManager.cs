@@ -67,6 +67,7 @@ namespace GameLogic.FillBlank
 
         public override void LoadQuestion()
         {
+            Debug.Log("加载一次SoftFill");
             // 1. 随机抽词
             currentWord = null;
             using (var conn = new SqliteConnection("URI=file:" + dbPath))
