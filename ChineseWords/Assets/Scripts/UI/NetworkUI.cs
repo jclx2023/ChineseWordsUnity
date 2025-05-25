@@ -1,50 +1,37 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TMPro;
 using Core.Network;
+using System.Collections.Generic;
 
 namespace UI
 {
     /// <summary>
-    /// ÍøÂçÁ¬½ÓUI¹ÜÀíÆ÷
-    /// Ö»¸ºÔğÍøÂçÁ¬½Ó£¬ÓÎÏ·Âß¼­ÓÉNetworkQuestionManagerController´¦Àí
+    /// ç½‘ç»œUIç®¡ç†å™¨
+    /// ä¸“æ³¨äºç½‘ç»œçŠ¶æ€æ˜¾ç¤ºå’Œæˆ¿é—´ç®¡ç†ï¼Œä¸å¤„ç†æ¸¸æˆç©æ³•UI
     /// </summary>
     public class NetworkUI : MonoBehaviour
     {
-        [Header("Ö÷Ãæ°å")]
-        [SerializeField] private GameObject mainPanel;
+        [Header("ç½‘ç»œçŠ¶æ€é¢æ¿")]
+        [SerializeField] private GameObject networkStatusPanel;
+        [SerializeField] private TMP_Text connectionStatusText;
+        [SerializeField] private TMP_Text roomInfoText;
+        [SerializeField] private TMP_Text playerListText;
+        [SerializeField] private Button disconnectButton;
+        [SerializeField] private Button backToMenuButton;
 
-        [Header("ÓÎÏ·Ä£Ê½Ñ¡ÔñÃæ°å")]
-        [SerializeField] private GameObject gameModePanel;
-        [SerializeField] private Button singlePlayerButton;
-        [SerializeField] private Button multiPlayerButton;
+        [Header("è°ƒè¯•ä¿¡æ¯ï¼ˆå¯é€‰ï¼‰")]
+        [SerializeField] private bool showDebugInfo = false;
+        [SerializeField] private TMP_Text debugInfoText;
 
-        [Header("Á¬½Ó½çÃæ")]
-        [SerializeField] private GameObject connectPanel;
-        [SerializeField] private TMP_InputField serverIPInput;
-        [SerializeField] private TMP_InputField portInput;
-        [SerializeField] private Button connectButton;
-        [SerializeField] private Button backToModeButton; // ·µ»ØÄ£Ê½Ñ¡Ôñ°´Å¥
-        [SerializeField] private TMP_Text statusText;
-
-        [Header("µÈ´ı½çÃæ")]
-        [SerializeField] private GameObject waitingPanel;
-        [SerializeField] private TMP_Text waitingText;
-        [SerializeField] private Button disconnectButton; // ¶Ï¿ªÁ¬½Ó°´Å¥·ÅÔÚµÈ´ı½çÃæ
-        [SerializeField] private TMP_Text clientInfoText;
-
-        private NetworkQuestionManagerController networkQMC;
+        private Dictionary<ushort, string> connectedPlayers;
 
         private void Start()
         {
-            networkQMC = FindObjectOfType<NetworkQuestionManagerController>();
-            if (networkQMC == null)
-            {
-                Debug.LogError("Î´ÕÒµ½ NetworkQuestionManagerController");
-            }
-
             InitializeUI();
             RegisterNetworkEvents();
+            UpdateUIBasedOnGameMode();
         }
 
         private void OnDestroy()
@@ -52,255 +39,339 @@ namespace UI
             UnregisterNetworkEvents();
         }
 
+        /// <summary>
+        /// åˆå§‹åŒ–UIç»„ä»¶
+        /// </summary>
         private void InitializeUI()
         {
-            // ÉèÖÃÄ¬ÈÏÖµ
-            if (serverIPInput != null)
-                serverIPInput.text = "127.0.0.1";
-            if (portInput != null)
-                portInput.text = "7777";
+            connectedPlayers = new Dictionary<ushort, string>();
 
-            // °ó¶¨°´Å¥ÊÂ¼ş
-            if (connectButton != null)
-                connectButton.onClick.AddListener(OnConnectButtonClicked);
-            if (backToModeButton != null)
-                backToModeButton.onClick.AddListener(OnBackToModeClicked);
+            // ç»‘å®šæŒ‰é’®äº‹ä»¶
             if (disconnectButton != null)
-                disconnectButton.onClick.AddListener(OnDisconnectButtonClicked);
-            if (singlePlayerButton != null)
-                singlePlayerButton.onClick.AddListener(OnSinglePlayerClicked);
-            if (multiPlayerButton != null)
-                multiPlayerButton.onClick.AddListener(OnMultiPlayerClicked);
+                disconnectButton.onClick.AddListener(OnDisconnectClicked);
+            if (backToMenuButton != null)
+                backToMenuButton.onClick.AddListener(OnBackToMenuClicked);
 
-            // ³õÊ¼×´Ì¬£ºÏÔÊ¾ÓÎÏ·Ä£Ê½Ñ¡ÔñÃæ°å£¨ÔÊĞíÑ¡Ôñµ¥»ú»ò¶àÈË£©
-            ShowPanel(PanelType.GameMode);
-            UpdateUI();
+            // è®¾ç½®è°ƒè¯•ä¿¡æ¯æ˜¾ç¤º
+            if (debugInfoText != null)
+                debugInfoText.gameObject.SetActive(showDebugInfo);
         }
 
+        /// <summary>
+        /// æ³¨å†Œç½‘ç»œäº‹ä»¶
+        /// </summary>
         private void RegisterNetworkEvents()
         {
             NetworkManager.OnConnected += OnNetworkConnected;
             NetworkManager.OnDisconnected += OnNetworkDisconnected;
-            NetworkManager.OnPlayerTurnChanged += OnPlayerTurnChanged;
+            NetworkManager.OnHostStarted += OnHostStarted;
+            NetworkManager.OnHostStopped += OnHostStopped;
+            NetworkManager.OnPlayerJoined += OnPlayerJoined;
+            NetworkManager.OnPlayerLeft += OnPlayerLeft;
         }
 
+        /// <summary>
+        /// æ³¨é”€ç½‘ç»œäº‹ä»¶
+        /// </summary>
         private void UnregisterNetworkEvents()
         {
             NetworkManager.OnConnected -= OnNetworkConnected;
             NetworkManager.OnDisconnected -= OnNetworkDisconnected;
-            NetworkManager.OnPlayerTurnChanged -= OnPlayerTurnChanged;
+            NetworkManager.OnHostStarted -= OnHostStarted;
+            NetworkManager.OnHostStopped -= OnHostStopped;
+            NetworkManager.OnPlayerJoined -= OnPlayerJoined;
+            NetworkManager.OnPlayerLeft -= OnPlayerLeft;
         }
 
-        #region UIÊÂ¼ş´¦Àí
-
-        private void OnConnectButtonClicked()
+        /// <summary>
+        /// æ ¹æ®æ¸¸æˆæ¨¡å¼æ›´æ–°UI
+        /// </summary>
+        private void UpdateUIBasedOnGameMode()
         {
-            string ip = serverIPInput?.text ?? "127.0.0.1";
-            if (ushort.TryParse(portInput?.text ?? "7777", out ushort port))
+            var gameMode = MainMenuManager.SelectedGameMode;
+
+            switch (gameMode)
             {
-                NetworkManager.Instance?.Connect(ip, port);
-                UpdateStatusText("ÕıÔÚÁ¬½Ó·şÎñÆ÷...");
-                connectButton.interactable = false;
+                case MainMenuManager.GameMode.SinglePlayer:
+                    // å•æœºæ¨¡å¼ï¼šéšè—ç½‘ç»œUI
+                    SetNetworkPanelActive(false);
+                    break;
+
+                case MainMenuManager.GameMode.Host:
+                case MainMenuManager.GameMode.Client:
+                    // ç½‘ç»œæ¨¡å¼ï¼šæ˜¾ç¤ºç½‘ç»œUI
+                    SetNetworkPanelActive(true);
+                    break;
+
+                default:
+                    Debug.LogWarning($"æœªçŸ¥æ¸¸æˆæ¨¡å¼: {gameMode}");
+                    break;
             }
-            else
-            {
-                UpdateStatusText("¶Ë¿ÚºÅ¸ñÊ½´íÎó");
-            }
         }
 
-        private void OnDisconnectButtonClicked()
+        /// <summary>
+        /// è®¾ç½®ç½‘ç»œé¢æ¿æ¿€æ´»çŠ¶æ€
+        /// </summary>
+        private void SetNetworkPanelActive(bool active)
         {
-            NetworkManager.Instance?.Disconnect();
+            if (networkStatusPanel != null)
+                networkStatusPanel.SetActive(active);
         }
 
-        private void OnSinglePlayerClicked()
-        {
-            Debug.Log("¿ªÊ¼µ¥»úÓÎÏ·");
-            // Òş²ØÍøÂçUI£¬Æô¶¯µ¥»úÄ£Ê½
-            HideNetworkUI();
-            networkQMC?.StartGame(false); // µ¥»úÄ£Ê½
-        }
-
-        private void OnMultiPlayerClicked()
-        {
-            Debug.Log("Ñ¡Ôñ¶àÈËÓÎÏ·£¬ĞèÒªÏÈÁ¬½Ó·şÎñÆ÷");
-            // ÏÔÊ¾Á¬½ÓÃæ°åÈÃÓÃ»§Á¬½Ó·şÎñÆ÷
-            ShowPanel(PanelType.Connect);
-        }
-
-        private void OnBackToModeClicked()
-        {
-            Debug.Log("·µ»ØÄ£Ê½Ñ¡Ôñ");
-            // ´ÓÁ¬½ÓÃæ°å·µ»ØÄ£Ê½Ñ¡Ôñ
-            ShowPanel(PanelType.GameMode);
-        }
-
-        #endregion
-
-        #region ÍøÂçÊÂ¼ş´¦Àí
+        #region ç½‘ç»œäº‹ä»¶å¤„ç†
 
         private void OnNetworkConnected()
         {
-            UpdateStatusText("Á¬½Ó³É¹¦");
-            UpdateClientInfoText($"¿Í»§¶ËID: {NetworkManager.Instance.ClientId}");
+            UpdateConnectionStatus("å·²è¿æ¥åˆ°æœåŠ¡å™¨");
 
-            // Á¬½Ó³É¹¦ºóÏÔÊ¾¶àÈËÓÎÏ·µÈ´ı½çÃæ
-            ShowPanel(PanelType.Waiting);
-            UpdateWaitingText("Á¬½Ó³É¹¦£¡µÈ´ı·şÎñÆ÷·ÖÅäÓÎÏ·...");
-
-            // ×Ô¶¯¿ªÊ¼¶àÈËÓÎÏ·
-            networkQMC?.StartGame(true); // ¶àÈËÄ£Ê½
+            if (NetworkManager.Instance.IsHost)
+            {
+                UpdateRoomInfo($"æˆ¿é—´: {NetworkManager.Instance.RoomName}");
+                AddPlayer(NetworkManager.Instance.ClientId, "æˆ¿ä¸»");
+            }
+            else
+            {
+                UpdateRoomInfo("å·²è¿æ¥åˆ°æˆ¿é—´");
+                AddPlayer(NetworkManager.Instance.ClientId, MainMenuManager.PlayerName);
+            }
 
             UpdateUI();
         }
 
         private void OnNetworkDisconnected()
         {
-            UpdateStatusText("Á¬½Ó¶Ï¿ª");
-            ShowPanel(PanelType.GameMode); // »Øµ½Ä£Ê½Ñ¡Ôñ
+            UpdateConnectionStatus("è¿æ¥å·²æ–­å¼€");
+            UpdateRoomInfo("");
+            ClearPlayerList();
             UpdateUI();
+        }
 
-            // Èç¹ûÕıÔÚ¶àÈËÓÎÏ·ÖĞ¶Ï¿ª£¬ÌáÊ¾ÓÃ»§
-            if (networkQMC?.IsMultiplayerMode == true)
+        private void OnHostStarted()
+        {
+            UpdateConnectionStatus("ä¸»æœºå·²å¯åŠ¨");
+            UpdateRoomInfo($"æˆ¿é—´: {NetworkManager.Instance.RoomName} | ç«¯å£: {NetworkManager.Instance.Port}");
+
+            if (disconnectButton != null)
             {
-                Debug.Log("ÍøÂç¶Ï¿ª£¬»Øµ½Ä£Ê½Ñ¡Ôñ½çÃæ");
-                ShowNetworkUI(); // È·±£UI¿É¼û
+                var buttonText = disconnectButton.GetComponentInChildren<TMP_Text>();
+                if (buttonText != null)
+                    buttonText.text = "åœæ­¢ä¸»æœº";
             }
         }
 
-        private void OnPlayerTurnChanged(ushort playerId)
+        private void OnHostStopped()
         {
-            if (networkQMC?.IsMultiplayerMode == true)
+            UpdateConnectionStatus("ä¸»æœºå·²åœæ­¢");
+            UpdateRoomInfo("");
+            ClearPlayerList();
+
+            if (disconnectButton != null)
             {
-                bool isMyTurn = playerId == NetworkManager.Instance?.ClientId;
-                if (isMyTurn)
-                {
-                    UpdateWaitingText("ÂÖµ½Äã´ğÌâÁË£¡");
-                    // Òş²ØµÈ´ı½çÃæ£¬ÏÔÊ¾ÓÎÏ·ÄÚÈİ
-                    HideNetworkUI();
-                }
-                else
-                {
-                    UpdateWaitingText($"ÂÖµ½Íæ¼Ò {playerId} ´ğÌâ£¬ÇëµÈ´ı...");
-                    ShowPanel(PanelType.Waiting);
-                }
+                var buttonText = disconnectButton.GetComponentInChildren<TMP_Text>();
+                if (buttonText != null)
+                    buttonText.text = "æ–­å¼€è¿æ¥";
             }
+        }
+
+        private void OnPlayerJoined(ushort playerId)
+        {
+            AddPlayer(playerId, $"ç©å®¶{playerId}");
+            Debug.Log($"ç©å®¶åŠ å…¥: {playerId}");
+        }
+
+        private void OnPlayerLeft(ushort playerId)
+        {
+            RemovePlayer(playerId);
+            Debug.Log($"ç©å®¶ç¦»å¼€: {playerId}");
         }
 
         #endregion
 
-        #region UI×´Ì¬¹ÜÀí
+        #region ç©å®¶åˆ—è¡¨ç®¡ç†
 
-        private enum PanelType
+        /// <summary>
+        /// æ·»åŠ ç©å®¶åˆ°åˆ—è¡¨
+        /// </summary>
+        private void AddPlayer(ushort playerId, string playerName)
         {
-            Connect,
-            GameMode,
-            Waiting
+            connectedPlayers[playerId] = playerName;
+            UpdatePlayerList();
         }
 
-        private void ShowPanel(PanelType panelType)
+        /// <summary>
+        /// ä»åˆ—è¡¨ç§»é™¤ç©å®¶
+        /// </summary>
+        private void RemovePlayer(ushort playerId)
         {
-            // Òş²ØËùÓĞÃæ°å
-            if (connectPanel != null) connectPanel.SetActive(false);
-            if (gameModePanel != null) gameModePanel.SetActive(false);
-            if (waitingPanel != null) waitingPanel.SetActive(false);
+            connectedPlayers.Remove(playerId);
+            UpdatePlayerList();
+        }
 
-            // ÏÔÊ¾Ö¸¶¨Ãæ°å
-            switch (panelType)
+        /// <summary>
+        /// æ¸…ç©ºç©å®¶åˆ—è¡¨
+        /// </summary>
+        private void ClearPlayerList()
+        {
+            connectedPlayers.Clear();
+            UpdatePlayerList();
+        }
+
+        /// <summary>
+        /// æ›´æ–°ç©å®¶åˆ—è¡¨æ˜¾ç¤º
+        /// </summary>
+        private void UpdatePlayerList()
+        {
+            if (playerListText == null)
+                return;
+
+            if (connectedPlayers.Count == 0)
             {
-                case PanelType.Connect:
-                    if (connectPanel != null) connectPanel.SetActive(true);
-                    break;
-                case PanelType.GameMode:
-                    if (gameModePanel != null) gameModePanel.SetActive(true);
-                    break;
-                case PanelType.Waiting:
-                    if (waitingPanel != null) waitingPanel.SetActive(true);
-                    break;
+                playerListText.text = "ç©å®¶åˆ—è¡¨ï¼šæ— ";
+                return;
             }
 
-            // È·±£Ö÷Ãæ°å¿É¼û
-            if (mainPanel != null) mainPanel.SetActive(true);
+            var playerListStr = "ç©å®¶åˆ—è¡¨ï¼š\n";
+            foreach (var player in connectedPlayers)
+            {
+                playerListStr += $"â€¢ {player.Value} (ID: {player.Key})\n";
+            }
+
+            playerListText.text = playerListStr.TrimEnd('\n');
         }
 
-        private void HideNetworkUI()
+        #endregion
+
+        #region UIæ›´æ–°æ–¹æ³•
+
+        /// <summary>
+        /// æ›´æ–°è¿æ¥çŠ¶æ€æ–‡æœ¬
+        /// </summary>
+        private void UpdateConnectionStatus(string status)
         {
-            // Òş²ØÕû¸öÍøÂçUI£¬ÈÃÓÎÏ·ÄÚÈİÏÔÊ¾
-            if (mainPanel != null) mainPanel.SetActive(false);
+            if (connectionStatusText != null)
+                connectionStatusText.text = $"çŠ¶æ€: {status}";
         }
 
-        private void ShowNetworkUI()
+        /// <summary>
+        /// æ›´æ–°æˆ¿é—´ä¿¡æ¯æ–‡æœ¬
+        /// </summary>
+        private void UpdateRoomInfo(string info)
         {
-            // ÖØĞÂÏÔÊ¾ÍøÂçUI
-            if (mainPanel != null) mainPanel.SetActive(true);
+            if (roomInfoText != null)
+                roomInfoText.text = info;
         }
 
+        /// <summary>
+        /// æ›´æ–°UIçŠ¶æ€
+        /// </summary>
         private void UpdateUI()
         {
             bool isConnected = NetworkManager.Instance?.IsConnected ?? false;
+            bool isHost = NetworkManager.Instance?.IsHost ?? false;
 
-            if (connectButton != null)
-                connectButton.interactable = !isConnected;
+            // æ›´æ–°æŒ‰é’®çŠ¶æ€
             if (disconnectButton != null)
-                disconnectButton.interactable = isConnected;
+                disconnectButton.interactable = isConnected || isHost;
 
-            // µ¥»úÄ£Ê½Ê¼ÖÕ¿ÉÓÃ£¬¶àÈËÄ£Ê½ÔÚGameModeÃæ°åÖĞÊ¼ÖÕ¿ÉÓÃ
-            if (singlePlayerButton != null)
-                singlePlayerButton.interactable = true;
-            if (multiPlayerButton != null)
-                multiPlayerButton.interactable = true;
+            // æ›´æ–°è°ƒè¯•ä¿¡æ¯
+            if (showDebugInfo && debugInfoText != null)
+            {
+                UpdateDebugInfo();
+            }
+        }
+
+        /// <summary>
+        /// æ›´æ–°è°ƒè¯•ä¿¡æ¯
+        /// </summary>
+        private void UpdateDebugInfo()
+        {
+            if (debugInfoText == null)
+                return;
+
+            var info = "=== ç½‘ç»œè°ƒè¯•ä¿¡æ¯ ===\n";
+            info += $"æ¸¸æˆæ¨¡å¼: {MainMenuManager.SelectedGameMode}\n";
+
+            if (NetworkManager.Instance != null)
+            {
+                info += $"æ˜¯å¦ä¸ºä¸»æœº: {NetworkManager.Instance.IsHost}\n";
+                info += $"æ˜¯å¦è¿æ¥: {NetworkManager.Instance.IsConnected}\n";
+                info += $"å®¢æˆ·ç«¯ID: {NetworkManager.Instance.ClientId}\n";
+                info += $"ç«¯å£: {NetworkManager.Instance.Port}\n";
+
+                if (NetworkManager.Instance.IsHost)
+                {
+                    info += $"æˆ¿é—´å: {NetworkManager.Instance.RoomName}\n";
+                    info += $"æœ€å¤§ç©å®¶: {NetworkManager.Instance.MaxPlayers}\n";
+                    info += $"å½“å‰ç©å®¶æ•°: {NetworkManager.Instance.ConnectedPlayerCount}\n";
+                }
+            }
+
+            debugInfoText.text = info;
         }
 
         #endregion
 
-        #region UIÎÄ±¾¸üĞÂ
+        #region æŒ‰é’®äº‹ä»¶å¤„ç†
 
-        private void UpdateStatusText(string text)
+        /// <summary>
+        /// æ–­å¼€è¿æ¥æŒ‰é’®ç‚¹å‡»
+        /// </summary>
+        private void OnDisconnectClicked()
         {
-            if (statusText != null)
-                statusText.text = text;
+            if (NetworkManager.Instance != null)
+            {
+                if (NetworkManager.Instance.IsHost)
+                {
+                    Debug.Log("åœæ­¢ä¸»æœº");
+                    NetworkManager.Instance.StopHost();
+                }
+                else
+                {
+                    Debug.Log("æ–­å¼€è¿æ¥");
+                    NetworkManager.Instance.Disconnect();
+                }
+            }
         }
 
-        private void UpdateClientInfoText(string text)
+        /// <summary>
+        /// è¿”å›ä¸»èœå•æŒ‰é’®ç‚¹å‡»
+        /// </summary>
+        private void OnBackToMenuClicked()
         {
-            if (clientInfoText != null)
-                clientInfoText.text = text;
-        }
+            // å…ˆæ–­å¼€ç½‘ç»œè¿æ¥
+            OnDisconnectClicked();
 
-        private void UpdateWaitingText(string text)
-        {
-            if (waitingText != null)
-                waitingText.text = text;
+            // è¿”å›ä¸»èœå•åœºæ™¯
+            SceneManager.LoadScene("MainMenuScene");
         }
 
         #endregion
 
-        #region ¹«¹²·½·¨
+        #region å…¬å…±æ¥å£
 
         /// <summary>
-        /// ÏÔÊ¾ÍøÂç´íÎó
+        /// æ˜¾ç¤ºç½‘ç»œçŠ¶æ€é¢æ¿
         /// </summary>
-        public void ShowNetworkError(string error)
+        public void ShowNetworkPanel()
         {
-            UpdateStatusText($"´íÎó: {error}");
-            ShowNetworkUI();
-            ShowPanel(PanelType.Connect);
+            SetNetworkPanelActive(true);
         }
 
         /// <summary>
-        /// ÓÎÏ·½áÊøºóÖØĞÂÏÔÊ¾Ä£Ê½Ñ¡Ôñ
+        /// éšè—ç½‘ç»œçŠ¶æ€é¢æ¿
         /// </summary>
-        public void OnGameEnded()
+        public void HideNetworkPanel()
         {
-            ShowNetworkUI();
-            if (NetworkManager.Instance?.IsConnected == true)
-            {
-                ShowPanel(PanelType.GameMode);
-            }
-            else
-            {
-                ShowPanel(PanelType.Connect);
-            }
+            SetNetworkPanelActive(false);
+        }
+
+        /// <summary>
+        /// åˆ‡æ¢ç½‘ç»œé¢æ¿æ˜¾ç¤ºçŠ¶æ€
+        /// </summary>
+        public void ToggleNetworkPanel()
+        {
+            if (networkStatusPanel != null)
+                SetNetworkPanelActive(!networkStatusPanel.activeSelf);
         }
 
         #endregion
