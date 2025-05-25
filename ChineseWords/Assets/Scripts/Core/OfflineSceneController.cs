@@ -1,37 +1,39 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.SceneManagement;
+using Managers;
 
 namespace Core
 {
     /// <summary>
-    /// µ¥»ú³¡¾°¿ØÖÆÆ÷
-    /// ×¨ÃÅ¹ÜÀíµ¥»úÓÎÏ·µÄ³õÊ¼»¯ºÍ¿ØÖÆ
+    /// å•æœºåœºæ™¯æ§åˆ¶å™¨
+    /// ä¸“é—¨ç®¡ç†å•æœºæ¸¸æˆçš„åˆå§‹åŒ–å’Œæ§åˆ¶
     /// </summary>
     public class OfflineSceneController : MonoBehaviour
     {
-        [Header("ÓÎÏ·¿ØÖÆÆ÷")]
+        [Header("æ¸¸æˆæ§åˆ¶å™¨")]
         [SerializeField] private QuestionManagerController questionController;
         [SerializeField] private TimerManager timerManager;
         [SerializeField] private PlayerHealthManager healthManager;
 
-        [Header("UI×é¼ş")]
+        [Header("UIç»„ä»¶")]
         [SerializeField] private GameObject gameCanvas;
         [SerializeField] private GameObject offlineUICanvas;
 
-        [Header("ÓÎÏ·ÉèÖÃ")]
+        [Header("æ¸¸æˆè®¾ç½®")]
         [SerializeField] private bool autoStartGame = true;
         [SerializeField] private float gameStartDelay = 1f;
+        [SerializeField] private bool autoFindComponents = true;
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static OfflineSceneController Instance { get; private set; }
 
-        // ÓÎÏ·×´Ì¬
+        // æ¸¸æˆçŠ¶æ€
         private bool gameStarted = false;
         private bool gamePaused = false;
 
-        // ÊôĞÔ
+        // å±æ€§
         public bool IsGameStarted => gameStarted;
         public bool IsGamePaused => gamePaused;
         public QuestionManagerController QuestionController => questionController;
@@ -47,6 +49,12 @@ namespace Core
                 Destroy(gameObject);
                 return;
             }
+
+            // å¦‚æœå¯ç”¨è‡ªåŠ¨æŸ¥æ‰¾ä¸”ç»„ä»¶æœªæ‰‹åŠ¨è®¾ç½®ï¼Œåˆ™è‡ªåŠ¨æŸ¥æ‰¾
+            if (autoFindComponents)
+            {
+                AutoFindComponents();
+            }
         }
 
         private void Start()
@@ -55,33 +63,88 @@ namespace Core
         }
 
         /// <summary>
-        /// ³õÊ¼»¯µ¥»úÓÎÏ·
+        /// è‡ªåŠ¨æŸ¥æ‰¾ç»„ä»¶
+        /// </summary>
+        private void AutoFindComponents()
+        {
+            // æŸ¥æ‰¾ QuestionManagerController
+            if (questionController == null)
+            {
+                // å…ˆå°è¯•æŒ‰åç§°æŸ¥æ‰¾ GameControllers GameObject
+                var gameControllersObj = GameObject.Find("GameControllers");
+                if (gameControllersObj != null)
+                {
+                    questionController = gameControllersObj.GetComponent<QuestionManagerController>();
+                }
+
+                // å¦‚æœè¿˜æ²¡æ‰¾åˆ°ï¼Œåœ¨åœºæ™¯ä¸­æœç´¢
+                if (questionController == null)
+                {
+                    questionController = FindObjectOfType<QuestionManagerController>();
+                }
+            }
+
+            // æŸ¥æ‰¾ TimerManager
+            if (timerManager == null)
+            {
+                var gameControllersObj = GameObject.Find("GameControllers");
+                if (gameControllersObj != null)
+                {
+                    timerManager = gameControllersObj.GetComponent<TimerManager>();
+                }
+
+                if (timerManager == null)
+                {
+                    timerManager = FindObjectOfType<TimerManager>();
+                }
+            }
+
+            // æŸ¥æ‰¾ PlayerHealthManager
+            if (healthManager == null)
+            {
+                var gameControllersObj = GameObject.Find("GameControllers");
+                if (gameControllersObj != null)
+                {
+                    healthManager = gameControllersObj.GetComponent<PlayerHealthManager>();
+                }
+
+                if (healthManager == null)
+                {
+                    healthManager = FindObjectOfType<PlayerHealthManager>();
+                }
+            }
+
+            LogDebug($"è‡ªåŠ¨æŸ¥æ‰¾ç»„ä»¶å®Œæˆ - QMC: {questionController != null}, Timer: {timerManager != null}, Health: {healthManager != null}");
+        }
+
+        /// <summary>
+        /// åˆå§‹åŒ–å•æœºæ¸¸æˆ
         /// </summary>
         private void InitializeOfflineGame()
         {
-            LogDebug("³õÊ¼»¯µ¥»úÓÎÏ·");
+            LogDebug("åˆå§‹åŒ–å•æœºæ¸¸æˆ");
 
-            // ÑéÖ¤×é¼şÒıÓÃ
+            // éªŒè¯ç»„ä»¶å¼•ç”¨
             if (!ValidateComponents())
             {
-                Debug.LogError("×é¼şÑéÖ¤Ê§°Ü£¬ÎŞ·¨Æô¶¯ÓÎÏ·");
+                Debug.LogError("ç»„ä»¶éªŒè¯å¤±è´¥ï¼Œæ— æ³•å¯åŠ¨æ¸¸æˆ");
                 return;
             }
 
-            // ÅäÖÃUI
+            // é…ç½®UI
             ConfigureUI();
 
-            // ×Ô¶¯¿ªÊ¼ÓÎÏ·
+            // è‡ªåŠ¨å¼€å§‹æ¸¸æˆ
             if (autoStartGame)
             {
                 Invoke(nameof(StartGame), gameStartDelay);
             }
 
-            LogDebug("µ¥»úÓÎÏ·³õÊ¼»¯Íê³É");
+            LogDebug("å•æœºæ¸¸æˆåˆå§‹åŒ–å®Œæˆ");
         }
 
         /// <summary>
-        /// ÑéÖ¤±ØÒª×é¼ş
+        /// éªŒè¯å¿…è¦ç»„ä»¶
         /// </summary>
         private bool ValidateComponents()
         {
@@ -89,19 +152,19 @@ namespace Core
 
             if (questionController == null)
             {
-                Debug.LogError("QuestionManagerController Î´ÉèÖÃ");
+                Debug.LogError("QuestionManagerController æœªè®¾ç½® - è¯·ç¡®ä¿ GameControllers GameObject ä¸ŠæŒ‚è½½äº†è¯¥ç»„ä»¶ï¼Œæˆ–åœ¨ Inspector ä¸­æ‰‹åŠ¨æ‹–æ‹½èµ‹å€¼");
                 isValid = false;
             }
 
             if (timerManager == null)
             {
-                Debug.LogError("TimerManager Î´ÉèÖÃ");
+                Debug.LogError("TimerManager æœªè®¾ç½® - è¯·ç¡®ä¿ GameControllers GameObject ä¸ŠæŒ‚è½½äº†è¯¥ç»„ä»¶ï¼Œæˆ–åœ¨ Inspector ä¸­æ‰‹åŠ¨æ‹–æ‹½èµ‹å€¼");
                 isValid = false;
             }
 
             if (healthManager == null)
             {
-                Debug.LogError("PlayerHealthManager Î´ÉèÖÃ");
+                Debug.LogError("PlayerHealthManager æœªè®¾ç½® - è¯·ç¡®ä¿ GameControllers GameObject ä¸ŠæŒ‚è½½äº†è¯¥ç»„ä»¶ï¼Œæˆ–åœ¨ Inspector ä¸­æ‰‹åŠ¨æ‹–æ‹½èµ‹å€¼");
                 isValid = false;
             }
 
@@ -109,153 +172,192 @@ namespace Core
         }
 
         /// <summary>
-        /// ÅäÖÃUI×é¼ş
+        /// é…ç½®UIç»„ä»¶
         /// </summary>
         private void ConfigureUI()
         {
-            // È·±£ÓÎÏ·UI¿É¼û
+            // ç¡®ä¿æ¸¸æˆUIå¯è§
             if (gameCanvas != null)
                 gameCanvas.SetActive(true);
 
             if (offlineUICanvas != null)
                 offlineUICanvas.SetActive(true);
 
-            LogDebug("UIÅäÖÃÍê³É");
+            LogDebug("UIé…ç½®å®Œæˆ");
         }
 
         /// <summary>
-        /// ¿ªÊ¼ÓÎÏ·
+        /// å¼€å§‹æ¸¸æˆ
         /// </summary>
         public void StartGame()
         {
             if (gameStarted)
             {
-                LogDebug("ÓÎÏ·ÒÑ¾­¿ªÊ¼");
+                LogDebug("æ¸¸æˆå·²ç»å¼€å§‹");
                 return;
             }
 
-            LogDebug("¿ªÊ¼µ¥»úÓÎÏ·");
+            LogDebug("å¼€å§‹å•æœºæ¸¸æˆ");
             gameStarted = true;
             gamePaused = false;
 
-            // ÕâÀï¿ÉÒÔÌí¼ÓÓÎÏ·¿ªÊ¼µÄÌØĞ§»òÒôĞ§
+            // è¿™é‡Œå¯ä»¥æ·»åŠ æ¸¸æˆå¼€å§‹çš„ç‰¹æ•ˆæˆ–éŸ³æ•ˆ
 
-            // QuestionManagerController »á×Ô¶¯¿ªÊ¼¼ÓÔØµÚÒ»Ìâ
+            // ä½¿ç”¨å·²ç»æ‰¾åˆ°çš„ questionController å¼•ç”¨
+            if (questionController != null)
+            {
+                questionController.StartQuestionFlow();
+                LogDebug("é¢˜ç›®æµç¨‹å·²å¯åŠ¨");
+            }
+            else
+            {
+                Debug.LogError("[OfflineSceneController] QuestionManagerController å¼•ç”¨ä¸ºç©ºï¼Œæ— æ³•å¯åŠ¨é¢˜ç›®æµç¨‹");
+
+                // å°è¯•æœ€åä¸€æ¬¡æŸ¥æ‰¾
+                questionController = FindObjectOfType<QuestionManagerController>();
+                if (questionController != null)
+                {
+                    questionController.StartQuestionFlow();
+                    LogDebug("é€šè¿‡æœ€åæŸ¥æ‰¾å¯åŠ¨äº†é¢˜ç›®æµç¨‹");
+                }
+                else
+                {
+                    Debug.LogError("[OfflineSceneController] åœ¨åœºæ™¯ä¸­æ‰¾ä¸åˆ° QuestionManagerController ç»„ä»¶");
+                }
+            }
         }
 
         /// <summary>
-        /// ÔİÍ£ÓÎÏ·
+        /// æš‚åœæ¸¸æˆ
         /// </summary>
         public void PauseGame()
         {
             if (!gameStarted || gamePaused)
                 return;
 
-            LogDebug("ÔİÍ£ÓÎÏ·");
+            LogDebug("æš‚åœæ¸¸æˆ");
             gamePaused = true;
 
-            // ÔİÍ£¼ÆÊ±Æ÷
+            // æš‚åœé¢˜ç›®æµç¨‹
+            if (questionController != null)
+            {
+                questionController.PauseQuestionFlow();
+            }
+
+            // æš‚åœè®¡æ—¶å™¨
             if (timerManager != null)
                 timerManager.PauseTimer();
 
-            // ÉèÖÃÊ±¼äËõ·Å
+            // è®¾ç½®æ—¶é—´ç¼©æ”¾
             Time.timeScale = 0f;
         }
 
         /// <summary>
-        /// »Ö¸´ÓÎÏ·
+        /// æ¢å¤æ¸¸æˆ
         /// </summary>
         public void ResumeGame()
         {
             if (!gameStarted || !gamePaused)
                 return;
 
-            LogDebug("»Ö¸´ÓÎÏ·");
+            LogDebug("æ¢å¤æ¸¸æˆ");
             gamePaused = false;
 
-            // »Ö¸´¼ÆÊ±Æ÷
+            // æ¢å¤é¢˜ç›®æµç¨‹
+            if (questionController != null)
+            {
+                questionController.ResumeQuestionFlow();
+            }
+
+            // æ¢å¤è®¡æ—¶å™¨
             if (timerManager != null)
                 timerManager.ResumeTimer();
 
-            // »Ö¸´Ê±¼äËõ·Å
+            // æ¢å¤æ—¶é—´ç¼©æ”¾
             Time.timeScale = 1f;
         }
 
         /// <summary>
-        /// ÖØĞÂ¿ªÊ¼ÓÎÏ·
+        /// é‡æ–°å¼€å§‹æ¸¸æˆ
         /// </summary>
         public void RestartGame()
         {
-            LogDebug("ÖØĞÂ¿ªÊ¼ÓÎÏ·");
+            LogDebug("é‡æ–°å¼€å§‹æ¸¸æˆ");
 
-            // »Ö¸´Ê±¼äËõ·Å
+            // æ¢å¤æ—¶é—´ç¼©æ”¾
             Time.timeScale = 1f;
 
-            // ÖØĞÂ¼ÓÔØµ±Ç°³¡¾°
+            // é‡æ–°åŠ è½½å½“å‰åœºæ™¯
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }
 
         /// <summary>
-        /// ½áÊøÓÎÏ·
+        /// ç»“æŸæ¸¸æˆ
         /// </summary>
         public void EndGame()
         {
             if (!gameStarted)
                 return;
 
-            LogDebug("½áÊøÓÎÏ·");
+            LogDebug("ç»“æŸæ¸¸æˆ");
             gameStarted = false;
             gamePaused = false;
 
-            // »Ö¸´Ê±¼äËõ·Å
+            // åœæ­¢é¢˜ç›®æµç¨‹
+            if (questionController != null)
+            {
+                questionController.StopQuestionFlow();
+            }
+
+            // æ¢å¤æ—¶é—´ç¼©æ”¾
             Time.timeScale = 1f;
 
-            // Í£Ö¹¼ÆÊ±Æ÷
+            // åœæ­¢è®¡æ—¶å™¨
             if (timerManager != null)
                 timerManager.StopTimer();
 
-            // ÕâÀï¿ÉÒÔÏÔÊ¾ÓÎÏ·½áÊø½çÃæ»òÍ³¼ÆĞÅÏ¢
+            // è¿™é‡Œå¯ä»¥æ˜¾ç¤ºæ¸¸æˆç»“æŸç•Œé¢æˆ–ç»Ÿè®¡ä¿¡æ¯
         }
 
         /// <summary>
-        /// ·µ»ØÖ÷²Ëµ¥
+        /// è¿”å›ä¸»èœå•
         /// </summary>
         public void BackToMainMenu()
         {
-            LogDebug("·µ»ØÖ÷²Ëµ¥");
+            LogDebug("è¿”å›ä¸»èœå•");
 
-            // »Ö¸´Ê±¼äËõ·Å
+            // æ¢å¤æ—¶é—´ç¼©æ”¾
             Time.timeScale = 1f;
 
-            // ¼ÓÔØÖ÷²Ëµ¥³¡¾°
+            // åŠ è½½ä¸»èœå•åœºæ™¯
             SceneManager.LoadScene("MainMenuScene");
         }
 
         /// <summary>
-        /// »ñÈ¡ÓÎÏ·Í³¼ÆĞÅÏ¢
+        /// è·å–æ¸¸æˆç»Ÿè®¡ä¿¡æ¯
         /// </summary>
         public string GetGameStats()
         {
-            var stats = "=== ÓÎÏ·Í³¼Æ ===\n";
-            stats += $"ÓÎÏ·×´Ì¬: {(gameStarted ? (gamePaused ? "ÒÑÔİÍ£" : "½øĞĞÖĞ") : "Î´¿ªÊ¼")}\n";
+            var stats = "=== æ¸¸æˆç»Ÿè®¡ ===\n";
+            stats += $"æ¸¸æˆçŠ¶æ€: {(gameStarted ? (gamePaused ? "å·²æš‚åœ" : "è¿›è¡Œä¸­") : "æœªå¼€å§‹")}\n";
 
             if (healthManager != null)
             {
-                // ¼ÙÉèHealthManagerÓĞ»ñÈ¡µ±Ç°ÑªÁ¿µÄ·½·¨
-                stats += $"µ±Ç°ÑªÁ¿: {healthManager.CurrentHealth}\n";
+                // å‡è®¾HealthManageræœ‰è·å–å½“å‰è¡€é‡çš„æ–¹æ³•
+                stats += $"å½“å‰è¡€é‡: {healthManager.CurrentHealth}\n";
             }
 
             if (timerManager != null)
             {
-                // ¼ÙÉèTimerManagerÓĞ»ñÈ¡Ê£ÓàÊ±¼äµÄ·½·¨
-                stats += $"Ê£ÓàÊ±¼ä: {timerManager.RemainingTime:F1}Ãë\n";
+                // å‡è®¾TimerManageræœ‰è·å–å‰©ä½™æ—¶é—´çš„æ–¹æ³•
+                stats += $"å‰©ä½™æ—¶é—´: {timerManager.RemainingTime:F1}ç§’\n";
             }
 
             return stats;
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -266,35 +368,61 @@ namespace Core
         }
 
         /// <summary>
-        /// Ó¦ÓÃ³ÌĞò½¹µã±ä»¯Ê±µÄ´¦Àí
+        /// åº”ç”¨ç¨‹åºç„¦ç‚¹å˜åŒ–æ—¶çš„å¤„ç†
         /// </summary>
         private void OnApplicationFocus(bool hasFocus)
         {
             if (!hasFocus && gameStarted && !gamePaused)
             {
-                // Ê§È¥½¹µãÊ±×Ô¶¯ÔİÍ£ÓÎÏ·
+                // å¤±å»ç„¦ç‚¹æ—¶è‡ªåŠ¨æš‚åœæ¸¸æˆ
                 PauseGame();
-                LogDebug("Ó¦ÓÃÊ§È¥½¹µã£¬×Ô¶¯ÔİÍ£ÓÎÏ·");
+                LogDebug("åº”ç”¨å¤±å»ç„¦ç‚¹ï¼Œè‡ªåŠ¨æš‚åœæ¸¸æˆ");
             }
         }
 
         /// <summary>
-        /// Ó¦ÓÃ³ÌĞòÔİÍ£Ê±µÄ´¦Àí
+        /// åº”ç”¨ç¨‹åºæš‚åœæ—¶çš„å¤„ç†
         /// </summary>
         private void OnApplicationPause(bool pauseStatus)
         {
             if (pauseStatus && gameStarted && !gamePaused)
             {
-                // Ó¦ÓÃÔİÍ£Ê±×Ô¶¯ÔİÍ£ÓÎÏ·
+                // åº”ç”¨æš‚åœæ—¶è‡ªåŠ¨æš‚åœæ¸¸æˆ
                 PauseGame();
-                LogDebug("Ó¦ÓÃÔİÍ££¬×Ô¶¯ÔİÍ£ÓÎÏ·");
+                LogDebug("åº”ç”¨æš‚åœï¼Œè‡ªåŠ¨æš‚åœæ¸¸æˆ");
             }
         }
 
         private void OnDestroy()
         {
-            // È·±£»Ö¸´Ê±¼äËõ·Å
+            // ç¡®ä¿æ¢å¤æ—¶é—´ç¼©æ”¾
             Time.timeScale = 1f;
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// ç¼–è¾‘å™¨ä¸­å¼ºåˆ¶é‡æ–°æŸ¥æ‰¾ç»„ä»¶
+        /// </summary>
+        [ContextMenu("é‡æ–°æŸ¥æ‰¾ç»„ä»¶")]
+        public void RefreshComponents()
+        {
+            AutoFindComponents();
+            LogDebug("ç»„ä»¶å¼•ç”¨å·²åˆ·æ–°");
+        }
+
+        /// <summary>
+        /// ç¼–è¾‘å™¨ä¸­æ˜¾ç¤ºç»„ä»¶çŠ¶æ€
+        /// </summary>
+        [ContextMenu("æ˜¾ç¤ºç»„ä»¶çŠ¶æ€")]
+        public void ShowComponentStatus()
+        {
+            Debug.Log($"=== ç»„ä»¶çŠ¶æ€ ===");
+            Debug.Log($"QuestionManagerController: {(questionController != null ? "âœ“" : "âœ—")}");
+            Debug.Log($"TimerManager: {(timerManager != null ? "âœ“" : "âœ—")}");
+            Debug.Log($"PlayerHealthManager: {(healthManager != null ? "âœ“" : "âœ—")}");
+            Debug.Log($"æ¸¸æˆå¼€å§‹: {(gameStarted ? "âœ“" : "âœ—")}");
+            Debug.Log($"æ¸¸æˆæš‚åœ: {(gamePaused ? "âœ“" : "âœ—")}");
+        }
+#endif
     }
 }

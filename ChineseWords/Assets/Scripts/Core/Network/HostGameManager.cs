@@ -1,6 +1,7 @@
 using UnityEngine;
 using Riptide;
 using Core.Network;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UI;
@@ -10,6 +11,7 @@ namespace Core.Network
     /// <summary>
     /// 主机游戏管理器
     /// 只在Host模式下激活，负责游戏逻辑控制
+    /// 使用事件驱动的初始化方式，解决脚本执行顺序问题
     /// </summary>
     public class HostGameManager : MonoBehaviour
     {
@@ -23,6 +25,10 @@ namespace Core.Network
         [SerializeField] private bool enableDebugLogs = true;
 
         public static HostGameManager Instance { get; private set; }
+
+        // 初始化状态
+        private bool isInitialized = false;
+        private bool isWaitingForNetworkManager = false;
 
         // 游戏状态
         private Dictionary<ushort, PlayerGameState> playerStates;
@@ -38,88 +44,251 @@ namespace Core.Network
         public bool IsGameInProgress => gameInProgress;
         public int PlayerCount => playerStates?.Count ?? 0;
         public ushort CurrentTurnPlayer => currentTurnPlayerId;
+        public bool IsInitialized => isInitialized;
 
         private void Awake()
         {
+            LogDebug($"Awake 执行时间: {Time.time}");
+
             if (Instance == null)
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
+                LogDebug("HostGameManager 单例已创建");
             }
             else
             {
+                LogDebug("销毁重复的HostGameManager实例");
                 Destroy(gameObject);
+                return;
             }
         }
 
         private void Start()
         {
-            // 只在Host模式下初始化
-            if (ShouldActivateHostManager())
+            LogDebug($"Start 执行时间: {Time.time}");
+
+            // 检查是否应该激活（基于选定的游戏模式）
+            if (MainMenuManager.SelectedGameMode != MainMenuManager.GameMode.Host)
             {
-                InitializeHostGame();
-            }
-            else
-            {
-                // 不是Host模式，禁用组件
+                LogDebug($"当前游戏模式: {MainMenuManager.SelectedGameMode}，非Host模式，禁用HostGameManager");
                 this.enabled = false;
-                LogDebug("非Host模式，禁用HostGameManager");
-            }
-        }
-
-        /// <summary>
-        /// 判断是否应该激活Host管理器
-        /// </summary>
-        private bool ShouldActivateHostManager()
-        {
-            return MainMenuManager.SelectedGameMode == MainMenuManager.GameMode.Host &&
-                   NetworkManager.Instance?.IsHost == true;
-        }
-
-        /// <summary>
-        /// 初始化主机游戏
-        /// </summary>
-        private void InitializeHostGame()
-        {
-            LogDebug("初始化主机游戏逻辑");
-
-            playerStates = new Dictionary<ushort, PlayerGameState>();
-            questionController = FindObjectOfType<NetworkQuestionManagerController>();
-
-            if (questionController == null)
-            {
-                Debug.LogError("未找到NetworkQuestionManagerController！");
                 return;
             }
 
-            // 注册网络事件
-            RegisterNetworkEvents();
+            // 开始初始化流程
+            StartCoroutine(InitializeHostManagerCoroutine());
+        }
+
+        /// <summary>
+        /// 初始化主机管理器的协程
+        /// </summary>
+        private IEnumerator InitializeHostManagerCoroutine()
+        {
+            LogDebug("开始初始化HostGameManager");
+
+            // 1. 等待 NetworkManager 准备就绪
+            yield return StartCoroutine(WaitForNetworkManager());
+
+            // 2. 检查网络状态并订阅事件
+            yield return StartCoroutine(CheckNetworkStatusAndSubscribe());
+
+            LogDebug("HostGameManager 初始化流程完成");
+        }
+
+        /// <summary>
+        /// 等待 NetworkManager 实例准备就绪
+        /// </summary>
+        private IEnumerator WaitForNetworkManager()
+        {
+            LogDebug("等待 NetworkManager 实例准备就绪...");
+            isWaitingForNetworkManager = true;
+
+            int waitFrames = 0;
+            const int maxWaitFrames = 300; // 5秒超时（60fps）
+
+            while (NetworkManager.Instance == null && waitFrames < maxWaitFrames)
+            {
+                yield return null;
+                waitFrames++;
+            }
+
+            isWaitingForNetworkManager = false;
+
+            if (NetworkManager.Instance == null)
+            {
+                Debug.LogError("[HostGameManager] 等待 NetworkManager 超时，禁用 HostGameManager");
+                this.enabled = false;
+                yield break;
+            }
+
+            LogDebug($"NetworkManager 实例已准备就绪，等待了 {waitFrames} 帧");
+        }
+
+        /// <summary>
+        /// 检查网络状态并订阅相关事件
+        /// </summary>
+        private IEnumerator CheckNetworkStatusAndSubscribe()
+        {
+            LogDebug($"NetworkManager 状态检查 - IsHost: {NetworkManager.Instance.IsHost}, IsConnected: {NetworkManager.Instance.IsConnected}");
+
+            if (NetworkManager.Instance.IsHost)
+            {
+                // 已经是主机，直接初始化
+                LogDebug("检测到已是Host模式，立即初始化");
+                yield return StartCoroutine(InitializeHostGameCoroutine());
+            }
+            else
+            {
+                // 还不是主机，订阅主机启动事件
+                LogDebug("等待主机启动事件...");
+                SubscribeToNetworkEvents();
+
+                // 设置超时检查
+                StartCoroutine(HostStartTimeoutCheck());
+            }
+        }
+
+        /// <summary>
+        /// 订阅网络事件
+        /// </summary>
+        private void SubscribeToNetworkEvents()
+        {
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.OnHostStarted += OnHostStarted;
+                NetworkManager.OnPlayerJoined += OnPlayerJoined;
+                NetworkManager.OnPlayerLeft += OnPlayerLeft;
+                LogDebug("已订阅网络事件");
+            }
+        }
+
+        /// <summary>
+        /// 取消订阅网络事件
+        /// </summary>
+        private void UnsubscribeFromNetworkEvents()
+        {
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.OnHostStarted -= OnHostStarted;
+                NetworkManager.OnPlayerJoined -= OnPlayerJoined;
+                NetworkManager.OnPlayerLeft -= OnPlayerLeft;
+                LogDebug("已取消订阅网络事件");
+            }
+        }
+
+        /// <summary>
+        /// 主机启动超时检查
+        /// </summary>
+        private IEnumerator HostStartTimeoutCheck()
+        {
+            yield return new WaitForSeconds(10f); // 10秒超时
+
+            if (!isInitialized && this.enabled)
+            {
+                Debug.LogWarning("[HostGameManager] 主机启动超时，可能不是Host模式，禁用HostGameManager");
+                this.enabled = false;
+            }
+        }
+
+        /// <summary>
+        /// 主机启动事件处理
+        /// </summary>
+        private void OnHostStarted()
+        {
+            LogDebug("收到主机启动事件");
+
+            if (!isInitialized)
+            {
+                StartCoroutine(InitializeHostGameCoroutine());
+            }
+        }
+
+        /// <summary>
+        /// 初始化主机游戏的协程
+        /// </summary>
+        private IEnumerator InitializeHostGameCoroutine()
+        {
+            if (isInitialized)
+            {
+                LogDebug("HostGameManager 已经初始化，跳过重复初始化");
+                yield break;
+            }
+
+            LogDebug("开始初始化主机游戏逻辑");
+
+            // 初始化游戏状态
+            playerStates = new Dictionary<ushort, PlayerGameState>();
+            gameInProgress = false;
+            currentQuestion = null;
+
+            // 查找题目控制器
+            yield return StartCoroutine(FindQuestionController());
+
+            if (questionController == null)
+            {
+                Debug.LogError("[HostGameManager] 未找到NetworkQuestionManagerController，初始化失败");
+                this.enabled = false;
+                yield break;
+            }
 
             // 如果Host已经连接，立即添加
-            if (NetworkManager.Instance.IsClient)
+            if (NetworkManager.Instance.IsConnected)
             {
                 AddPlayer(NetworkManager.Instance.ClientId, "房主");
             }
 
+            // 标记为已初始化
+            isInitialized = true;
             LogDebug("主机游戏初始化完成");
+
+            // 检查游戏开始条件
+            CheckGameStartConditions();
         }
 
         /// <summary>
-        /// 注册网络事件
+        /// 查找题目控制器
         /// </summary>
-        private void RegisterNetworkEvents()
+        private IEnumerator FindQuestionController()
         {
-            NetworkManager.OnPlayerJoined += OnPlayerJoined;
-            NetworkManager.OnPlayerLeft += OnPlayerLeft;
+            LogDebug("查找 NetworkQuestionManagerController...");
+
+            int attempts = 0;
+            const int maxAttempts = 10;
+
+            while (questionController == null && attempts < maxAttempts)
+            {
+                questionController = FindObjectOfType<NetworkQuestionManagerController>();
+
+                if (questionController == null)
+                {
+                    LogDebug($"第 {attempts + 1} 次查找 NetworkQuestionManagerController 失败，继续尝试...");
+                    yield return new WaitForSeconds(0.5f);
+                    attempts++;
+                }
+            }
+
+            if (questionController != null)
+            {
+                LogDebug("NetworkQuestionManagerController 找到");
+            }
+            else
+            {
+                Debug.LogError("[HostGameManager] 查找 NetworkQuestionManagerController 失败");
+            }
         }
 
         /// <summary>
-        /// 注销网络事件
+        /// 判断是否应该激活Host管理器（保留原有逻辑）
         /// </summary>
-        private void UnregisterNetworkEvents()
+        private bool ShouldActivateHostManager()
         {
-            NetworkManager.OnPlayerJoined -= OnPlayerJoined;
-            NetworkManager.OnPlayerLeft -= OnPlayerLeft;
+            bool shouldActivate = MainMenuManager.SelectedGameMode == MainMenuManager.GameMode.Host &&
+                                 NetworkManager.Instance?.IsHost == true;
+
+            LogDebug($"ShouldActivateHostManager: {shouldActivate} (GameMode: {MainMenuManager.SelectedGameMode}, IsHost: {NetworkManager.Instance?.IsHost})");
+
+            return shouldActivate;
         }
 
         /// <summary>
@@ -127,6 +296,13 @@ namespace Core.Network
         /// </summary>
         private void AddPlayer(ushort playerId, string playerName = null)
         {
+            if (!isInitialized)
+            {
+                LogDebug($"HostGameManager 未初始化，延迟添加玩家 {playerId}");
+                StartCoroutine(DelayedAddPlayer(playerId, playerName));
+                return;
+            }
+
             if (playerStates.ContainsKey(playerId))
             {
                 LogDebug($"玩家 {playerId} 已存在，跳过添加");
@@ -150,11 +326,24 @@ namespace Core.Network
         }
 
         /// <summary>
+        /// 延迟添加玩家（等待初始化完成）
+        /// </summary>
+        private IEnumerator DelayedAddPlayer(ushort playerId, string playerName)
+        {
+            while (!isInitialized)
+            {
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            AddPlayer(playerId, playerName);
+        }
+
+        /// <summary>
         /// 移除玩家
         /// </summary>
         private void RemovePlayer(ushort playerId)
         {
-            if (!playerStates.ContainsKey(playerId))
+            if (!isInitialized || !playerStates.ContainsKey(playerId))
                 return;
 
             string playerName = playerStates[playerId].playerName;
@@ -177,7 +366,7 @@ namespace Core.Network
         /// </summary>
         private void CheckGameStartConditions()
         {
-            if (gameInProgress || !autoStartGame)
+            if (!isInitialized || gameInProgress || !autoStartGame)
                 return;
 
             // 至少需要1个玩家才能开始游戏
@@ -221,6 +410,12 @@ namespace Core.Network
         /// </summary>
         public void StartHostGame()
         {
+            if (!isInitialized)
+            {
+                LogDebug("HostGameManager 未初始化，无法开始游戏");
+                return;
+            }
+
             if (gameInProgress)
             {
                 LogDebug("游戏已经在进行中");
@@ -268,7 +463,7 @@ namespace Core.Network
         /// </summary>
         private void GenerateAndSendQuestion()
         {
-            if (!gameInProgress)
+            if (!gameInProgress || !isInitialized)
                 return;
 
             LogDebug("生成新题目");
@@ -348,9 +543,9 @@ namespace Core.Network
         /// </summary>
         public void HandlePlayerAnswer(ushort playerId, string answer)
         {
-            if (!gameInProgress || playerId != currentTurnPlayerId || currentQuestion == null)
+            if (!isInitialized || !gameInProgress || playerId != currentTurnPlayerId || currentQuestion == null)
             {
-                LogDebug($"无效的答案提交: playerId={playerId}, currentTurn={currentTurnPlayerId}, gameInProgress={gameInProgress}");
+                LogDebug($"无效的答案提交: playerId={playerId}, currentTurn={currentTurnPlayerId}, gameInProgress={gameInProgress}, initialized={isInitialized}");
                 return;
             }
 
@@ -468,6 +663,9 @@ namespace Core.Network
         /// </summary>
         private void BroadcastQuestion(NetworkQuestionData question)
         {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.SendQuestion);
             message.AddBytes(question.Serialize());
             NetworkManager.Instance.BroadcastMessage(message);
@@ -478,6 +676,9 @@ namespace Core.Network
         /// </summary>
         private void BroadcastPlayerTurnChanged(ushort playerId)
         {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.PlayerTurnChanged);
             message.AddUShort(playerId);
             NetworkManager.Instance.BroadcastMessage(message);
@@ -490,6 +691,9 @@ namespace Core.Network
         /// </summary>
         private void BroadcastHealthUpdate(ushort playerId, int newHealth)
         {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.HealthUpdate);
             message.AddUShort(playerId);
             message.AddInt(newHealth);
@@ -501,6 +705,9 @@ namespace Core.Network
         /// </summary>
         private void BroadcastAnswerResult(bool isCorrect, string correctAnswer)
         {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.AnswerResult);
             message.AddBool(isCorrect);
             message.AddString(correctAnswer);
@@ -513,12 +720,45 @@ namespace Core.Network
 
         private void OnPlayerJoined(ushort playerId)
         {
+            LogDebug($"网络事件: 玩家 {playerId} 加入");
             AddPlayer(playerId);
         }
 
         private void OnPlayerLeft(ushort playerId)
         {
+            LogDebug($"网络事件: 玩家 {playerId} 离开");
             RemovePlayer(playerId);
+        }
+
+        #endregion
+
+        #region 公共接口和状态检查
+
+        /// <summary>
+        /// 强制重新初始化（用于调试）
+        /// </summary>
+        [ContextMenu("强制重新初始化")]
+        public void ForceReinitialize()
+        {
+            if (Application.isPlaying)
+            {
+                LogDebug("强制重新初始化");
+                isInitialized = false;
+                StartCoroutine(InitializeHostManagerCoroutine());
+            }
+        }
+
+        /// <summary>
+        /// 获取当前状态信息（用于调试）
+        /// </summary>
+        public string GetStatusInfo()
+        {
+            return $"Initialized: {isInitialized}, " +
+                   $"GameInProgress: {gameInProgress}, " +
+                   $"PlayerCount: {PlayerCount}, " +
+                   $"CurrentTurn: {currentTurnPlayerId}, " +
+                   $"NetworkManager: {NetworkManager.Instance != null}, " +
+                   $"IsHost: {NetworkManager.Instance?.IsHost}";
         }
 
         #endregion
@@ -538,10 +778,32 @@ namespace Core.Network
 
         #endregion
 
+        #region Unity 生命周期
+
         private void OnDestroy()
         {
-            UnregisterNetworkEvents();
+            LogDebug("HostGameManager 被销毁");
+            UnsubscribeFromNetworkEvents();
+
+            if (Instance == this)
+            {
+                Instance = null;
+            }
         }
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus && isInitialized)
+            {
+                LogDebug("应用暂停，暂停游戏逻辑");
+            }
+            else if (!pauseStatus && isInitialized)
+            {
+                LogDebug("应用恢复，恢复游戏逻辑");
+            }
+        }
+
+        #endregion
     }
 
     /// <summary>

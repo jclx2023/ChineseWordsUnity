@@ -167,7 +167,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   networkManager: {fileID: 946501601}
-  hostGameManager: {fileID: 1815254235}
+  hostGameManager: {fileID: 1644422172}
   networkCanvas: {fileID: 1678533145}
   gameCanvas: {fileID: 1352040679}
   networkUI: {fileID: 1678533150}
@@ -1655,8 +1655,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 17c781f05cf01cc4e84ea5abb7c12e50, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  initialHealth: 5
+  damagePerWrong: 1
+  allowNegativeHealth: 0
   healthText: {fileID: 579353659}
   gameOverPanel: {fileID: 0}
+  healthTextFormat: "\u8840\u91CF\uFF1A{0}"
+  enableDebugLog: 1
 --- !u!114 &1644422176
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1669,7 +1674,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e72c46d9e1e7fe848a4f6caec199f9cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  defaultTimeLimit: 10
+  autoStartOnEnable: 0
+  loopTimer: 0
   timerText: {fileID: 1157705177}
+  timerTextFormat: "\u5012\u8BA1\u65F6: {0}"
+  timeUpText: "\u65F6\u95F4\u5230\uFF01"
+  normalColor: {r: 0.18867922, g: 0.18867922, b: 0.18867922, a: 1}
+  warningColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  criticalColor: {r: 1, g: 0, b: 0, a: 1}
+  warningThreshold: 5
+  criticalThreshold: 3
+  enableDebugLog: 1
 --- !u!114 &1644422177
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1946,55 +1962,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1747564966}
   m_CullTransparentMesh: 1
---- !u!1 &1815254235
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1815254237}
-  - component: {fileID: 1815254236}
-  m_Layer: 0
-  m_Name: HostGameManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1815254236
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1815254235}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 906b73de48141a24aa6d2b510ceacd02, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  questionTimeLimit: 30
-  initialPlayerHealth: 100
-  damagePerWrongAnswer: 20
-  autoStartGame: 1
-  enableDebugLogs: 1
---- !u!4 &1815254237
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1815254235}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 927.6943, y: 629.41815, z: 1017.50433}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1890576863
 GameObject:
   m_ObjectHideFlags: 0
@@ -2138,6 +2105,5 @@ SceneRoots:
   - {fileID: 1316480639}
   - {fileID: 1644422174}
   - {fileID: 946501603}
-  - {fileID: 1815254237}
   - {fileID: 190055566}
   - {fileID: 1352040680}
