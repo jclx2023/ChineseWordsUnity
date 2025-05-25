@@ -64,6 +64,14 @@ public class MainMenuManager : MonoBehaviour
         GameManager.Instance.SetQuestionType((QuestionType)(-1));  // 标记为无效
         SceneManager.LoadScene("Game");
     }
+    public void OnClick_Switch_To_Network()
+    {
+        SceneManager.LoadScene("Network");
+    }
+    public void OnClick_Switch_To_Offline()
+    {
+        SceneManager.LoadScene("Offline");
+    }
 
     public void OnClick_Exit()
     {

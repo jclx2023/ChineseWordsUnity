@@ -5,123 +5,410 @@ using System.Collections;
 using System.Collections.Generic;
 using Mono.Data.Sqlite;
 using Core;
+using Core.Network;
 
 namespace GameLogic.Choice
 {
     /// <summary>
-    /// 词语选择填空（近义词/同义/造句等通用）题管理器：
-    /// - 从自定义表随机读取一条记录
-    /// - 将 stem 显示在題干
-    /// - 将 True, 1, 2, 3 四个选项随机打乱，分别赋给四个按钮
+    /// 近义词选择题管理器
+    /// - 支持单机和网络模式
+    /// - 单机模式：从 simular_usage_questions 表随机取一条记录
+    /// - 网络模式：使用服务器提供的题目数据
+    /// - 将 stem 显示在題干，True/1/2/3 四个选项随机打乱分配给按钮
     /// - 玩家点击按钮判定正误，通过 OnAnswerResult 通知外层
     /// </summary>
-    public class SimularWordChoiceQuestionManager : QuestionManagerBase
+    public class SimularWordChoiceQuestionManager : NetworkQuestionManagerBase
     {
         private string dbPath;
 
+        [Header("UI设置")]
+        [SerializeField] private string uiPrefabPath = "Prefabs/InGame/ChooseUI";
+
+        [Header("UI组件引用")]
         private TMP_Text questionText;
         private Button[] optionButtons;
         private TMP_Text feedbackText;
 
         private string correctOption;
+        private bool hasAnswered = false;
 
-        private void Awake()
+        protected override void Awake()
         {
+            base.Awake(); // 调用网络基类初始化
             dbPath = Application.streamingAssetsPath + "/dictionary.db";
         }
 
         private void Start()
         {
-            var ui = UIManager.Instance.LoadUI("Prefabs/InGame/ChooseUI");
+            InitializeUI();
+        }
 
+        /// <summary>
+        /// 初始化UI组件
+        /// </summary>
+        private void InitializeUI()
+        {
+            var ui = UIManager.Instance.LoadUI(uiPrefabPath);
+            if (ui == null)
+            {
+                Debug.LogError($"无法加载UI预制体: {uiPrefabPath}");
+                return;
+            }
 
-            questionText = ui.Find("QuestionText").GetComponent<TMP_Text>();
-            feedbackText = ui.Find("FeedbackText").GetComponent<TMP_Text>();
+            // 获取UI组件
+            questionText = ui.Find("QuestionText")?.GetComponent<TMP_Text>();
+            feedbackText = ui.Find("FeedbackText")?.GetComponent<TMP_Text>();
 
+            if (questionText == null || feedbackText == null)
+            {
+                Debug.LogError("UI组件获取失败，检查预制体结构");
+                return;
+            }
+
+            // 初始化选项按钮
+            InitializeOptionButtons(ui);
+        }
+
+        /// <summary>
+        /// 初始化选项按钮
+        /// </summary>
+        private void InitializeOptionButtons(Transform ui)
+        {
             optionButtons = new Button[4];
             for (int i = 0; i < 4; i++)
             {
-                var btn = ui.Find($"OptionButton{i + 1}").GetComponent<Button>();
+                var btnTransform = ui.Find($"OptionButton{i + 1}");
+                if (btnTransform == null)
+                {
+                    Debug.LogError($"找不到按钮: OptionButton{i + 1}");
+                    continue;
+                }
+
+                var btn = btnTransform.GetComponent<Button>();
+                if (btn == null)
+                {
+                    Debug.LogError($"OptionButton{i + 1} 没有Button组件");
+                    continue;
+                }
+
                 optionButtons[i] = btn;
-                int idx = i;
+                int index = i; // 避免闭包问题
+
                 btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() => OnOptionClicked(idx));
+                btn.onClick.AddListener(() => OnOptionClicked(index));
             }
         }
 
-        public override void LoadQuestion()
+        /// <summary>
+        /// 加载本地题目（单机模式）
+        /// </summary>
+        protected override void LoadLocalQuestion()
         {
-            string stem = null;
-            var choices = new List<string>(4);
-            Debug.Log("加载一次SimularWord");
+            Debug.Log("[SimularWord] 加载本地题目");
 
-            using (var conn = new SqliteConnection("URI=file:" + dbPath))
+            string stem = null;
+            List<string> choices = new List<string>(4);
+
+            try
             {
-                conn.Open();
-                using (var cmd = conn.CreateCommand())
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
                 {
-                    cmd.CommandText = @"
-SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
-  FROM simular_usage_questions
- ORDER BY RANDOM()
-    LIMIT 1";
-                    using (var reader = cmd.ExecuteReader())
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
                     {
-                        if (reader.Read())
+                        cmd.CommandText = @"
+                            SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
+                            FROM simular_usage_questions
+                            ORDER BY RANDOM()
+                            LIMIT 1";
+
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            stem = reader.GetString(0);
-                            correctOption = reader.GetString(1);
-                            choices.Add(reader.GetString(2));
-                            choices.Add(reader.GetString(3));
-                            choices.Add(reader.GetString(4));
+                            if (reader.Read())
+                            {
+                                stem = reader.GetString(0);
+                                correctOption = reader.GetString(1);
+
+                                // 添加错误选项
+                                choices.Add(reader.GetString(2)); // opt1
+                                choices.Add(reader.GetString(3)); // opt2
+                                choices.Add(reader.GetString(4)); // opt3
+                            }
                         }
                     }
                 }
             }
-
-            if (string.IsNullOrEmpty(stem))
+            catch (System.Exception e)
             {
-                questionText.text = "暂无题目数据";
+                Debug.LogError($"数据库查询失败: {e.Message}");
+                DisplayErrorMessage("数据库错误，无法加载题目");
                 return;
             }
 
-            questionText.text = stem;
-            feedbackText.text = string.Empty;
+            if (string.IsNullOrEmpty(stem) || choices.Count == 0)
+            {
+                DisplayErrorMessage("暂无题目数据");
+                return;
+            }
 
             // 添加正确选项并打乱
             choices.Add(correctOption);
+            ShuffleChoices(choices);
+
+            // 显示题目
+            DisplayQuestion(stem, choices);
+        }
+
+        /// <summary>
+        /// 加载网络题目（网络模式）
+        /// </summary>
+        protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
+        {
+            Debug.Log("[SimularWord] 加载网络题目");
+
+            if (networkData == null)
+            {
+                Debug.LogError("网络题目数据为空");
+                DisplayErrorMessage("网络题目数据错误");
+                return;
+            }
+
+            if (networkData.questionType != QuestionType.SimularWordChoice)
+            {
+                Debug.LogError($"题目类型不匹配: 期望{QuestionType.SimularWordChoice}, 实际{networkData.questionType}");
+                LoadLocalQuestion(); // 降级到本地题目
+                return;
+            }
+
+            correctOption = networkData.correctAnswer;
+
+            // 网络模式下选项已由服务器打乱，直接显示
+            List<string> choices = new List<string>(networkData.options);
+            DisplayQuestion(networkData.questionText, choices);
+        }
+
+        /// <summary>
+        /// 显示题目内容
+        /// </summary>
+        private void DisplayQuestion(string stem, List<string> choices)
+        {
+            hasAnswered = false;
+
+            // 显示题干
+            questionText.text = stem;
+            feedbackText.text = string.Empty;
+
+            // 设置选项按钮
+            for (int i = 0; i < optionButtons.Length; i++)
+            {
+                if (i < choices.Count)
+                {
+                    var txt = optionButtons[i].GetComponentInChildren<TMP_Text>();
+                    if (txt != null)
+                    {
+                        txt.text = choices[i];
+                        optionButtons[i].gameObject.SetActive(true);
+                        optionButtons[i].interactable = true;
+                    }
+                }
+                else
+                {
+                    // 隐藏多余的按钮
+                    optionButtons[i].gameObject.SetActive(false);
+                }
+            }
+
+            Debug.Log($"题目显示完成: {stem}");
+        }
+
+        /// <summary>
+        /// 随机打乱选项
+        /// </summary>
+        private void ShuffleChoices(List<string> choices)
+        {
             for (int i = choices.Count - 1; i > 0; i--)
             {
                 int j = Random.Range(0, i + 1);
-                var tmp = choices[i]; choices[i] = choices[j]; choices[j] = tmp;
-            }
-
-            // 赋值按钮文本
-            for (int i = 0; i < optionButtons.Length; i++)
-            {
-                var txt = optionButtons[i].GetComponentInChildren<TMP_Text>();
-                txt.text = choices[i];
+                string temp = choices[i];
+                choices[i] = choices[j];
+                choices[j] = temp;
             }
         }
 
-        public override void CheckAnswer(string answer)
+        /// <summary>
+        /// 显示错误信息
+        /// </summary>
+        private void DisplayErrorMessage(string message)
         {
-            // 通过按钮回调，不使用此方法
+            if (questionText != null)
+                questionText.text = message;
+
+            if (feedbackText != null)
+                feedbackText.text = "";
+
+            // 隐藏所有选项按钮
+            if (optionButtons != null)
+            {
+                foreach (var btn in optionButtons)
+                {
+                    if (btn != null)
+                        btn.gameObject.SetActive(false);
+                }
+            }
         }
 
+        /// <summary>
+        /// 检查本地答案（单机模式）
+        /// </summary>
+        protected override void CheckLocalAnswer(string answer)
+        {
+            // 选择题通过按钮点击处理，此方法不直接使用
+            Debug.Log("[SimularWord] CheckLocalAnswer 被调用，但选择题通过按钮处理");
+        }
+
+        /// <summary>
+        /// 选项按钮点击处理
+        /// </summary>
         private void OnOptionClicked(int index)
         {
-            var txt = optionButtons[index].GetComponentInChildren<TMP_Text>();
-            bool isRight = txt.text == correctOption;
-            StartCoroutine(ShowFeedbackThenNext(isRight));
-            OnAnswerResult?.Invoke(isRight);
+            if (hasAnswered)
+            {
+                Debug.Log("已经回答过了，忽略重复点击");
+                return;
+            }
+
+            if (index >= optionButtons.Length || optionButtons[index] == null)
+            {
+                Debug.LogError($"无效的选项索引: {index}");
+                return;
+            }
+
+            var selectedText = optionButtons[index].GetComponentInChildren<TMP_Text>();
+            if (selectedText == null)
+            {
+                Debug.LogError("获取选项文本失败");
+                return;
+            }
+
+            string selectedAnswer = selectedText.text;
+            hasAnswered = true;
+
+            Debug.Log($"[SimularWord] 选择了选项 {index + 1}: {selectedAnswer}");
+
+            // 禁用所有按钮防止重复点击
+            DisableAllButtons();
+
+            if (IsNetworkMode())
+            {
+                HandleNetworkAnswer(selectedAnswer);
+            }
+            else
+            {
+                HandleLocalAnswer(selectedAnswer);
+            }
         }
 
-        private IEnumerator ShowFeedbackThenNext(bool isRight)
+        /// <summary>
+        /// 处理网络模式答案
+        /// </summary>
+        private void HandleNetworkAnswer(string answer)
         {
-            feedbackText.color = isRight ? Color.green : Color.red;
-            feedbackText.text = isRight ? "回答正确！" : $"回答错误，正确答案是：{correctOption}";
-            yield return new WaitForSeconds(1f);
+            Debug.Log($"[SimularWord] 网络模式提交答案: {answer}");
+
+            // 显示提交状态
+            feedbackText.text = "已提交答案，等待服务器结果...";
+            feedbackText.color = Color.yellow;
+
+            // 通过基类提交到服务器
+            CheckAnswer(answer);
+        }
+
+        /// <summary>
+        /// 处理单机模式答案
+        /// </summary>
+        private void HandleLocalAnswer(string answer)
+        {
+            bool isCorrect = answer == correctOption;
+            Debug.Log($"[SimularWord] 单机模式答题结果: {(isCorrect ? "正确" : "错误")}");
+
+            // 显示结果并通知外层
+            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+        }
+
+        /// <summary>
+        /// 禁用所有选项按钮
+        /// </summary>
+        private void DisableAllButtons()
+        {
+            if (optionButtons != null)
+            {
+                foreach (var btn in optionButtons)
+                {
+                    if (btn != null)
+                        btn.interactable = false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 重新启用所有选项按钮
+        /// </summary>
+        private void EnableAllButtons()
+        {
+            if (optionButtons != null)
+            {
+                foreach (var btn in optionButtons)
+                {
+                    if (btn != null && btn.gameObject.activeInHierarchy)
+                        btn.interactable = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 显示反馈信息并通知结果
+        /// </summary>
+        private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
+        {
+            // 显示反馈
+            feedbackText.color = isCorrect ? Color.green : Color.red;
+            feedbackText.text = isCorrect ? "回答正确！" : $"回答错误，正确答案是：{correctOption}";
+
+            // 等待一段时间
+            yield return new WaitForSeconds(1.5f);
+
+            // 通知答题结果
+            OnAnswerResult?.Invoke(isCorrect);
+
+            // 为下一题准备
+            EnableAllButtons();
+        }
+
+        /// <summary>
+        /// 显示网络答题结果（由网络系统调用）
+        /// </summary>
+        public void ShowNetworkResult(bool isCorrect, string correctAnswer)
+        {
+            Debug.Log($"[SimularWord] 收到网络结果: {(isCorrect ? "正确" : "错误")}");
+
+            correctOption = correctAnswer;
+            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+        }
+
+        /// <summary>
+        /// 清理资源
+        /// </summary>
+        private void OnDestroy()
+        {
+            // 清理按钮事件监听
+            if (optionButtons != null)
+            {
+                foreach (var btn in optionButtons)
+                {
+                    if (btn != null)
+                        btn.onClick.RemoveAllListeners();
+                }
+            }
         }
     }
 }
