@@ -325,15 +325,15 @@ namespace Core
                 return;
             }
 
-            // 绑定血量管理器
-            if (healthManager != null)
-            {
-                healthManager.BindManager(currentManager);
-            }
 
+
+            // 绑定血量管理器
+            //if (healthManager != null)
+            //{
+            //    healthManager.BindManager(currentManager);
+            //}
             // 绑定答题结果事件
             currentManager.OnAnswerResult += HandleAnswerResult;
-
             // 延迟加载题目
             StartCoroutine(DelayedLoadQuestion());
         }

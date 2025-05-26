@@ -80,7 +80,41 @@ namespace Core.Network
         private void Start()
         {
             LogDebug($"NetworkManager Start 执行时间: {Time.time}");
-            // 根据主菜单选择的模式进行初始化
+
+            // 检查当前场景，如果是主菜单场景则不自动初始化
+            string currentSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            if (IsMainMenuScene(currentSceneName))
+            {
+                LogDebug("检测到主菜单场景，NetworkManager保持待命状态");
+                return;
+            }
+
+            // 只有在网络游戏场景才根据主菜单选择的模式进行初始化
+            InitializeFromMainMenu();
+        }
+        /// <summary>
+        /// 检查是否为主菜单场景
+        /// </summary>
+        private bool IsMainMenuScene(string sceneName)
+        {
+            // 添加你的主菜单场景名称
+            string[] mainMenuScenes = { "MainMenuScene", "MainMenu", "Menu" };
+
+            foreach (string menuScene in mainMenuScenes)
+            {
+                if (sceneName.Equals(menuScene, System.StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 手动启动网络初始化（从MainMenuManager调用）
+        /// </summary>
+        public void ManualInitializeNetwork()
+        {
+            LogDebug("手动启动网络初始化");
             InitializeFromMainMenu();
         }
 
@@ -393,10 +427,124 @@ namespace Core.Network
             }
         }
 
+        #region 房间管理消息处理
+
+        /// <summary>
+        /// 发送房间数据给指定客户端
+        /// </summary>
+        public void SendRoomDataToClient(ushort clientId, RoomData roomData)
+        {
+            if (!IsHost || server == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.RoomDataSync);
+            message.SerializeRoomData(roomData);
+            server.Send(message, clientId);
+
+            LogDebug($"发送房间数据给客户端 {clientId}");
+        }
+
+        /// <summary>
+        /// 广播玩家加入房间
+        /// </summary>
+        public void BroadcastPlayerJoinRoom(RoomPlayer player)
+        {
+            if (!IsHost || server == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerJoinRoom);
+            message.SerializePlayer(player);
+            server.SendToAll(message);
+
+            LogDebug($"广播玩家加入: {player.playerName}");
+        }
+
+        /// <summary>
+        /// 广播玩家离开房间
+        /// </summary>
+        public void BroadcastPlayerLeaveRoom(ushort playerId)
+        {
+            if (!IsHost || server == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerLeaveRoom);
+            message.AddUShort(playerId);
+            server.SendToAll(message);
+
+            LogDebug($"广播玩家离开: {playerId}");
+        }
+
+        /// <summary>
+        /// 广播玩家准备状态更新
+        /// </summary>
+        public void BroadcastPlayerReadyUpdate(ushort playerId, bool isReady)
+        {
+            if (!IsHost || server == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerReadyUpdate);
+            message.SerializeReadyChange(playerId, isReady);
+            server.SendToAll(message);
+
+            LogDebug($"广播准备状态: 玩家{playerId} -> {isReady}");
+        }
+
+        /// <summary>
+        /// 广播游戏开始命令
+        /// </summary>
+        public void BroadcastGameStart()
+        {
+            if (!IsHost || server == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.GameStartRequest);
+            server.SendToAll(message);
+
+            LogDebug("广播游戏开始命令");
+        }
+
+        /// <summary>
+        /// 请求房间信息
+        /// </summary>
+        public void RequestRoomInfo()
+        {
+            if (IsHost || client == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.RoomInfoRequest);
+            client.Send(message);
+
+            LogDebug("请求房间信息");
+        }
+
+        /// <summary>
+        /// 请求改变准备状态
+        /// </summary>
+        public void RequestReadyStateChange(bool isReady)
+        {
+            if (IsHost || client == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerReadyRequest);
+            message.SerializeReadyChange(ClientId, isReady);
+            client.Send(message);
+
+            LogDebug($"请求改变准备状态: {isReady}");
+        }
+
+        #endregion
+
         #region 服务器事件处理（Host模式）
 
         private void OnServerClientConnected(object sender, ServerConnectedEventArgs e)
         {
+            // 检查是否是Host自己的客户端连接
+            if (IsHost && e.Client.Id == ClientId)
+            {
+                LogDebug($"Host自己的客户端连接成功: ID={e.Client.Id}，不触发玩家加入事件");
+                return;
+            }
+
             LogDebug($"玩家加入房间: ID={e.Client.Id}");
             OnPlayerJoined?.Invoke(e.Client.Id);
         }
@@ -513,6 +661,105 @@ namespace Core.Network
 
         #endregion
 
+        #region 房间消息处理器
+
+        [MessageHandler((ushort)NetworkMessageType.RoomInfoRequest)]
+        private static void HandleRoomInfoRequest(ushort fromClientId, Message message)
+        {
+            Debug.Log($"[NetworkManager] 收到房间信息请求来自客户端 {fromClientId}");
+
+            // 获取当前房间数据
+            if (RoomManager.Instance?.CurrentRoom != null)
+            {
+                Instance.SendRoomDataToClient(fromClientId, RoomManager.Instance.CurrentRoom);
+            }
+        }
+
+        [MessageHandler((ushort)NetworkMessageType.PlayerReadyRequest)]
+        private static void HandlePlayerReadyRequest(ushort fromClientId, Message message)
+        {
+            var (playerId, isReady) = message.DeserializeReadyChange();
+
+            Debug.Log($"[NetworkManager] 收到准备状态请求: 玩家{playerId} -> {isReady}");
+
+            // 更新房间中玩家的准备状态
+            if (RoomManager.Instance?.CurrentRoom != null)
+            {
+                bool success = RoomManager.Instance.CurrentRoom.SetPlayerReady(playerId, isReady);
+                if (success)
+                {
+                    // 广播准备状态变化给所有客户端
+                    Instance.BroadcastPlayerReadyUpdate(playerId, isReady);
+                }
+            }
+        }
+
+        [MessageHandler((ushort)NetworkMessageType.RoomDataSync)]
+        private static void HandleRoomDataSync(Message message)
+        {
+            RoomData roomData = message.DeserializeRoomData();
+            Debug.Log($"[NetworkManager] 收到房间数据同步: {roomData.roomName}");
+
+            // 通知RoomManager更新房间数据
+            if (RoomManager.Instance != null)
+            {
+                RoomManager.Instance.UpdateRoomFromNetwork(roomData);
+            }
+        }
+
+        [MessageHandler((ushort)NetworkMessageType.PlayerJoinRoom)]
+        private static void HandlePlayerJoinRoom(Message message)
+        {
+            RoomPlayer player = message.DeserializePlayer();
+            Debug.Log($"[NetworkManager] 收到玩家加入通知: {player.playerName}");
+
+            // 通知RoomManager
+            if (RoomManager.Instance != null)
+            {
+                RoomManager.Instance.OnNetworkPlayerJoined(player);
+            }
+        }
+
+        [MessageHandler((ushort)NetworkMessageType.PlayerLeaveRoom)]
+        private static void HandlePlayerLeaveRoom(Message message)
+        {
+            ushort playerId = message.GetUShort();
+            Debug.Log($"[NetworkManager] 收到玩家离开通知: {playerId}");
+
+            // 通知RoomManager
+            if (RoomManager.Instance != null)
+            {
+                RoomManager.Instance.OnNetworkPlayerLeftMessage(playerId);
+            }
+        }
+
+        [MessageHandler((ushort)NetworkMessageType.PlayerReadyUpdate)]
+        private static void HandlePlayerReadyUpdate(Message message)
+        {
+            var (playerId, isReady) = message.DeserializeReadyChange();
+            Debug.Log($"[NetworkManager] 收到准备状态更新: 玩家{playerId} -> {isReady}");
+
+            // 通知RoomManager
+            if (RoomManager.Instance != null)
+            {
+                RoomManager.Instance.OnNetworkPlayerReadyChanged(playerId, isReady);
+            }
+        }
+
+        [MessageHandler((ushort)NetworkMessageType.GameStartRequest)]
+        private static void HandleGameStartRequest(Message message)
+        {
+            Debug.Log("[NetworkManager] 收到游戏开始命令");
+
+            // 通知RoomManager
+            if (RoomManager.Instance != null)
+            {
+                RoomManager.Instance.OnNetworkGameStart();
+            }
+        }
+
+        #endregion
+
         #region 公共接口方法（保持兼容）
 
         /// <summary>
@@ -545,7 +792,7 @@ namespace Core.Network
                 return;
             }
 
-            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.RequestQuestion);
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.RequestQuestion);
             SendMessage(message);
             LogDebug("请求题目...");
         }
@@ -561,7 +808,7 @@ namespace Core.Network
                 return;
             }
 
-            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.SubmitAnswer);
+            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.SubmitAnswer);
             message.AddString(answer);
             SendMessage(message);
             LogDebug($"提交答案: {answer}");
@@ -594,4 +841,6 @@ namespace Core.Network
 
         #endregion
     }
+
+
 }

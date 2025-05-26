@@ -26,7 +26,15 @@ namespace Core.Network
         // 游戏控制
         StartGame = 30,
         EndGame = 31,
-        RestartGame = 32
+        RestartGame = 32,
+
+        RoomDataSync = 201,           // Host -> Client: 同步房间完整数据
+        PlayerJoinRoom = 202,         // Server -> All: 玩家加入房间通知
+        PlayerLeaveRoom = 203,        // Server -> All: 玩家离开房间通知
+        PlayerReadyRequest = 204,     // Client -> Host: 客户端请求改变准备状态
+        PlayerReadyUpdate = 205,      // Host -> All: 广播玩家准备状态变化
+        GameStartRequest = 206,       // Host -> All: 房主启动游戏
+        RoomInfoRequest = 207,        // Client -> Host: 请求房间信息
     }
 
     /// <summary>

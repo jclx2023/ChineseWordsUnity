@@ -757,6 +757,7 @@ MonoBehaviour:
   roomNameInput: {fileID: 832409482}
   hostPortInput: {fileID: 106691540}
   maxPlayersInput: {fileID: 2013147960}
+  hostPlayerNameInput: {fileID: 0}
   startHostButton: {fileID: 1418484415}
   backFromCreateButton: {fileID: 1012814797}
   hostStatusText: {fileID: 597007440}
@@ -769,6 +770,8 @@ MonoBehaviour:
   connectionStatusText: {fileID: 1343017544}
   offlineGameScene: OfflineGameScene
   networkGameScene: NetworkGameScene
+  roomScene: RoomScene
+  enableDebugLogs: 1
 --- !u!1 &106691538
 GameObject:
   m_ObjectHideFlags: 0
@@ -3822,7 +3825,7 @@ MonoBehaviour:
   m_fontColor32:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:

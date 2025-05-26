@@ -2581,7 +2581,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   defaultTimeLimit: 15
-  defaultInitialHealth: 3
+  defaultInitialHealth: 10
   defaultDamagePerWrong: 1
   timeUpDelay: 0.5
   questionTransitionDelay: 0.2

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
+using Core.Network;
 
 namespace UI
 {
@@ -23,6 +24,7 @@ namespace UI
         [SerializeField] private TMP_InputField roomNameInput;
         [SerializeField] private TMP_InputField hostPortInput;
         [SerializeField] private TMP_InputField maxPlayersInput;
+        [SerializeField] private TMP_InputField hostPlayerNameInput; // 新增：房主玩家名
         [SerializeField] private Button startHostButton;
         [SerializeField] private Button backFromCreateButton;
         [SerializeField] private TMP_Text hostStatusText;
@@ -39,6 +41,10 @@ namespace UI
         [Header("场景名称")]
         [SerializeField] private string offlineGameScene = "OfflineGameScene";
         [SerializeField] private string networkGameScene = "NetworkGameScene";
+        [SerializeField] private string roomScene = "RoomScene"; // 新增：房间场景
+
+        [Header("调试设置")]
+        [SerializeField] private bool enableDebugLogs = true;
 
         // 游戏模式
         public enum GameMode
@@ -54,6 +60,9 @@ namespace UI
         public static string HostIP { get; private set; }
         public static ushort Port { get; private set; }
         public static int MaxPlayers { get; private set; }
+
+        // 网络状态跟踪
+        private bool isConnecting = false;
 
         private void Start()
         {
@@ -73,6 +82,8 @@ namespace UI
                 hostPortInput.text = "7777";
             if (maxPlayersInput != null)
                 maxPlayersInput.text = "4";
+            if (hostPlayerNameInput != null)
+                hostPlayerNameInput.text = "房主" + Random.Range(100, 999);
             if (hostIPInput != null)
                 hostIPInput.text = "127.0.0.1";
             if (clientPortInput != null)
@@ -155,7 +166,7 @@ namespace UI
         /// </summary>
         private void OnSinglePlayerClicked()
         {
-            Debug.Log("选择单机游戏");
+            LogDebug("选择单机游戏");
             SelectedGameMode = GameMode.SinglePlayer;
 
             // 加载单机游戏场景
@@ -167,7 +178,7 @@ namespace UI
         /// </summary>
         private void OnCreateRoomClicked()
         {
-            Debug.Log("选择创建房间");
+            LogDebug("选择创建房间");
             ShowCreateRoomPanel();
         }
 
@@ -176,7 +187,7 @@ namespace UI
         /// </summary>
         private void OnJoinRoomClicked()
         {
-            Debug.Log("选择加入房间");
+            LogDebug("选择加入房间");
             ShowJoinRoomPanel();
         }
 
@@ -185,7 +196,7 @@ namespace UI
         /// </summary>
         private void OnExitClicked()
         {
-            Debug.Log("退出游戏");
+            LogDebug("退出游戏");
 
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
@@ -194,7 +205,7 @@ namespace UI
 #endif
         }
 
-        #endregion
+        #region 网络事件处理
 
         #region 创建房间面板事件
 
@@ -203,6 +214,12 @@ namespace UI
         /// </summary>
         private void OnStartHostClicked()
         {
+            if (isConnecting)
+            {
+                LogDebug("正在连接中，请稍候");
+                return;
+            }
+
             // 验证输入
             if (!ValidateHostInputs())
                 return;
@@ -210,7 +227,7 @@ namespace UI
             // 设置Host模式参数
             SelectedGameMode = GameMode.Host;
             RoomName = roomNameInput.text.Trim();
-            PlayerName = "房主"; // Host默认名称
+            PlayerName = hostPlayerNameInput?.text.Trim() ?? "房主";
 
             if (ushort.TryParse(hostPortInput.text, out ushort port))
                 Port = port;
@@ -222,11 +239,27 @@ namespace UI
             else
                 MaxPlayers = 4;
 
-            Debug.Log($"创建房间: {RoomName}, 端口: {Port}, 最大玩家数: {MaxPlayers}");
+            LogDebug($"创建房间: {RoomName}, 玩家: {PlayerName}, 端口: {Port}, 最大玩家数: {MaxPlayers}");
 
-            // 显示状态并加载网络场景
-            UpdateHostStatusText("正在创建房间...");
-            LoadScene(networkGameScene);
+            // 显示状态
+            UpdateHostStatusText("正在启动主机...");
+            isConnecting = true;
+
+            // 确保NetworkManager存在
+            if (EnsureNetworkManager())
+            {
+                // 订阅Host启动事件
+                NetworkManager.OnHostStarted += OnHostStartedForRoom;
+
+                // 启动Host
+                NetworkManager.Instance.StartAsHost(Port, RoomName, MaxPlayers);
+            }
+            else
+            {
+                LogDebug("无法创建或找到NetworkManager");
+                UpdateHostStatusText("网络初始化失败");
+                isConnecting = false;
+            }
         }
 
         /// <summary>
@@ -234,7 +267,14 @@ namespace UI
         /// </summary>
         private void OnBackFromCreateClicked()
         {
-            Debug.Log("从创建房间返回主菜单");
+            LogDebug("从创建房间返回主菜单");
+
+            // 取消连接状态
+            isConnecting = false;
+
+            // 清理网络事件订阅
+            CleanupNetworkEvents();
+
             ShowMainMenu();
         }
 
@@ -246,6 +286,12 @@ namespace UI
             if (roomNameInput != null && string.IsNullOrWhiteSpace(roomNameInput.text))
             {
                 UpdateHostStatusText("请输入房间名称");
+                return false;
+            }
+
+            if (hostPlayerNameInput != null && string.IsNullOrWhiteSpace(hostPlayerNameInput.text))
+            {
+                UpdateHostStatusText("请输入玩家名称");
                 return false;
             }
 
@@ -298,6 +344,12 @@ namespace UI
         /// </summary>
         private void OnConnectToHostClicked()
         {
+            if (isConnecting)
+            {
+                LogDebug("正在连接中，请稍候");
+                return;
+            }
+
             // 验证输入
             if (!ValidateClientInputs())
                 return;
@@ -312,11 +364,27 @@ namespace UI
             else
                 Port = 7777;
 
-            Debug.Log($"连接到主机: {HostIP}:{Port}, 玩家名: {PlayerName}");
+            LogDebug($"连接到主机: {HostIP}:{Port}, 玩家名: {PlayerName}");
 
-            // 显示状态并加载网络场景
+            // 显示状态
             UpdateConnectionStatusText("正在连接到主机...");
-            LoadScene(networkGameScene);
+            isConnecting = true;
+
+            // 确保NetworkManager存在
+            if (EnsureNetworkManager())
+            {
+                // 订阅连接事件
+                NetworkManager.OnConnected += OnConnectedForRoom;
+
+                // 连接到Host
+                NetworkManager.Instance.ConnectAsClient(HostIP, Port);
+            }
+            else
+            {
+                LogDebug("无法创建或找到NetworkManager");
+                UpdateConnectionStatusText("网络初始化失败");
+                isConnecting = false;
+            }
         }
 
         /// <summary>
@@ -324,7 +392,14 @@ namespace UI
         /// </summary>
         private void OnBackFromJoinClicked()
         {
-            Debug.Log("从加入房间返回主菜单");
+            LogDebug("从加入房间返回主菜单");
+
+            // 取消连接状态
+            isConnecting = false;
+
+            // 清理网络事件订阅
+            CleanupNetworkEvents();
+
             ShowMainMenu();
         }
 
@@ -373,6 +448,196 @@ namespace UI
 
         #endregion
 
+        #region 网络管理器确保
+
+        /// <summary>
+        /// 确保NetworkManager和RoomManager存在并且正确初始化
+        /// </summary>
+        private bool EnsureNetworkManager()
+        {
+            // 1. 检查NetworkManager是否存在
+            if (NetworkManager.Instance == null)
+            {
+                LogDebug("NetworkManager不存在，尝试查找或创建");
+
+                // 尝试在场景中查找
+                NetworkManager existingNetworkManager = FindObjectOfType<NetworkManager>();
+                if (existingNetworkManager == null)
+                {
+                    // 尝试创建NetworkManager
+                    if (!CreateNetworkManager())
+                    {
+                        LogDebug("创建NetworkManager失败");
+                        return false;
+                    }
+                }
+                else
+                {
+                    LogDebug("在场景中找到了NetworkManager");
+                }
+            }
+
+            // 2. 检查RoomManager是否存在
+            if (RoomManager.Instance == null)
+            {
+                LogDebug("RoomManager不存在，尝试查找或创建");
+
+                // 尝试在场景中查找
+                RoomManager existingRoomManager = FindObjectOfType<RoomManager>();
+                if (existingRoomManager == null)
+                {
+                    // 尝试创建RoomManager
+                    if (!CreateRoomManager())
+                    {
+                        LogDebug("创建RoomManager失败");
+                        return false;
+                    }
+                }
+                else
+                {
+                    LogDebug("在场景中找到了RoomManager");
+                }
+            }
+
+            // 3. 手动初始化NetworkManager（重要：这样它不会在主菜单自动启动）
+            if (NetworkManager.Instance != null)
+            {
+                // 调用手动初始化方法，这样NetworkManager知道现在应该启动网络了
+                NetworkManager.Instance.ManualInitializeNetwork();
+            }
+
+            return NetworkManager.Instance != null && RoomManager.Instance != null;
+        }
+
+        /// <summary>
+        /// 创建NetworkManager
+        /// </summary>
+        private bool CreateNetworkManager()
+        {
+            try
+            {
+                // 创建NetworkManager GameObject
+                GameObject networkManagerObj = new GameObject("NetworkManager");
+                DontDestroyOnLoad(networkManagerObj);
+
+                // 添加NetworkManager组件
+                NetworkManager networkManager = networkManagerObj.AddComponent<NetworkManager>();
+
+                LogDebug("NetworkManager创建成功");
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"创建NetworkManager失败: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 创建RoomManager
+        /// </summary>
+        private bool CreateRoomManager()
+        {
+            try
+            {
+                // 创建RoomManager GameObject
+                GameObject roomManagerObj = new GameObject("RoomManager");
+                DontDestroyOnLoad(roomManagerObj);
+
+                // 添加RoomManager组件
+                RoomManager roomManager = roomManagerObj.AddComponent<RoomManager>();
+
+                LogDebug("RoomManager创建成功");
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"创建RoomManager失败: {e.Message}");
+                return false;
+            }
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Host启动成功后的处理
+        /// </summary>
+        private void OnHostStartedForRoom()
+        {
+            LogDebug("Host启动成功，创建房间并切换场景");
+
+            // 取消订阅
+            NetworkManager.OnHostStarted -= OnHostStartedForRoom;
+            isConnecting = false;
+
+            // 创建房间
+            if (RoomManager.Instance != null)
+            {
+                bool success = RoomManager.Instance.CreateRoom(RoomName, PlayerName);
+                if (success)
+                {
+                    LogDebug("房间创建成功，切换到房间场景");
+                    // 切换到房间场景
+                    LoadScene(roomScene);
+                }
+                else
+                {
+                    LogDebug("创建房间失败");
+                    UpdateHostStatusText("创建房间失败");
+                }
+            }
+            else
+            {
+                LogDebug("RoomManager 实例不存在");
+                UpdateHostStatusText("房间管理器未找到");
+            }
+        }
+
+        /// <summary>
+        /// 客户端连接成功后的处理
+        /// </summary>
+        private void OnConnectedForRoom()
+        {
+            LogDebug("连接成功，加入房间并切换场景");
+
+            // 取消订阅
+            NetworkManager.OnConnected -= OnConnectedForRoom;
+            isConnecting = false;
+
+            // 加入房间
+            if (RoomManager.Instance != null)
+            {
+                bool success = RoomManager.Instance.JoinRoom(PlayerName);
+                if (success)
+                {
+                    LogDebug("加入房间成功，切换到房间场景");
+                    // 切换到房间场景
+                    LoadScene(roomScene);
+                }
+                else
+                {
+                    LogDebug("加入房间失败");
+                    UpdateConnectionStatusText("加入房间失败");
+                }
+            }
+            else
+            {
+                LogDebug("RoomManager 实例不存在");
+                UpdateConnectionStatusText("房间管理器未找到");
+            }
+        }
+
+        /// <summary>
+        /// 清理网络事件订阅
+        /// </summary>
+        private void CleanupNetworkEvents()
+        {
+            NetworkManager.OnHostStarted -= OnHostStartedForRoom;
+            NetworkManager.OnConnected -= OnConnectedForRoom;
+        }
+
+        #endregion
+
         /// <summary>
         /// 加载场景
         /// </summary>
@@ -386,6 +651,7 @@ namespace UI
 
             try
             {
+                LogDebug($"加载场景: {sceneName}");
                 SceneManager.LoadScene(sceneName);
             }
             catch (System.Exception e)
@@ -395,10 +661,24 @@ namespace UI
         }
 
         /// <summary>
+        /// 调试日志
+        /// </summary>
+        private void LogDebug(string message)
+        {
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[MainMenuManager] {message}");
+            }
+        }
+
+        /// <summary>
         /// 清理资源
         /// </summary>
         private void OnDestroy()
         {
+            // 清理网络事件订阅
+            CleanupNetworkEvents();
+
             // 清理所有按钮事件监听
             if (singlePlayerButton != null)
                 singlePlayerButton.onClick.RemoveAllListeners();
@@ -419,3 +699,4 @@ namespace UI
         }
     }
 }
+#endregion
