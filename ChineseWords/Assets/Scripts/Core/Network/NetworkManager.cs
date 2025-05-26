@@ -17,7 +17,7 @@ namespace Core.Network
         [Header("网络配置")]
         [SerializeField] private ushort defaultPort = 7777;
         [SerializeField] private ushort maxClients = 8;
-        [SerializeField] private ushort timeoutTime = 5000;
+        [SerializeField] private ushort timeoutTime = 10000;
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -60,6 +60,7 @@ namespace Core.Network
 
         private void Awake()
         {
+            Application.runInBackground = true;
             LogDebug($"NetworkManager Awake 执行时间: {Time.time}");
 
             // 单例模式

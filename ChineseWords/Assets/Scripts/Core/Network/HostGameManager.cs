@@ -376,7 +376,325 @@ namespace Core.Network
                 Invoke(nameof(StartHostGame), gameStartDelay);
             }
         }
+        /// <summary>
+        /// 从房间系统触发游戏开始（新增方法）
+        /// </summary>
+        public void StartGameFromRoom()
+        {
+            if (!isInitialized)
+            {
+                LogDebug("HostGameManager 未初始化，无法开始游戏");
+                return;
+            }
 
+            if (gameInProgress)
+            {
+                LogDebug("游戏已经在进行中");
+                return;
+            }
+
+            // 从房间系统获取玩家信息
+            if (RoomManager.Instance?.CurrentRoom != null)
+            {
+                SyncPlayersFromRoom();
+            }
+
+            LogDebug("从房间系统启动游戏");
+            StartHostGame();
+        }
+
+        /// <summary>
+        /// 从房间系统同步玩家信息
+        /// </summary>
+        private void SyncPlayersFromRoom()
+        {
+            var room = RoomManager.Instance.CurrentRoom;
+            if (room == null) return;
+
+            // 清空现有玩家状态
+            playerStates = new Dictionary<ushort, PlayerGameState>();
+
+            // 从房间添加所有玩家
+            foreach (var roomPlayer in room.players.Values)
+            {
+                playerStates[roomPlayer.playerId] = new PlayerGameState
+                {
+                    playerId = roomPlayer.playerId,
+                    playerName = roomPlayer.playerName,
+                    health = initialPlayerHealth,
+                    isAlive = true,
+                    score = 0,
+                    isReady = true // 能进入游戏的都是准备好的
+                };
+
+                LogDebug($"从房间同步玩家: {roomPlayer.playerName} (ID: {roomPlayer.playerId})");
+            }
+
+            LogDebug($"同步完成，游戏玩家数: {playerStates.Count}");
+        }
+
+        /// <summary>
+        /// 生成并发送题目（改进版）
+        /// </summary>
+        private void GenerateAndSendQuestion()
+        {
+            if (!gameInProgress || !isInitialized)
+                return;
+
+            LogDebug("开始生成新题目");
+
+            // 选择题目类型
+            var questionType = SelectRandomQuestionType();
+            LogDebug($"选择的题目类型: {questionType}");
+
+            // 调用对应的题型管理器生成题目
+            NetworkQuestionData question = GenerateQuestionByType(questionType);
+
+            if (question != null)
+            {
+                currentQuestion = question;
+                // 广播题目给所有客户端
+                BroadcastQuestion(question);
+                LogDebug($"题目已发送: {questionType} - {question.questionText}");
+            }
+            else
+            {
+                Debug.LogError($"生成 {questionType} 题目失败");
+                // 重试生成题目
+                Invoke(nameof(GenerateAndSendQuestion), 1f);
+            }
+        }
+
+        /// <summary>
+        /// 根据题目类型生成题目
+        /// </summary>
+        private NetworkQuestionData GenerateQuestionByType(QuestionType questionType)
+        {
+            try
+            {
+                // 查找或创建对应的题型管理器来抽题
+                QuestionManagerBase questionManager = GetOrCreateQuestionManager(questionType);
+
+                if (questionManager == null)
+                {
+                    LogDebug($"无法创建 {questionType} 题型管理器");
+                    return CreateDefaultQuestion(questionType);
+                }
+
+                // 调用题型管理器的抽题逻辑
+                NetworkQuestionData networkQuestion = ExtractQuestionFromManager(questionManager, questionType);
+
+                if (networkQuestion != null)
+                {
+                    LogDebug($"成功从 {questionType} 管理器抽取题目: {networkQuestion.questionText}");
+                    return networkQuestion;
+                }
+                else
+                {
+                    LogDebug($"从 {questionType} 管理器抽题失败，使用默认题目");
+                    return CreateDefaultQuestion(questionType);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"生成题目失败: {e.Message}");
+                return CreateDefaultQuestion(questionType);
+            }
+        }
+
+        /// <summary>
+        /// 获取或创建题型管理器
+        /// </summary>
+        private QuestionManagerBase GetOrCreateQuestionManager(QuestionType questionType)
+        {
+            // 尝试在场景中查找现有的管理器
+            QuestionManagerBase existingManager = FindQuestionManagerInScene(questionType);
+            if (existingManager != null)
+            {
+                LogDebug($"找到现有的 {questionType} 管理器");
+                return existingManager;
+            }
+
+            // 如果没有找到，创建一个临时的管理器用于抽题
+            return CreateTemporaryQuestionManager(questionType);
+        }
+
+        /// <summary>
+        /// 在场景中查找现有的题型管理器
+        /// </summary>
+        private QuestionManagerBase FindQuestionManagerInScene(QuestionType questionType)
+        {
+            switch (questionType)
+            {
+                case QuestionType.ExplanationChoice:
+                    return FindObjectOfType<GameLogic.Choice.ExplanationChoiceQuestionManager>();
+                case QuestionType.HardFill:
+                    return FindObjectOfType<GameLogic.FillBlank.HardFillQuestionManager>();
+                case QuestionType.SoftFill:
+                    return FindObjectOfType<GameLogic.FillBlank.SoftFillQuestionManager>();
+                case QuestionType.TextPinyin:
+                    return FindObjectOfType<GameLogic.FillBlank.TextPinyinQuestionManager>();
+                case QuestionType.SimularWordChoice:
+                    return FindObjectOfType<GameLogic.Choice.SimularWordChoiceQuestionManager>();
+                // 添加其他题型管理器
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// 创建临时的题型管理器用于抽题
+        /// </summary>
+        private QuestionManagerBase CreateTemporaryQuestionManager(QuestionType questionType)
+        {
+            try
+            {
+                GameObject tempManagerObj = new GameObject($"Temp_{questionType}_Manager");
+                tempManagerObj.transform.SetParent(this.transform); // 设置为HostGameManager的子对象
+
+                QuestionManagerBase manager = null;
+
+                switch (questionType)
+                {
+                    case QuestionType.ExplanationChoice:
+                        manager = tempManagerObj.AddComponent<GameLogic.Choice.ExplanationChoiceQuestionManager>();
+                        break;
+                    case QuestionType.HardFill:
+                        manager = tempManagerObj.AddComponent<GameLogic.FillBlank.HardFillQuestionManager>();
+                        break;
+                    case QuestionType.SoftFill:
+                        manager = tempManagerObj.AddComponent<GameLogic.FillBlank.SoftFillQuestionManager>();
+                        break;
+                    case QuestionType.TextPinyin:
+                        manager = tempManagerObj.AddComponent<GameLogic.FillBlank.TextPinyinQuestionManager>();
+                        break;
+                    case QuestionType.SimularWordChoice:
+                        manager = tempManagerObj.AddComponent<GameLogic.Choice.SimularWordChoiceQuestionManager>();
+                        break;
+                    // 添加其他题型
+                    default:
+                        Destroy(tempManagerObj);
+                        return null;
+                }
+
+                if (manager != null)
+                {
+                    LogDebug($"创建临时 {questionType} 管理器成功");
+                }
+
+                return manager;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"创建临时 {questionType} 管理器失败: {e.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 从题型管理器提取题目数据
+        /// </summary>
+        private NetworkQuestionData ExtractQuestionFromManager(QuestionManagerBase manager, QuestionType questionType)
+        {
+            try
+            {
+                // 检查管理器是否实现了IQuestionDataProvider接口
+                if (manager is IQuestionDataProvider dataProvider)
+                {
+                    LogDebug($"使用IQuestionDataProvider接口从 {manager.GetType().Name} 获取题目");
+                    NetworkQuestionData questionData = dataProvider.GetQuestionData();
+
+                    if (questionData != null)
+                    {
+                        LogDebug($"成功获取题目: {questionData.questionText}");
+                        return questionData;
+                    }
+                    else
+                    {
+                        LogDebug($"从 {manager.GetType().Name} 获取题目数据为空");
+                    }
+                }
+                else
+                {
+                    // 如果管理器还没有实现接口，使用反射或其他方式（临时方案）
+                    LogDebug($"{manager.GetType().Name} 尚未实现IQuestionDataProvider接口，使用临时方案");
+                    return ExtractQuestionUsingReflection(manager, questionType);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"从管理器提取题目失败: {e.Message}");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 使用反射方式提取题目（临时方案）
+        /// 这是为了兼容还没有实现IQuestionDataProvider接口的管理器
+        /// </summary>
+        private NetworkQuestionData ExtractQuestionUsingReflection(QuestionManagerBase manager, QuestionType questionType)
+        {
+            // 这里可以通过反射调用管理器的私有方法来获取题目数据
+            // 或者创建一个简单的模拟题目
+
+            LogDebug($"为 {questionType} 创建模拟题目数据");
+
+            // 临时返回模拟数据，建议尽快为各个管理器实现IQuestionDataProvider接口
+            switch (questionType)
+            {
+                case QuestionType.ExplanationChoice:
+                    return NetworkQuestionDataExtensions.CreateFromLocalData(
+                        QuestionType.ExplanationChoice,
+                        "下列哪个是恍然大悟的正确解释？（来自ExplanationChoiceQuestionManager）",
+                        "突然醒悟，明白过来",
+                        new string[] { "突然醒悟，明白过来", "感到非常惊讶", "心情变得很好", "觉得很困惑" },
+                        questionTimeLimit,
+                        "{\"source\": \"reflection_fallback\"}"
+                    );
+
+                case QuestionType.HardFill:
+                    return NetworkQuestionDataExtensions.CreateFromLocalData(
+                        QuestionType.HardFill,
+                        "山重水复疑无路，___村___又一村（来自HardFillQuestionManager）",
+                        "柳暗花明",
+                        null,
+                        questionTimeLimit,
+                        "{\"source\": \"reflection_fallback\", \"blanks\": 2}"
+                    );
+
+                // 添加其他题型的临时数据
+                default:
+                    return NetworkQuestionDataExtensions.CreateFromLocalData(
+                        questionType,
+                        $"这是一个{questionType}类型的测试题目",
+                        "测试答案",
+                        questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
+                            ? new string[] { "选项A", "测试答案", "选项C", "选项D" }
+                            : null,
+                        questionTimeLimit,
+                        "{\"source\": \"reflection_fallback\"}"
+                    );
+            }
+        }
+
+        /// <summary>
+        /// 创建默认题目（备用方案）
+        /// </summary>
+        private NetworkQuestionData CreateDefaultQuestion(QuestionType questionType)
+        {
+            return new NetworkQuestionData
+            {
+                questionType = questionType,
+                questionText = $"默认{questionType}题目：这是一个测试题目",
+                correctAnswer = "测试答案",
+                options = questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
+                    ? new string[] { "选项A", "测试答案", "选项C", "选项D" }
+                    : new string[0],
+                timeLimit = questionTimeLimit,
+                additionalData = "{\"isDefault\": true}"
+            };
+        }
         /// <summary>
         /// 检查游戏结束条件
         /// </summary>
@@ -458,33 +776,6 @@ namespace Core.Network
             // BroadcastGameEnd(reason);
         }
 
-        /// <summary>
-        /// 生成并发送题目
-        /// </summary>
-        private void GenerateAndSendQuestion()
-        {
-            if (!gameInProgress || !isInitialized)
-                return;
-
-            LogDebug("生成新题目");
-
-            // 使用现有的题目生成逻辑（简化版演示）
-            var questionType = SelectRandomQuestionType();
-            currentQuestion = CreateSampleQuestion(questionType);
-
-            if (currentQuestion != null)
-            {
-                // 广播题目给所有客户端
-                BroadcastQuestion(currentQuestion);
-                LogDebug($"题目已发送: {questionType}");
-            }
-            else
-            {
-                Debug.LogError("题目生成失败");
-                // 可以重试或跳过
-                Invoke(nameof(GenerateAndSendQuestion), 1f);
-            }
-        }
 
         /// <summary>
         /// 选择随机题目类型
@@ -515,26 +806,10 @@ namespace Core.Network
         {
             return new Dictionary<QuestionType, float>
             {
-                { QuestionType.ExplanationChoice, 1f },
+                { QuestionType.ExplanationChoice, 100f },
                 { QuestionType.SimularWordChoice, 1f },
                 { QuestionType.TextPinyin, 1f },
                 { QuestionType.HardFill, 1f }
-            };
-        }
-
-        /// <summary>
-        /// 创建示例题目（临时实现，实际应该连接数据库）
-        /// </summary>
-        private NetworkQuestionData CreateSampleQuestion(QuestionType questionType)
-        {
-            return new NetworkQuestionData
-            {
-                questionType = questionType,
-                questionText = $"示例{questionType}题目：请选择正确答案",
-                correctAnswer = "正确答案",
-                options = new string[] { "选项A", "正确答案", "选项C", "选项D" },
-                timeLimit = questionTimeLimit,
-                additionalData = "{\"sampleData\": true}"
             };
         }
 

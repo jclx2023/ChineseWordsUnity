@@ -1088,7 +1088,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   defaultPort: 7777
   maxClients: 8
-  timeoutTime: 5000
+  timeoutTime: 10000
   enableDebugLogs: 1
 --- !u!4 &946501603
 Transform:
@@ -1316,6 +1316,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1352040680}
+  - component: {fileID: 1352040681}
   m_Layer: 0
   m_Name: GameCanvas
   m_TagString: Untagged
@@ -1338,6 +1339,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1352040681
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1352040679}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c948f4153c5289418c71c9120fbae6e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  uiRoot: {fileID: 0}
 --- !u!1 &1545427128
 GameObject:
   m_ObjectHideFlags: 0

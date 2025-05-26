@@ -240,6 +240,13 @@ namespace Core.Network
             if (!IsInRoom || !isHost)
                 return;
 
+            // 检查是否是Host自己的客户端连接，如果是则忽略
+            if (NetworkManager.Instance != null && playerId == NetworkManager.Instance.ClientId)
+            {
+                LogDebug($"忽略Host自己的客户端连接: {playerId}");
+                return;
+            }
+
             // Host模式下，为新加入的玩家创建房间数据
             string playerName = $"玩家{playerId}";
             bool success = currentRoom.AddPlayer(playerId, playerName);
@@ -425,7 +432,7 @@ namespace Core.Network
             return $"房间: {currentRoom.roomName}, " +
                    $"状态: {currentRoom.state}, " +
                    $"玩家: {currentRoom.players.Count}/{currentRoom.maxPlayers}, " +
-                   $"准备: {currentRoom.GetReadyPlayerCount()}/{currentRoom.players.Count}, " +
+                   $"准备: {currentRoom.GetReadyPlayerCount()}/{currentRoom.GetNonHostPlayerCount()}, " +
                    $"是否房主: {isHost}";
         }
 

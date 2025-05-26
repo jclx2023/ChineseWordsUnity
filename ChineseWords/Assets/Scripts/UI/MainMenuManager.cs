@@ -66,6 +66,7 @@ namespace UI
 
         private void Start()
         {
+            Application.runInBackground = true;
             InitializeUI();
             ShowMainMenu();
         }

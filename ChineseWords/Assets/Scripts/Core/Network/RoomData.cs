@@ -107,7 +107,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 检查是否所有玩家都已准备
+        /// 检查是否所有玩家都已准备（房主不需要准备）
         /// </summary>
         public bool AreAllPlayersReady()
         {
@@ -116,6 +116,11 @@ namespace Core.Network
 
             foreach (var player in players.Values)
             {
+                // 房主不需要准备，跳过检查
+                if (player.isHost)
+                    continue;
+
+                // 其他玩家必须准备
                 if (player.state != PlayerRoomState.Ready)
                     return false;
             }
@@ -123,14 +128,32 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 获取准备的玩家数量
+        /// 获取准备的玩家数量（不包括房主）
         /// </summary>
         public int GetReadyPlayerCount()
         {
             int count = 0;
             foreach (var player in players.Values)
             {
+                // 房主不算在准备数量中
+                if (player.isHost)
+                    continue;
+
                 if (player.state == PlayerRoomState.Ready)
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 获取需要准备的玩家总数（不包括房主）
+        /// </summary>
+        public int GetNonHostPlayerCount()
+        {
+            int count = 0;
+            foreach (var player in players.Values)
+            {
+                if (!player.isHost)
                     count++;
             }
             return count;

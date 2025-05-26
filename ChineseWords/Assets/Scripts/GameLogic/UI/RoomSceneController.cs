@@ -254,7 +254,13 @@ namespace UI
             switch (roomData.state)
             {
                 case RoomState.Waiting:
-                    return "等待玩家准备";
+                    // 显示准备状态，但排除房主
+                    int readyCount = roomData.GetReadyPlayerCount();
+                    int nonHostCount = roomData.GetNonHostPlayerCount();
+                    if (nonHostCount == 0)
+                        return "等待玩家加入";
+                    else
+                        return $"准备状态: {readyCount}/{nonHostCount}";
                 case RoomState.Ready:
                     return "准备开始";
                 case RoomState.Starting:
@@ -299,10 +305,25 @@ namespace UI
                     var buttonText = startGameButton.GetComponentInChildren<TMP_Text>();
                     if (buttonText != null)
                     {
-                        if (!canStartGame)
-                            buttonText.text = "等待玩家准备";
+                        var room = RoomManager.Instance?.CurrentRoom;
+                        if (room == null)
+                        {
+                            buttonText.text = "等待房间数据";
+                        }
+                        else if (room.GetNonHostPlayerCount() == 0)
+                        {
+                            buttonText.text = "等待玩家加入";
+                        }
+                        else if (!room.AreAllPlayersReady())
+                        {
+                            int readyCount = room.GetReadyPlayerCount();
+                            int totalNonHost = room.GetNonHostPlayerCount();
+                            buttonText.text = $"等待准备 ({readyCount}/{totalNonHost})";
+                        }
                         else
+                        {
                             buttonText.text = "开始游戏";
+                        }
                     }
                 }
             }
@@ -494,6 +515,20 @@ namespace UI
         {
             LogDebug("游戏开始");
             ShowLoadingPanel("游戏启动中，请稍候...");
+
+            // 触发HostGameManager开始游戏（仅Host调用）
+            if (RoomManager.Instance?.IsHost == true)
+            {
+                if (HostGameManager.Instance != null)
+                {
+                    LogDebug("触发HostGameManager开始游戏");
+                    HostGameManager.Instance.StartGameFromRoom();
+                }
+                else
+                {
+                    LogDebug("HostGameManager实例不存在");
+                }
+            }
 
             // 延迟切换场景，给玩家一些反应时间
             Invoke(nameof(SwitchToGameScene), 2f);
