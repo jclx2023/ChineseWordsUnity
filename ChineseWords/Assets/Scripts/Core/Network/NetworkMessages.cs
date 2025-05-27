@@ -24,7 +24,7 @@ namespace Core.Network
         GameStateSync = 22,
 
         // ÓÎÏ·¿ØÖÆ
-        StartGame = 30,
+        GameStart = 30,
         EndGame = 31,
         RestartGame = 32,
 
