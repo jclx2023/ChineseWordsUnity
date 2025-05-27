@@ -13,12 +13,13 @@ namespace GameLogic.FillBlank
     /// <summary>
     /// 硬性单词补全题管理器
     /// - 支持单机和网络模式
+    /// - 实现IQuestionDataProvider接口，支持Host抽题
     /// - 单机模式：按词长加权随机抽词，随机展示部分字符
     /// - 网络模式：使用服务器提供的题目数据
     /// - 玩家输入完整词，校验长度、保留字、词库存在性
     /// - "投降"视为提交空答案，视作错误
     /// </summary>
-    public class HardFillQuestionManager : NetworkQuestionManagerBase
+    public class HardFillQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
         private string dbPath;
 
@@ -50,6 +51,9 @@ namespace GameLogic.FillBlank
         private int[] revealIndices;
         private bool hasAnswered = false;
 
+        // IQuestionDataProvider接口实现
+        public QuestionType QuestionType => QuestionType.HardFill;
+
         protected override void Awake()
         {
             base.Awake(); // 调用网络基类初始化
@@ -58,7 +62,122 @@ namespace GameLogic.FillBlank
 
         private void Start()
         {
-            InitializeUI();
+            // 检查是否需要UI（Host抽题模式可能不需要UI）
+            if (NeedsUI())
+            {
+                InitializeUI();
+            }
+            else
+            {
+                Debug.Log("[HardFill] Host抽题模式，跳过UI初始化");
+            }
+        }
+
+        /// <summary>
+        /// 检查是否需要UI
+        /// </summary>
+        private bool NeedsUI()
+        {
+            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
+            // 或者如果是QuestionDataService的子对象，也不需要UI
+            return transform.parent == null ||
+                   (transform.parent.GetComponent<HostGameManager>() == null &&
+                    transform.parent.GetComponent<QuestionDataService>() == null);
+        }
+
+        /// <summary>
+        /// 获取题目数据（IQuestionDataProvider接口实现）
+        /// 专门为Host抽题使用，不显示UI
+        /// </summary>
+        public NetworkQuestionData GetQuestionData()
+        {
+            Debug.Log("[HardFill] Host请求抽题数据");
+
+            // 1. 根据权重确定目标词长
+            int targetLength = GetWeightedWordLength();
+
+            // 2. 随机抽词
+            string word = GetRandomWord(targetLength);
+
+            if (string.IsNullOrEmpty(word))
+            {
+                Debug.LogWarning("[HardFill] Host抽题：暂无符合条件的词条");
+                return null;
+            }
+
+            // 3. 生成显示模式
+            int[] revealPattern = GenerateRevealPattern(word);
+
+            // 4. 构造显示文本
+            string displayText = CreateDisplayText(word, revealPattern);
+
+            // 5. 创建附加数据
+            var additionalData = new HardFillAdditionalData
+            {
+                revealIndices = revealPattern,
+                revealCount = revealPattern.Length,
+                displayPattern = displayText
+            };
+
+            // 6. 创建网络题目数据
+            var questionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.HardFill,
+                questionText = $"题目：{displayText}",
+                correctAnswer = word,
+                options = new string[0], // 填空题不需要选项
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(additionalData)
+            };
+
+            Debug.Log($"[HardFill] Host抽题成功: {displayText} (答案: {word})");
+            return questionData;
+        }
+
+        /// <summary>
+        /// 为指定单词生成显示模式
+        /// </summary>
+        private int[] GenerateRevealPattern(string word)
+        {
+            if (string.IsNullOrEmpty(word))
+                return new int[0];
+
+            int wordLength = word.Length;
+            int revealNum = Mathf.Clamp(revealCount, 1, wordLength - 1);
+
+            // 随机选择要显示的位置
+            var allIndices = Enumerable.Range(0, wordLength).ToArray();
+
+            // Fisher-Yates 洗牌算法
+            for (int i = allIndices.Length - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                int temp = allIndices[i];
+                allIndices[i] = allIndices[j];
+                allIndices[j] = temp;
+            }
+
+            return allIndices.Take(revealNum).OrderBy(x => x).ToArray();
+        }
+
+        /// <summary>
+        /// 创建显示文本
+        /// </summary>
+        private string CreateDisplayText(string word, int[] revealPattern)
+        {
+            if (string.IsNullOrEmpty(word) || revealPattern == null)
+                return "";
+
+            var displayText = new System.Text.StringBuilder();
+            for (int i = 0; i < word.Length; i++)
+            {
+                if (revealPattern.Contains(i))
+                    displayText.Append(word[i]);
+                else
+                    displayText.Append('_');
+            }
+
+            return displayText.ToString();
         }
 
         /// <summary>
@@ -66,10 +185,16 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void InitializeUI()
         {
+            if (UIManager.Instance == null)
+            {
+                Debug.LogError("[HardFill] UIManager实例不存在");
+                return;
+            }
+
             var ui = UIManager.Instance.LoadUI(uiPrefabPath);
             if (ui == null)
             {
-                Debug.LogError($"无法加载UI预制体: {uiPrefabPath}");
+                Debug.LogError($"[HardFill] 无法加载UI预制体: {uiPrefabPath}");
                 return;
             }
 
@@ -83,7 +208,7 @@ namespace GameLogic.FillBlank
             if (questionText == null || answerInput == null || submitButton == null ||
                 surrenderButton == null || feedbackText == null)
             {
-                Debug.LogError("UI组件获取失败，检查预制体结构");
+                Debug.LogError("[HardFill] UI组件获取失败，检查预制体结构");
                 return;
             }
 
@@ -99,6 +224,8 @@ namespace GameLogic.FillBlank
             answerInput.onSubmit.AddListener(OnInputSubmit);
 
             feedbackText.text = string.Empty;
+
+            Debug.Log("[HardFill] UI初始化完成");
         }
 
         /// <summary>
@@ -108,22 +235,37 @@ namespace GameLogic.FillBlank
         {
             Debug.Log("[HardFill] 加载本地题目");
 
-            // 1. 根据权重确定目标词长
-            int targetLength = GetWeightedWordLength();
-
-            // 2. 随机抽词
-            currentWord = GetRandomWord(targetLength);
-
-            if (string.IsNullOrEmpty(currentWord))
+            // 使用GetQuestionData()方法复用抽题逻辑
+            var questionData = GetQuestionData();
+            if (questionData == null)
             {
                 DisplayErrorMessage("没有符合条件的词条。");
                 return;
             }
 
-            // 3. 生成显示模式
-            GenerateRevealPattern();
+            // 解析题目数据
+            currentWord = questionData.correctAnswer;
 
-            // 4. 显示题目
+            // 从附加数据中解析显示模式
+            if (!string.IsNullOrEmpty(questionData.additionalData))
+            {
+                try
+                {
+                    var additionalInfo = JsonUtility.FromJson<HardFillAdditionalData>(questionData.additionalData);
+                    revealIndices = additionalInfo.revealIndices;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成显示模式");
+                    revealIndices = GenerateRevealPattern(currentWord);
+                }
+            }
+            else
+            {
+                revealIndices = GenerateRevealPattern(currentWord);
+            }
+
+            // 显示题目
             DisplayQuestion();
         }
 
@@ -136,15 +278,15 @@ namespace GameLogic.FillBlank
 
             if (networkData == null)
             {
-                Debug.LogError("网络题目数据为空");
+                Debug.LogError("[HardFill] 网络题目数据为空");
                 DisplayErrorMessage("网络题目数据错误");
                 return;
             }
 
             if (networkData.questionType != QuestionType.HardFill)
             {
-                Debug.LogError($"题目类型不匹配: 期望{QuestionType.HardFill}, 实际{networkData.questionType}");
-                LoadLocalQuestion(); // 降级到本地题目
+                Debug.LogError($"[HardFill] 题目类型不匹配: 期望{QuestionType.HardFill}, 实际{networkData.questionType}");
+                DisplayErrorMessage("题目类型错误");
                 return;
             }
 
@@ -173,13 +315,13 @@ namespace GameLogic.FillBlank
                 catch (System.Exception e)
                 {
                     Debug.LogWarning($"解析网络附加数据失败: {e.Message}，使用默认显示模式");
-                    GenerateRevealPattern();
+                    revealIndices = GenerateRevealPattern(currentWord);
                 }
             }
             else
             {
-                // 如果没有附加数据，从questionText中解析或使用默认模式
-                GenerateRevealPattern();
+                // 如果没有附加数据，使用默认模式
+                revealIndices = GenerateRevealPattern(currentWord);
             }
         }
 
@@ -250,29 +392,11 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// 生成字符显示模式
+        /// 生成字符显示模式（保持原有逻辑用于单机模式）
         /// </summary>
         private void GenerateRevealPattern()
         {
-            if (string.IsNullOrEmpty(currentWord))
-                return;
-
-            int wordLength = currentWord.Length;
-            int revealNum = Mathf.Clamp(revealCount, 1, wordLength - 1);
-
-            // 随机选择要显示的位置
-            var allIndices = Enumerable.Range(0, wordLength).ToArray();
-
-            // Fisher-Yates 洗牌算法
-            for (int i = allIndices.Length - 1; i > 0; i--)
-            {
-                int j = Random.Range(0, i + 1);
-                int temp = allIndices[i];
-                allIndices[i] = allIndices[j];
-                allIndices[j] = temp;
-            }
-
-            revealIndices = allIndices.Take(revealNum).OrderBy(x => x).ToArray();
+            revealIndices = GenerateRevealPattern(currentWord);
         }
 
         /// <summary>
@@ -289,14 +413,7 @@ namespace GameLogic.FillBlank
             }
 
             // 构造显示文本
-            var displayText = new System.Text.StringBuilder();
-            for (int i = 0; i < currentWord.Length; i++)
-            {
-                if (revealIndices.Contains(i))
-                    displayText.Append(currentWord[i]);
-                else
-                    displayText.Append('_');
-            }
+            string displayText = CreateDisplayText(currentWord, revealIndices);
 
             questionText.text = $"题目：{displayText}";
 
@@ -318,6 +435,8 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void DisplayErrorMessage(string message)
         {
+            Debug.LogWarning($"[HardFill] {message}");
+
             if (questionText != null)
                 questionText.text = message;
 
@@ -480,8 +599,15 @@ namespace GameLogic.FillBlank
             feedbackText.text = "已提交答案，等待服务器结果...";
             feedbackText.color = Color.yellow;
 
-            // 通过基类提交到服务器
-            CheckAnswer(answer);
+            // 提交答案到服务器
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(answer);
+            }
+            else
+            {
+                Debug.LogError("[HardFill] NetworkManager实例不存在，无法提交答案");
+            }
         }
 
         /// <summary>
@@ -498,15 +624,18 @@ namespace GameLogic.FillBlank
         private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
         {
             // 显示反馈
-            if (isCorrect)
+            if (feedbackText != null)
             {
-                feedbackText.text = "回答正确！";
-                feedbackText.color = Color.green;
-            }
-            else
-            {
-                feedbackText.text = $"回答错误，正确示例：{currentWord}";
-                feedbackText.color = Color.red;
+                if (isCorrect)
+                {
+                    feedbackText.text = "回答正确！";
+                    feedbackText.color = Color.green;
+                }
+                else
+                {
+                    feedbackText.text = $"回答错误，正确示例：{currentWord}";
+                    feedbackText.color = Color.red;
+                }
             }
 
             // 等待一段时间

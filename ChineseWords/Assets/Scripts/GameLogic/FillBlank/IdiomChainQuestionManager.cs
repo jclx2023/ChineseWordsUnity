@@ -13,12 +13,14 @@ namespace GameLogic.FillBlank
     /// <summary>
     /// 成语接龙题管理器
     /// - 支持单机和网络模式
+    /// - 实现IQuestionDataProvider接口，支持Host抽题
     /// - 单机模式：从预加载的首题候选中随机选择，玩家接龙
     /// - 网络模式：使用服务器提供的题目数据
     /// - 高亮显示需要接龙的字符，玩家输入下一个成语
     /// - 验证开头字符和成语存在性
+    /// - 特殊逻辑：答对后用答案作为下一题继续接龙
     /// </summary>
-    public class IdiomChainQuestionManager : NetworkQuestionManagerBase
+    public class IdiomChainQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
         private string dbPath;
 
@@ -46,6 +48,9 @@ namespace GameLogic.FillBlank
         private bool hasAnswered = false;
         private bool isGameInProgress = false;
 
+        // IQuestionDataProvider接口实现
+        public QuestionType QuestionType => QuestionType.IdiomChain;
+
         protected override void Awake()
         {
             base.Awake(); // 调用网络基类初始化
@@ -57,7 +62,137 @@ namespace GameLogic.FillBlank
 
         private void Start()
         {
-            InitializeUI();
+            // 检查是否需要UI（Host抽题模式可能不需要UI）
+            if (NeedsUI())
+            {
+                InitializeUI();
+            }
+            else
+            {
+                Debug.Log("[IdiomChain] Host抽题模式，跳过UI初始化");
+            }
+        }
+
+        /// <summary>
+        /// 检查是否需要UI
+        /// </summary>
+        private bool NeedsUI()
+        {
+            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
+            // 或者如果是QuestionDataService的子对象，也不需要UI
+            return transform.parent == null ||
+                   (transform.parent.GetComponent<HostGameManager>() == null &&
+                    transform.parent.GetComponent<QuestionDataService>() == null);
+        }
+
+        /// <summary>
+        /// 获取题目数据（IQuestionDataProvider接口实现）
+        /// 专门为Host抽题使用，不显示UI
+        /// </summary>
+        public NetworkQuestionData GetQuestionData()
+        {
+            Debug.Log("[IdiomChain] Host请求抽题数据");
+
+            // 随机选择一个首题成语
+            string selectedIdiom = GetRandomFirstIdiom();
+
+            if (string.IsNullOrEmpty(selectedIdiom))
+            {
+                Debug.LogWarning("[IdiomChain] Host抽题：没有可用的成语题目");
+                return null;
+            }
+
+            // 创建显示文本（高亮最后一个字）
+            string displayText = CreateDisplayText(selectedIdiom);
+
+            // 创建附加数据
+            var additionalData = new IdiomChainAdditionalData
+            {
+                displayText = displayText,
+                currentIdiom = selectedIdiom,
+                targetChar = selectedIdiom[selectedIdiom.Length - 1]
+            };
+
+            // 创建网络题目数据
+            var questionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.IdiomChain,
+                questionText = displayText,
+                correctAnswer = selectedIdiom, // 当前成语作为基准
+                options = new string[0], // 成语接龙不需要选项
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(additionalData)
+            };
+
+            Debug.Log($"[IdiomChain] Host抽题成功: {selectedIdiom} -> {displayText}");
+            return questionData;
+        }
+
+        /// <summary>
+        /// 创建成语接龙的特殊题目（用于答对后的连续接龙）
+        /// </summary>
+        /// <param name="baseIdiom">基准成语（玩家刚回答的成语）</param>
+        /// <returns>新的题目数据</returns>
+        public NetworkQuestionData CreateContinuationQuestion(string baseIdiom)
+        {
+            Debug.Log($"[IdiomChain] 创建连续接龙题目，基于: {baseIdiom}");
+
+            if (string.IsNullOrEmpty(baseIdiom))
+                return null;
+
+            // 创建显示文本（高亮最后一个字）
+            string displayText = CreateDisplayText(baseIdiom);
+
+            // 创建附加数据
+            var additionalData = new IdiomChainAdditionalData
+            {
+                displayText = displayText,
+                currentIdiom = baseIdiom,
+                targetChar = baseIdiom[baseIdiom.Length - 1]
+            };
+
+            // 创建网络题目数据
+            var questionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.IdiomChain,
+                questionText = displayText,
+                correctAnswer = baseIdiom, // 当前成语作为基准
+                options = new string[0],
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(additionalData)
+            };
+
+            Debug.Log($"[IdiomChain] 连续接龙题目创建成功: {baseIdiom} -> {displayText}");
+            return questionData;
+        }
+
+        /// <summary>
+        /// 创建显示文本（高亮最后一个字）
+        /// </summary>
+        private string CreateDisplayText(string idiom)
+        {
+            if (string.IsNullOrEmpty(idiom))
+                return "";
+
+            // 高亮最后一个字
+            char lastChar = idiom[idiom.Length - 1];
+            return idiom.Substring(0, idiom.Length - 1) + $"<color=red>{lastChar}</color>";
+        }
+
+        /// <summary>
+        /// 随机获取首题成语
+        /// </summary>
+        private string GetRandomFirstIdiom()
+        {
+            if (firstCandidates.Count == 0)
+            {
+                Debug.LogError("[IdiomChain] 首题候选列表为空");
+                return null;
+            }
+
+            // 随机选择（不移除，因为Host端可能需要多次抽题）
+            int index = Random.Range(0, firstCandidates.Count);
+            return firstCandidates[index];
         }
 
         /// <summary>
@@ -115,10 +250,16 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void InitializeUI()
         {
+            if (UIManager.Instance == null)
+            {
+                Debug.LogError("[IdiomChain] UIManager实例不存在");
+                return;
+            }
+
             var ui = UIManager.Instance.LoadUI(uiPrefabPath);
             if (ui == null)
             {
-                Debug.LogError($"无法加载UI预制体: {uiPrefabPath}");
+                Debug.LogError($"[IdiomChain] 无法加载UI预制体: {uiPrefabPath}");
                 return;
             }
 
@@ -132,7 +273,7 @@ namespace GameLogic.FillBlank
             if (questionText == null || answerInput == null || submitButton == null ||
                 surrenderButton == null || feedbackText == null)
             {
-                Debug.LogError("UI组件获取失败，检查预制体结构");
+                Debug.LogError("[IdiomChain] UI组件获取失败，检查预制体结构");
                 return;
             }
 
@@ -151,6 +292,8 @@ namespace GameLogic.FillBlank
             answerInput.onSubmit.AddListener(OnInputSubmit);
 
             feedbackText.text = string.Empty;
+
+            Debug.Log("[IdiomChain] UI初始化完成");
         }
 
         /// <summary>
@@ -160,19 +303,37 @@ namespace GameLogic.FillBlank
         {
             Debug.Log("[IdiomChain] 加载本地题目");
 
-            if (firstCandidates.Count == 0)
+            // 使用GetQuestionData()方法复用抽题逻辑
+            var questionData = GetQuestionData();
+            if (questionData == null)
             {
                 DisplayErrorMessage("没有可用的成语题目");
                 return;
             }
 
-            // 随机选择一个首题成语
-            int index = Random.Range(0, firstCandidates.Count);
-            currentIdiom = firstCandidates[index];
-            firstCandidates.RemoveAt(index); // 移除已使用的成语避免重复
+            // 解析题目数据
+            currentIdiom = questionData.correctAnswer;
+
+            // 从附加数据中获取显示信息
+            if (!string.IsNullOrEmpty(questionData.additionalData))
+            {
+                try
+                {
+                    var additionalInfo = JsonUtility.FromJson<IdiomChainAdditionalData>(questionData.additionalData);
+                    DisplayQuestionDirect(additionalInfo.displayText);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"解析附加数据失败: {e.Message}");
+                    ShowQuestion(currentIdiom);
+                }
+            }
+            else
+            {
+                ShowQuestion(currentIdiom);
+            }
 
             isGameInProgress = true;
-            ShowQuestion(currentIdiom);
         }
 
         /// <summary>
@@ -184,15 +345,15 @@ namespace GameLogic.FillBlank
 
             if (networkData == null)
             {
-                Debug.LogError("网络题目数据为空");
+                Debug.LogError("[IdiomChain] 网络题目数据为空");
                 DisplayErrorMessage("网络题目数据错误");
                 return;
             }
 
             if (networkData.questionType != QuestionType.IdiomChain)
             {
-                Debug.LogError($"题目类型不匹配: 期望{QuestionType.IdiomChain}, 实际{networkData.questionType}");
-                LoadLocalQuestion(); // 降级到本地题目
+                Debug.LogError($"[IdiomChain] 题目类型不匹配: 期望{QuestionType.IdiomChain}, 实际{networkData.questionType}");
+                DisplayErrorMessage("题目类型错误");
                 return;
             }
 
@@ -233,11 +394,7 @@ namespace GameLogic.FillBlank
             }
 
             hasAnswered = false;
-
-            // 高亮最后一个字
-            char lastChar = idiom[idiom.Length - 1];
-            string displayText = idiom.Substring(0, idiom.Length - 1) + $"<color=red>{lastChar}</color>";
-
+            string displayText = CreateDisplayText(idiom);
             DisplayQuestionDirect(displayText);
         }
 
@@ -266,6 +423,8 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void DisplayErrorMessage(string message)
         {
+            Debug.LogWarning($"[IdiomChain] {message}");
+
             if (questionText != null)
                 questionText.text = message;
 
@@ -480,8 +639,15 @@ namespace GameLogic.FillBlank
             feedbackText.text = "已提交答案，等待服务器结果...";
             feedbackText.color = Color.yellow;
 
-            // 通过基类提交到服务器
-            CheckAnswer(answer);
+            // 提交答案到服务器
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(answer);
+            }
+            else
+            {
+                Debug.LogError("[IdiomChain] NetworkManager实例不存在，无法提交答案");
+            }
         }
 
         /// <summary>

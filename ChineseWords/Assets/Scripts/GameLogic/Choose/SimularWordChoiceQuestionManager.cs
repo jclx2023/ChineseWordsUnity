@@ -12,12 +12,13 @@ namespace GameLogic.Choice
     /// <summary>
     /// 近义词选择题管理器
     /// - 支持单机和网络模式
+    /// - 实现IQuestionDataProvider接口，支持Host抽题
     /// - 单机模式：从 simular_usage_questions 表随机取一条记录
     /// - 网络模式：使用服务器提供的题目数据
     /// - 将 stem 显示在題干，True/1/2/3 四个选项随机打乱分配给按钮
     /// - 玩家点击按钮判定正误，通过 OnAnswerResult 通知外层
     /// </summary>
-    public class SimularWordChoiceQuestionManager : NetworkQuestionManagerBase
+    public class SimularWordChoiceQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
         private string dbPath;
 
@@ -32,6 +33,9 @@ namespace GameLogic.Choice
         private string correctOption;
         private bool hasAnswered = false;
 
+        // IQuestionDataProvider接口实现
+        public QuestionType QuestionType => QuestionType.SimularWordChoice;
+
         protected override void Awake()
         {
             base.Awake(); // 调用网络基类初始化
@@ -40,7 +44,98 @@ namespace GameLogic.Choice
 
         private void Start()
         {
-            InitializeUI();
+            // 检查是否需要UI（Host抽题模式可能不需要UI）
+            if (NeedsUI())
+            {
+                InitializeUI();
+            }
+            else
+            {
+                Debug.Log("[SimularWord] Host抽题模式，跳过UI初始化");
+            }
+        }
+
+        /// <summary>
+        /// 检查是否需要UI
+        /// </summary>
+        private bool NeedsUI()
+        {
+            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
+            // 或者如果是QuestionDataService的子对象，也不需要UI
+            return transform.parent == null ||
+                   (transform.parent.GetComponent<HostGameManager>() == null &&
+                    transform.parent.GetComponent<QuestionDataService>() == null);
+        }
+
+        /// <summary>
+        /// 获取题目数据（IQuestionDataProvider接口实现）
+        /// 专门为Host抽题使用，不显示UI
+        /// </summary>
+        public NetworkQuestionData GetQuestionData()
+        {
+            Debug.Log("[SimularWord] Host请求抽题数据");
+
+            string stem = null;
+            List<string> choices = new List<string>(4);
+            string correctOption = null;
+
+            try
+            {
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
+                            FROM simular_usage_questions
+                            ORDER BY RANDOM()
+                            LIMIT 1";
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                stem = reader.GetString(0);
+                                correctOption = reader.GetString(1);
+
+                                choices.Add(reader.GetString(1)); // correct
+                                choices.Add(reader.GetString(2)); // opt1
+                                choices.Add(reader.GetString(3)); // opt2
+                                choices.Add(reader.GetString(4)); // opt3
+                            }
+                        }
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Host抽题数据库查询失败: {e.Message}");
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(stem) || choices.Count == 0)
+            {
+                Debug.LogWarning("[SimularWord] Host抽题：暂无题目数据");
+                return null;
+            }
+
+            // 随机打乱选项
+            ShuffleChoices(choices);
+
+            // 创建网络题目数据
+            var questionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.SimularWordChoice,
+                questionText = stem,
+                correctAnswer = correctOption,
+                options = choices.ToArray(),
+                timeLimit = 30f,
+                additionalData = "{\"source\": \"SimularWordChoiceQuestionManager\"}"
+            };
+
+            Debug.Log($"[SimularWord] Host抽题成功: {stem}");
+            return questionData;
         }
 
         /// <summary>
@@ -48,10 +143,16 @@ namespace GameLogic.Choice
         /// </summary>
         private void InitializeUI()
         {
+            if (UIManager.Instance == null)
+            {
+                Debug.LogError("[SimularWord] UIManager实例不存在");
+                return;
+            }
+
             var ui = UIManager.Instance.LoadUI(uiPrefabPath);
             if (ui == null)
             {
-                Debug.LogError($"无法加载UI预制体: {uiPrefabPath}");
+                Debug.LogError($"[SimularWord] 无法加载UI预制体: {uiPrefabPath}");
                 return;
             }
 
@@ -61,12 +162,14 @@ namespace GameLogic.Choice
 
             if (questionText == null || feedbackText == null)
             {
-                Debug.LogError("UI组件获取失败，检查预制体结构");
+                Debug.LogError("[SimularWord] UI组件获取失败，检查预制体结构");
                 return;
             }
 
             // 初始化选项按钮
             InitializeOptionButtons(ui);
+
+            Debug.Log("[SimularWord] UI初始化完成");
         }
 
         /// <summary>
@@ -106,57 +209,20 @@ namespace GameLogic.Choice
         {
             Debug.Log("[SimularWord] 加载本地题目");
 
-            string stem = null;
-            List<string> choices = new List<string>(4);
-
-            try
-            {
-                using (var conn = new SqliteConnection("URI=file:" + dbPath))
-                {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = @"
-                            SELECT [stem], [True] AS correct, [1] AS opt1, [2] AS opt2, [3] AS opt3
-                            FROM simular_usage_questions
-                            ORDER BY RANDOM()
-                            LIMIT 1";
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                stem = reader.GetString(0);
-                                correctOption = reader.GetString(1);
-
-                                // 添加错误选项
-                                choices.Add(reader.GetString(2)); // opt1
-                                choices.Add(reader.GetString(3)); // opt2
-                                choices.Add(reader.GetString(4)); // opt3
-                            }
-                        }
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"数据库查询失败: {e.Message}");
-                DisplayErrorMessage("数据库错误，无法加载题目");
-                return;
-            }
-
-            if (string.IsNullOrEmpty(stem) || choices.Count == 0)
+            // 使用GetQuestionData()方法复用抽题逻辑
+            var questionData = GetQuestionData();
+            if (questionData == null)
             {
                 DisplayErrorMessage("暂无题目数据");
                 return;
             }
 
-            // 添加正确选项并打乱
-            choices.Add(correctOption);
-            ShuffleChoices(choices);
+            // 设置正确答案
+            correctOption = questionData.correctAnswer;
 
             // 显示题目
-            DisplayQuestion(stem, choices);
+            List<string> choices = new List<string>(questionData.options);
+            DisplayQuestion(questionData.questionText, choices);
         }
 
         /// <summary>
@@ -168,15 +234,15 @@ namespace GameLogic.Choice
 
             if (networkData == null)
             {
-                Debug.LogError("网络题目数据为空");
+                Debug.LogError("[SimularWord] 网络题目数据为空");
                 DisplayErrorMessage("网络题目数据错误");
                 return;
             }
 
             if (networkData.questionType != QuestionType.SimularWordChoice)
             {
-                Debug.LogError($"题目类型不匹配: 期望{QuestionType.SimularWordChoice}, 实际{networkData.questionType}");
-                LoadLocalQuestion(); // 降级到本地题目
+                Debug.LogError($"[SimularWord] 题目类型不匹配: 期望{QuestionType.SimularWordChoice}, 实际{networkData.questionType}");
+                DisplayErrorMessage("题目类型错误");
                 return;
             }
 
@@ -192,11 +258,18 @@ namespace GameLogic.Choice
         /// </summary>
         private void DisplayQuestion(string stem, List<string> choices)
         {
+            if (questionText == null || optionButtons == null)
+            {
+                Debug.LogError("[SimularWord] UI组件未初始化");
+                return;
+            }
+
             hasAnswered = false;
 
             // 显示题干
             questionText.text = stem;
-            feedbackText.text = string.Empty;
+            if (feedbackText != null)
+                feedbackText.text = string.Empty;
 
             // 设置选项按钮
             for (int i = 0; i < optionButtons.Length; i++)
@@ -218,7 +291,7 @@ namespace GameLogic.Choice
                 }
             }
 
-            Debug.Log($"题目显示完成: {stem}");
+            Debug.Log($"[SimularWord] 题目显示完成: {stem}");
         }
 
         /// <summary>
@@ -240,6 +313,8 @@ namespace GameLogic.Choice
         /// </summary>
         private void DisplayErrorMessage(string message)
         {
+            Debug.LogWarning($"[SimularWord] {message}");
+
             if (questionText != null)
                 questionText.text = message;
 
@@ -273,20 +348,20 @@ namespace GameLogic.Choice
         {
             if (hasAnswered)
             {
-                Debug.Log("已经回答过了，忽略重复点击");
+                Debug.Log("[SimularWord] 已经回答过了，忽略重复点击");
                 return;
             }
 
             if (index >= optionButtons.Length || optionButtons[index] == null)
             {
-                Debug.LogError($"无效的选项索引: {index}");
+                Debug.LogError($"[SimularWord] 无效的选项索引: {index}");
                 return;
             }
 
             var selectedText = optionButtons[index].GetComponentInChildren<TMP_Text>();
             if (selectedText == null)
             {
-                Debug.LogError("获取选项文本失败");
+                Debug.LogError("[SimularWord] 获取选项文本失败");
                 return;
             }
 
@@ -316,11 +391,21 @@ namespace GameLogic.Choice
             Debug.Log($"[SimularWord] 网络模式提交答案: {answer}");
 
             // 显示提交状态
-            feedbackText.text = "已提交答案，等待服务器结果...";
-            feedbackText.color = Color.yellow;
+            if (feedbackText != null)
+            {
+                feedbackText.text = "已提交答案，等待服务器结果...";
+                feedbackText.color = Color.yellow;
+            }
 
-            // 通过基类提交到服务器
-            CheckAnswer(answer);
+            // 提交答案到服务器
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(answer);
+            }
+            else
+            {
+                Debug.LogError("[SimularWord] NetworkManager实例不存在，无法提交答案");
+            }
         }
 
         /// <summary>
@@ -371,8 +456,11 @@ namespace GameLogic.Choice
         private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
         {
             // 显示反馈
-            feedbackText.color = isCorrect ? Color.green : Color.red;
-            feedbackText.text = isCorrect ? "回答正确！" : $"回答错误，正确答案是：{correctOption}";
+            if (feedbackText != null)
+            {
+                feedbackText.color = isCorrect ? Color.green : Color.red;
+                feedbackText.text = isCorrect ? "回答正确！" : $"回答错误，正确答案是：{correctOption}";
+            }
 
             // 等待一段时间
             yield return new WaitForSeconds(1.5f);

@@ -14,11 +14,12 @@ namespace GameLogic.FillBlank
     /// <summary>
     /// 软性单词补全题管理器
     /// - 支持单机和网络模式
+    /// - 实现IQuestionDataProvider接口，支持Host抽题
     /// - 单机模式：随机抽词，生成通配符模式 (*任意长度，_单个字符)
     /// - 网络模式：使用服务器提供的题目数据和模式
     /// - 玩家输入答案，使用正则表达式匹配模式，再验证词库存在性
     /// </summary>
-    public class SoftFillQuestionManager : NetworkQuestionManagerBase
+    public class SoftFillQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
         private string dbPath;
 
@@ -45,6 +46,9 @@ namespace GameLogic.FillBlank
         private Regex matchRegex;
         private bool hasAnswered = false;
 
+        // IQuestionDataProvider接口实现
+        public QuestionType QuestionType => QuestionType.SoftFill;
+
         protected override void Awake()
         {
             base.Awake(); // 调用网络基类初始化
@@ -53,7 +57,168 @@ namespace GameLogic.FillBlank
 
         private void Start()
         {
-            InitializeUI();
+            // 检查是否需要UI（Host抽题模式可能不需要UI）
+            if (NeedsUI())
+            {
+                InitializeUI();
+            }
+            else
+            {
+                Debug.Log("[SoftFill] Host抽题模式，跳过UI初始化");
+            }
+        }
+
+        /// <summary>
+        /// 检查是否需要UI
+        /// </summary>
+        private bool NeedsUI()
+        {
+            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
+            // 或者如果是QuestionDataService的子对象，也不需要UI
+            return transform.parent == null ||
+                   (transform.parent.GetComponent<HostGameManager>() == null &&
+                    transform.parent.GetComponent<QuestionDataService>() == null);
+        }
+
+        /// <summary>
+        /// 获取题目数据（IQuestionDataProvider接口实现）
+        /// 专门为Host抽题使用，不显示UI
+        /// </summary>
+        public NetworkQuestionData GetQuestionData()
+        {
+            Debug.Log("[SoftFill] Host请求抽题数据");
+
+            // 1. 随机抽词
+            string word = GetRandomWord();
+
+            if (string.IsNullOrEmpty(word))
+            {
+                Debug.LogWarning("[SoftFill] Host抽题：暂无符合条件的词条");
+                return null;
+            }
+
+            // 2. 生成通配符模式
+            string pattern = GenerateWildcardPattern(word);
+
+            if (string.IsNullOrEmpty(pattern))
+            {
+                Debug.LogWarning("[SoftFill] Host抽题：通配符模式生成失败");
+                return null;
+            }
+
+            // 3. 创建正则表达式模式（用于验证）
+            string regexPattern = CreateRegexPattern(pattern);
+
+            // 4. 创建附加数据
+            var additionalData = new SoftFillAdditionalData
+            {
+                stemPattern = pattern,
+                regexPattern = regexPattern,
+                revealIndices = ExtractRevealIndices(word, pattern)
+            };
+
+            // 5. 创建网络题目数据
+            var questionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.SoftFill,
+                questionText = $"题目：请输入一个符合<color=red>{pattern}</color>格式的单词\nHint：*为任意个字，_为单个字",
+                correctAnswer = word,
+                options = new string[0], // 填空题不需要选项
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(additionalData)
+            };
+
+            Debug.Log($"[SoftFill] Host抽题成功: {pattern} (示例答案: {word})");
+            return questionData;
+        }
+
+        /// <summary>
+        /// 为指定单词生成通配符模式
+        /// </summary>
+        private string GenerateWildcardPattern(string word)
+        {
+            if (string.IsNullOrEmpty(word))
+                return "";
+
+            int wordLength = word.Length;
+            int x = Mathf.Clamp(revealCount, 1, wordLength - 1);
+
+            // 随机选择要显示的字符位置
+            var indices = Enumerable.Range(0, wordLength).ToArray();
+
+            // Fisher-Yates 洗牌算法
+            for (int i = indices.Length - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                int temp = indices[i];
+                indices[i] = indices[j];
+                indices[j] = temp;
+            }
+
+            var selectedIndices = indices.Take(x).OrderBy(i => i).ToArray();
+
+            // 构造通配符题干
+            var sb = new System.Text.StringBuilder();
+            sb.Append("*");
+            sb.Append(word[selectedIndices[0]]);
+
+            for (int k = 1; k < selectedIndices.Length; k++)
+            {
+                int gap = selectedIndices[k] - selectedIndices[k - 1] - 1;
+                sb.Append(new string('_', gap));
+                sb.Append(word[selectedIndices[k]]);
+            }
+            sb.Append("*");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 创建正则表达式模式
+        /// </summary>
+        private string CreateRegexPattern(string stemPattern)
+        {
+            if (string.IsNullOrEmpty(stemPattern))
+                return "";
+
+            try
+            {
+                // 构建正则表达式模式
+                // * -> .*, _ -> .
+                var pattern = "^" + string.Concat(stemPattern.Select(c =>
+                {
+                    if (c == '*') return ".*";
+                    if (c == '_') return ".";
+                    return Regex.Escape(c.ToString());
+                })) + "$";
+
+                return pattern;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"创建正则表达式失败: {e.Message}");
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// 从通配符模式中提取显示字符的位置
+        /// </summary>
+        private int[] ExtractRevealIndices(string word, string pattern)
+        {
+            var indices = new List<int>();
+
+            // 这是一个简化的提取逻辑，实际可能需要更复杂的解析
+            // 对于软填空题，主要是为了传输完整信息
+            for (int i = 0; i < word.Length && i < pattern.Length; i++)
+            {
+                if (pattern[i] != '*' && pattern[i] != '_')
+                {
+                    indices.Add(i);
+                }
+            }
+
+            return indices.ToArray();
         }
 
         /// <summary>
@@ -61,10 +226,16 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void InitializeUI()
         {
+            if (UIManager.Instance == null)
+            {
+                Debug.LogError("[SoftFill] UIManager实例不存在");
+                return;
+            }
+
             var ui = UIManager.Instance.LoadUI(uiPrefabPath);
             if (ui == null)
             {
-                Debug.LogError($"无法加载UI预制体: {uiPrefabPath}");
+                Debug.LogError($"[SoftFill] 无法加载UI预制体: {uiPrefabPath}");
                 return;
             }
 
@@ -78,7 +249,7 @@ namespace GameLogic.FillBlank
             if (questionText == null || answerInput == null || submitButton == null ||
                 surrenderButton == null || feedbackText == null)
             {
-                Debug.LogError("UI组件获取失败，检查预制体结构");
+                Debug.LogError("[SoftFill] UI组件获取失败，检查预制体结构");
                 return;
             }
 
@@ -94,6 +265,8 @@ namespace GameLogic.FillBlank
             answerInput.onSubmit.AddListener(OnInputSubmit);
 
             feedbackText.text = string.Empty;
+
+            Debug.Log("[SoftFill] UI初始化完成");
         }
 
         /// <summary>
@@ -103,22 +276,40 @@ namespace GameLogic.FillBlank
         {
             Debug.Log("[SoftFill] 加载本地题目");
 
-            // 1. 随机抽词
-            currentWord = GetRandomWord();
-
-            if (string.IsNullOrEmpty(currentWord))
+            // 使用GetQuestionData()方法复用抽题逻辑
+            var questionData = GetQuestionData();
+            if (questionData == null)
             {
                 DisplayErrorMessage("没有符合条件的词条。");
                 return;
             }
 
-            // 2. 生成通配符模式
-            GenerateWildcardPattern();
+            // 解析题目数据
+            currentWord = questionData.correctAnswer;
 
-            // 3. 创建正则表达式
+            // 从附加数据中解析通配符模式
+            if (!string.IsNullOrEmpty(questionData.additionalData))
+            {
+                try
+                {
+                    var additionalInfo = JsonUtility.FromJson<SoftFillAdditionalData>(questionData.additionalData);
+                    stemPattern = additionalInfo.stemPattern;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成模式");
+                    stemPattern = GenerateWildcardPattern(currentWord);
+                }
+            }
+            else
+            {
+                stemPattern = GenerateWildcardPattern(currentWord);
+            }
+
+            // 创建正则表达式
             CreateMatchRegex();
 
-            // 4. 显示题目
+            // 显示题目
             DisplayQuestion();
         }
 
@@ -131,15 +322,15 @@ namespace GameLogic.FillBlank
 
             if (networkData == null)
             {
-                Debug.LogError("网络题目数据为空");
+                Debug.LogError("[SoftFill] 网络题目数据为空");
                 DisplayErrorMessage("网络题目数据错误");
                 return;
             }
 
             if (networkData.questionType != QuestionType.SoftFill)
             {
-                Debug.LogError($"题目类型不匹配: 期望{QuestionType.SoftFill}, 实际{networkData.questionType}");
-                LoadLocalQuestion(); // 降级到本地题目
+                Debug.LogError($"[SoftFill] 题目类型不匹配: 期望{QuestionType.SoftFill}, 实际{networkData.questionType}");
+                DisplayErrorMessage("题目类型错误");
                 return;
             }
 
@@ -195,7 +386,7 @@ namespace GameLogic.FillBlank
             else
             {
                 Debug.LogWarning("无法从题目文本解析模式，使用默认模式");
-                GenerateWildcardPattern();
+                stemPattern = GenerateWildcardPattern(currentWord);
             }
         }
 
@@ -240,44 +431,11 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// 生成通配符模式
+        /// 生成通配符模式（保持原有逻辑用于单机模式）
         /// </summary>
         private void GenerateWildcardPattern()
         {
-            if (string.IsNullOrEmpty(currentWord))
-                return;
-
-            int wordLength = currentWord.Length;
-            int x = Mathf.Clamp(revealCount, 1, wordLength - 1);
-
-            // 随机选择要显示的字符位置
-            var indices = Enumerable.Range(0, wordLength).ToArray();
-
-            // Fisher-Yates 洗牌算法
-            for (int i = indices.Length - 1; i > 0; i--)
-            {
-                int j = Random.Range(0, i + 1);
-                int temp = indices[i];
-                indices[i] = indices[j];
-                indices[j] = temp;
-            }
-
-            var selectedIndices = indices.Take(x).OrderBy(i => i).ToArray();
-
-            // 构造通配符题干
-            var sb = new System.Text.StringBuilder();
-            sb.Append("*");
-            sb.Append(currentWord[selectedIndices[0]]);
-
-            for (int k = 1; k < selectedIndices.Length; k++)
-            {
-                int gap = selectedIndices[k] - selectedIndices[k - 1] - 1;
-                sb.Append(new string('_', gap));
-                sb.Append(currentWord[selectedIndices[k]]);
-            }
-            sb.Append("*");
-
-            stemPattern = sb.ToString();
+            stemPattern = GenerateWildcardPattern(currentWord);
         }
 
         /// <summary>
@@ -342,6 +500,8 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void DisplayErrorMessage(string message)
         {
+            Debug.LogWarning($"[SoftFill] {message}");
+
             if (questionText != null)
                 questionText.text = message;
 
@@ -497,8 +657,15 @@ namespace GameLogic.FillBlank
             feedbackText.text = "已提交答案，等待服务器结果...";
             feedbackText.color = Color.yellow;
 
-            // 通过基类提交到服务器
-            CheckAnswer(answer);
+            // 提交答案到服务器
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(answer);
+            }
+            else
+            {
+                Debug.LogError("[SoftFill] NetworkManager实例不存在，无法提交答案");
+            }
         }
 
         /// <summary>
@@ -515,15 +682,18 @@ namespace GameLogic.FillBlank
         private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
         {
             // 显示反馈
-            if (isCorrect)
+            if (feedbackText != null)
             {
-                feedbackText.text = "回答正确！";
-                feedbackText.color = Color.green;
-            }
-            else
-            {
-                feedbackText.text = $"回答错误，可接受示例：{currentWord}";
-                feedbackText.color = Color.red;
+                if (isCorrect)
+                {
+                    feedbackText.text = "回答正确！";
+                    feedbackText.color = Color.green;
+                }
+                else
+                {
+                    feedbackText.text = $"回答错误，可接受示例：{currentWord}";
+                    feedbackText.color = Color.red;
+                }
             }
 
             // 等待一段时间

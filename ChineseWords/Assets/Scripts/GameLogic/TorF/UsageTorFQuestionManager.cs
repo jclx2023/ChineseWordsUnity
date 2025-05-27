@@ -12,13 +12,14 @@ namespace GameLogic.TorF
     /// <summary>
     /// 成语/词语使用判断题管理器
     /// - 支持单机和网络模式
+    /// - 实现IQuestionDataProvider接口，支持Host抽题
     /// - 单机模式：从 simular_usage_questions 表随机取一条记录
     /// - 网络模式：使用服务器提供的题目数据
     /// - 随机决定展示正确示例或错误示例
     /// - 将替换后文本插入到下划线位置并高亮
     /// - 玩家选择"正确"/"错误"判定
     /// </summary>
-    public class UsageTorFQuestionManager : NetworkQuestionManagerBase
+    public class UsageTorFQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
         private string dbPath;
 
@@ -40,6 +41,9 @@ namespace GameLogic.TorF
         private string currentFill;         // 当前使用的填空
         private bool hasAnswered = false;
 
+        // IQuestionDataProvider接口实现
+        public QuestionType QuestionType => QuestionType.UsageTorF;
+
         protected override void Awake()
         {
             base.Awake(); // 调用网络基类初始化
@@ -48,7 +52,77 @@ namespace GameLogic.TorF
 
         private void Start()
         {
-            InitializeUI();
+            // 检查是否需要UI（Host抽题模式可能不需要UI）
+            if (NeedsUI())
+            {
+                InitializeUI();
+            }
+            else
+            {
+                Debug.Log("[UsageTorF] Host抽题模式，跳过UI初始化");
+            }
+        }
+
+        /// <summary>
+        /// 检查是否需要UI
+        /// </summary>
+        private bool NeedsUI()
+        {
+            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
+            // 或者如果是QuestionDataService的子对象，也不需要UI
+            return transform.parent == null ||
+                   (transform.parent.GetComponent<HostGameManager>() == null &&
+                    transform.parent.GetComponent<QuestionDataService>() == null);
+        }
+
+        /// <summary>
+        /// 获取题目数据（IQuestionDataProvider接口实现）
+        /// 专门为Host抽题使用，不显示UI
+        /// </summary>
+        public NetworkQuestionData GetQuestionData()
+        {
+            Debug.Log("[UsageTorF] Host请求抽题数据");
+
+            // 1. 从数据库获取使用判断题数据
+            var usageData = GetRandomUsageData();
+            if (usageData == null)
+            {
+                Debug.LogWarning("[UsageTorF] Host抽题：暂无题目数据");
+                return null;
+            }
+
+            // 2. 随机决定展示正确还是错误示例
+            bool isInstanceCorrect = Random.value < 0.5f;
+            string currentFill = isInstanceCorrect ?
+                usageData.correctFill :
+                usageData.wrongFills[Random.Range(0, usageData.wrongFills.Count)];
+
+            // 3. 构造显示文本
+            string questionText = ReplaceUnderscoreWithHighlight(usageData.stem, currentFill);
+
+            // 4. 创建附加数据
+            var additionalData = new UsageTorFAdditionalData
+            {
+                stem = usageData.stem,
+                correctFill = usageData.correctFill,
+                currentFill = currentFill,
+                isInstanceCorrect = isInstanceCorrect,
+                wrongFills = usageData.wrongFills.ToArray()
+            };
+
+            // 5. 创建网络题目数据
+            var networkQuestionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.UsageTorF,
+                questionText = questionText,
+                correctAnswer = isInstanceCorrect.ToString().ToLower(), // "true" 或 "false"
+                options = new string[] { "正确", "错误" }, // 固定的两个选项
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(additionalData)
+            };
+
+            Debug.Log($"[UsageTorF] Host抽题成功: {currentFill} (实例{(isInstanceCorrect ? "正确" : "错误")})");
+            return networkQuestionData;
         }
 
         /// <summary>
@@ -56,10 +130,16 @@ namespace GameLogic.TorF
         /// </summary>
         private void InitializeUI()
         {
+            if (UIManager.Instance == null)
+            {
+                Debug.LogError("[UsageTorF] UIManager实例不存在");
+                return;
+            }
+
             var ui = UIManager.Instance.LoadUI(uiPrefabPath);
             if (ui == null)
             {
-                Debug.LogError($"无法加载UI预制体: {uiPrefabPath}");
+                Debug.LogError($"[UsageTorF] 无法加载UI预制体: {uiPrefabPath}");
                 return;
             }
 
@@ -71,7 +151,7 @@ namespace GameLogic.TorF
 
             if (questionText == null || trueButton == null || falseButton == null || feedbackText == null)
             {
-                Debug.LogError("UI组件获取失败，检查预制体结构");
+                Debug.LogError("[UsageTorF] UI组件获取失败，检查预制体结构");
                 return;
             }
 
@@ -81,7 +161,7 @@ namespace GameLogic.TorF
 
             if (textTrue == null || textFalse == null)
             {
-                Debug.LogError("按钮文本组件获取失败");
+                Debug.LogError("[UsageTorF] 按钮文本组件获取失败");
                 return;
             }
 
@@ -92,6 +172,8 @@ namespace GameLogic.TorF
             falseButton.onClick.AddListener(() => OnSelectAnswer(false));
 
             feedbackText.text = string.Empty;
+
+            Debug.Log("[UsageTorF] UI初始化完成");
         }
 
         /// <summary>
@@ -101,6 +183,49 @@ namespace GameLogic.TorF
         {
             Debug.Log("[UsageTorF] 加载本地题目");
 
+            // 使用GetQuestionData()方法复用抽题逻辑
+            var questionData = GetQuestionData();
+            if (questionData == null)
+            {
+                DisplayErrorMessage("暂无题目数据");
+                return;
+            }
+
+            // 解析题目数据
+            isInstanceCorrect = questionData.correctAnswer.ToLower() == "true";
+
+            // 从附加数据中解析详细信息
+            if (!string.IsNullOrEmpty(questionData.additionalData))
+            {
+                try
+                {
+                    var additionalInfo = JsonUtility.FromJson<UsageTorFAdditionalData>(questionData.additionalData);
+                    currentStem = additionalInfo.stem;
+                    correctFill = additionalInfo.correctFill;
+                    currentFill = additionalInfo.currentFill;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成题目");
+                    LoadOriginalLocalQuestion();
+                    return;
+                }
+            }
+            else
+            {
+                LoadOriginalLocalQuestion();
+                return;
+            }
+
+            // 显示题目
+            DisplayQuestion();
+        }
+
+        /// <summary>
+        /// 原始的本地题目加载逻辑（备用）
+        /// </summary>
+        private void LoadOriginalLocalQuestion()
+        {
             // 1. 从数据库获取使用判断题数据
             var usageData = GetRandomUsageData();
             if (usageData == null)
@@ -131,15 +256,15 @@ namespace GameLogic.TorF
 
             if (networkData == null)
             {
-                Debug.LogError("网络题目数据为空");
+                Debug.LogError("[UsageTorF] 网络题目数据为空");
                 DisplayErrorMessage("网络题目数据错误");
                 return;
             }
 
             if (networkData.questionType != QuestionType.UsageTorF)
             {
-                Debug.LogError($"题目类型不匹配: 期望{QuestionType.UsageTorF}, 实际{networkData.questionType}");
-                LoadLocalQuestion(); // 降级到本地题目
+                Debug.LogError($"[UsageTorF] 题目类型不匹配: 期望{QuestionType.UsageTorF}, 实际{networkData.questionType}");
+                DisplayErrorMessage("题目类型错误");
                 return;
             }
 
@@ -320,6 +445,8 @@ namespace GameLogic.TorF
         /// </summary>
         private void DisplayErrorMessage(string message)
         {
+            Debug.LogWarning($"[UsageTorF] {message}");
+
             if (questionText != null)
                 questionText.text = message;
 
@@ -349,7 +476,7 @@ namespace GameLogic.TorF
         {
             if (hasAnswered)
             {
-                Debug.Log("已经回答过了，忽略重复点击");
+                Debug.Log("[UsageTorF] 已经回答过了，忽略重复点击");
                 return;
             }
 
@@ -379,11 +506,21 @@ namespace GameLogic.TorF
             Debug.Log($"[UsageTorF] 网络模式提交答案: {answer}");
 
             // 显示提交状态
-            feedbackText.text = "已提交答案，等待服务器结果...";
-            feedbackText.color = Color.yellow;
+            if (feedbackText != null)
+            {
+                feedbackText.text = "已提交答案，等待服务器结果...";
+                feedbackText.color = Color.yellow;
+            }
 
-            // 通过基类提交到服务器
-            CheckAnswer(answer);
+            // 提交答案到服务器
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(answer);
+            }
+            else
+            {
+                Debug.LogError("[UsageTorF] NetworkManager实例不存在，无法提交答案");
+            }
         }
 
         /// <summary>
@@ -405,8 +542,11 @@ namespace GameLogic.TorF
         private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
         {
             // 显示反馈
-            feedbackText.color = isCorrect ? Color.green : Color.red;
-            feedbackText.text = isCorrect ? "回答正确！" : "回答错误！";
+            if (feedbackText != null)
+            {
+                feedbackText.color = isCorrect ? Color.green : Color.red;
+                feedbackText.text = isCorrect ? "回答正确！" : "回答错误！";
+            }
 
             // 等待一段时间
             yield return new WaitForSeconds(1.5f);
@@ -415,8 +555,10 @@ namespace GameLogic.TorF
             OnAnswerResult?.Invoke(isCorrect);
 
             // 重新启用按钮为下一题准备
-            trueButton.interactable = true;
-            falseButton.interactable = true;
+            if (trueButton != null)
+                trueButton.interactable = true;
+            if (falseButton != null)
+                falseButton.interactable = true;
         }
 
         /// <summary>

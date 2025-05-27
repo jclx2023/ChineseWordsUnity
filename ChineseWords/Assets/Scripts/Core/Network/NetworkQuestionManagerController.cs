@@ -1,10 +1,6 @@
 using UnityEngine;
 using Core;
 using Core.Network;
-using GameLogic;
-using GameLogic.FillBlank;
-using GameLogic.TorF;
-using GameLogic.Choice;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,9 +9,9 @@ using Managers;
 namespace Core.Network
 {
     /// <summary>
-    /// 网络化题目管理控制器
-    /// 负责在网络游戏中管理题目生成、答题逻辑，但不控制游戏开始
-    /// 游戏开始由HostGameManager控制
+    /// 优化后的网络题目管理控制器
+    /// 专注于：客户端题目显示 + 网络消息处理 + 答案提交
+    /// 移除了：题目生成逻辑（由Host负责）+ 重复的管理器创建逻辑
     /// </summary>
     public class NetworkQuestionManagerController : MonoBehaviour
     {
@@ -27,25 +23,26 @@ namespace Core.Network
         [SerializeField] private float timeUpDelay = 1f;
         [SerializeField] private bool isMultiplayerMode = false;
 
+        [Header("调试设置")]
+        [SerializeField] private bool enableDebugLogs = true;
+
         public static NetworkQuestionManagerController Instance { get; private set; }
 
         // 当前状态
-        private QuestionManagerBase manager;
+        private QuestionManagerBase currentManager;
         private NetworkQuestionData currentNetworkQuestion;
         private bool isMyTurn = false;
         private bool isWaitingForNetworkQuestion = false;
         private bool gameStarted = false;
         private bool isInitialized = false;
 
-        // 题目类型权重（与原QMC保持一致）
+        // 题目类型权重（供Host使用）
         public Dictionary<QuestionType, float> TypeWeights = new Dictionary<QuestionType, float>()
         {
-            //{ QuestionType.HandWriting, 0.5f },
             { QuestionType.IdiomChain, 1f },
             { QuestionType.TextPinyin, 1f },
             { QuestionType.HardFill, 1f },
             { QuestionType.SoftFill, 1f },
-            //{ QuestionType.AbbrFill, 1f },
             { QuestionType.SentimentTorF, 1f },
             { QuestionType.SimularWordChoice, 1f },
             { QuestionType.UsageTorF, 1f },
@@ -61,13 +58,14 @@ namespace Core.Network
         public bool IsMyTurn => isMyTurn;
         public bool IsGameStarted => gameStarted;
         public bool IsInitialized => isInitialized;
+        public QuestionManagerBase CurrentManager => currentManager;
 
         private void Awake()
         {
             if (Instance == null)
             {
                 Instance = this;
-                // 注意：不要DontDestroyOnLoad，因为这是场景特定的组件
+                LogDebug("NetworkQuestionManagerController 单例已创建");
             }
             else
             {
@@ -75,7 +73,7 @@ namespace Core.Network
                 return;
             }
 
-            // 初始化但不启动游戏
+            // 初始化组件但不启动游戏
             InitializeComponents();
         }
 
@@ -83,19 +81,28 @@ namespace Core.Network
         {
             RegisterNetworkEvents();
             isInitialized = true;
-            Debug.Log("[NQMC] 组件已初始化，等待游戏开始指令");
+            LogDebug("组件已初始化，等待游戏开始指令");
         }
 
         private void OnDestroy()
         {
             UnregisterNetworkEvents();
+            CleanupCurrentManager();
+
             if (Instance == this)
                 Instance = null;
+
+            LogDebug("NetworkQuestionManagerController 已销毁");
         }
 
+        /// <summary>
+        /// 初始化组件依赖
+        /// </summary>
         private void InitializeComponents()
         {
-            // 获取或添加必要组件
+            LogDebug("初始化组件依赖...");
+
+            // 获取或查找必要组件
             if (timerManager == null)
                 timerManager = GetComponent<TimerManager>() ?? FindObjectOfType<TimerManager>();
             if (hpManager == null)
@@ -123,28 +130,40 @@ namespace Core.Network
 
             // 绑定计时器事件
             timerManager.OnTimeUp += HandleTimeUp;
+
+            LogDebug("组件依赖初始化完成");
         }
 
+        /// <summary>
+        /// 注册网络事件
+        /// </summary>
         private void RegisterNetworkEvents()
         {
             NetworkManager.OnQuestionReceived += OnNetworkQuestionReceived;
             NetworkManager.OnAnswerResultReceived += OnNetworkAnswerResult;
             NetworkManager.OnPlayerTurnChanged += OnNetworkPlayerTurnChanged;
             NetworkManager.OnDisconnected += OnNetworkDisconnected;
+
+            LogDebug("网络事件已注册");
         }
 
+        /// <summary>
+        /// 取消注册网络事件
+        /// </summary>
         private void UnregisterNetworkEvents()
         {
             NetworkManager.OnQuestionReceived -= OnNetworkQuestionReceived;
             NetworkManager.OnAnswerResultReceived -= OnNetworkAnswerResult;
             NetworkManager.OnPlayerTurnChanged -= OnNetworkPlayerTurnChanged;
             NetworkManager.OnDisconnected -= OnNetworkDisconnected;
+
+            LogDebug("网络事件已取消注册");
         }
 
-        #region 公共接口 - 由HostGameManager调用
+        #region 公共接口 - 由外部系统调用
 
         /// <summary>
-        /// 开始游戏（由HostGameManager调用）
+        /// 开始游戏（由外部系统调用）
         /// </summary>
         /// <param name="multiplayerMode">是否为多人模式</param>
         public void StartGame(bool multiplayerMode = false)
@@ -158,142 +177,161 @@ namespace Core.Network
             isMultiplayerMode = multiplayerMode;
             gameStarted = true;
 
-            Debug.Log($"[NQMC] 开始游戏 - 模式: {(isMultiplayerMode ? "多人" : "单机")}");
+            LogDebug($"开始游戏 - 模式: {(isMultiplayerMode ? "多人" : "单机")}");
 
             if (isMultiplayerMode)
             {
-                if (NetworkManager.Instance?.IsConnected == true)
-                {
-                    Debug.Log("[NQMC] 多人模式：等待服务器分配回合");
-                    // 多人模式下等待服务器通知轮次
-                    isWaitingForNetworkQuestion = true;
-                }
-                else
-                {
-                    Debug.LogError("[NQMC] 未连接到服务器，无法开始多人游戏");
-                    OnGameEnded?.Invoke(false);
-                    return;
-                }
+                StartMultiplayerGame();
             }
             else
             {
-                // 单机模式：立即开始第一题
-                isMyTurn = true;
-                StartCoroutine(DelayedFirstQuestion());
+                StartSinglePlayerGame();
             }
         }
 
         /// <summary>
-        /// 停止游戏（由HostGameManager调用）
+        /// 停止游戏（由外部系统调用）
         /// </summary>
         public void StopGame()
         {
-            Debug.Log("[NQMC] 停止游戏");
+            LogDebug("停止游戏");
             gameStarted = false;
             isMyTurn = false;
             isWaitingForNetworkQuestion = false;
 
-            if (timerManager != null)
-                timerManager.StopTimer();
-
-            if (manager != null)
-            {
-                Destroy(manager.gameObject);
-                manager = null;
-            }
+            StopTimer();
+            CleanupCurrentManager();
         }
 
         /// <summary>
-        /// 暂停游戏（由HostGameManager调用）
+        /// 暂停游戏（由外部系统调用）
         /// </summary>
         public void PauseGame()
         {
-            Debug.Log("[NQMC] 暂停游戏");
+            LogDebug("暂停游戏");
             if (timerManager != null)
                 timerManager.PauseTimer();
         }
 
         /// <summary>
-        /// 恢复游戏（由HostGameManager调用）
+        /// 恢复游戏（由外部系统调用）
         /// </summary>
         public void ResumeGame()
         {
-            Debug.Log("[NQMC] 恢复游戏");
+            LogDebug("恢复游戏");
             if (timerManager != null)
                 timerManager.ResumeTimer();
         }
 
         /// <summary>
-        /// 强制开始下一题（由HostGameManager调用）
+        /// 强制开始下一题（由外部系统调用）
         /// </summary>
         public void ForceNextQuestion()
         {
             if (!gameStarted)
             {
-                Debug.LogWarning("[NQMC] 游戏未开始，无法强制下一题");
+                LogDebug("游戏未开始，无法强制下一题");
                 return;
             }
 
-            Debug.Log("[NQMC] 强制开始下一题");
-            LoadNextQuestion();
-        }
-
-        #endregion
-
-        #region 内部题目管理逻辑
-
-        private IEnumerator DelayedFirstQuestion()
-        {
-            yield return null;
-            LoadNextQuestion();
-        }
-
-        private void LoadNextQuestion()
-        {
-            if (!gameStarted)
-            {
-                Debug.Log("[NQMC] 游戏已停止，不加载新题目");
-                return;
-            }
-
-            // 清理当前题目管理器
-            if (manager != null)
-            {
-                Destroy(manager.gameObject);
-                manager = null;
-            }
+            LogDebug("强制开始下一题");
 
             if (isMultiplayerMode)
             {
-                if (isMyTurn && NetworkManager.Instance?.IsConnected == true)
+                // 多人模式下，只有轮到自己才能强制下一题
+                if (isMyTurn)
                 {
-                    // 网络模式：请求服务器分配题目
                     RequestNetworkQuestion();
                 }
                 else
                 {
-                    Debug.Log("[NQMC] 不是我的回合或未连接服务器，等待...");
+                    LogDebug("不是我的回合，无法强制下一题");
                 }
             }
             else
             {
-                // 单机模式：使用原有逻辑
-                LoadLocalQuestion();
+                // 单机模式直接加载下一题
+                LoadNextLocalQuestion();
             }
         }
 
-        private void LoadLocalQuestion()
+        #endregion
+
+        #region 游戏模式处理
+
+        /// <summary>
+        /// 开始多人游戏
+        /// </summary>
+        private void StartMultiplayerGame()
         {
-            var selectedType = SelectRandomTypeByWeight();
-            manager = CreateManager(selectedType);
-
-            if (manager != null)
+            if (NetworkManager.Instance?.IsConnected == true)
             {
-                if (hpManager != null)
-                    hpManager.BindManager(manager);
+                LogDebug("多人模式：等待服务器分配回合");
+                isWaitingForNetworkQuestion = true;
+            }
+            else
+            {
+                Debug.LogError("[NQMC] 未连接到服务器，无法开始多人游戏");
+                OnGameEnded?.Invoke(false);
+            }
+        }
 
-                manager.OnAnswerResult += HandleAnswerResult;
+        /// <summary>
+        /// 开始单机游戏
+        /// </summary>
+        private void StartSinglePlayerGame()
+        {
+            LogDebug("单机模式：立即开始第一题");
+            isMyTurn = true;
+            StartCoroutine(DelayedFirstQuestion());
+        }
+
+        /// <summary>
+        /// 延迟开始第一题
+        /// </summary>
+        private IEnumerator DelayedFirstQuestion()
+        {
+            yield return null;
+            LoadNextLocalQuestion();
+        }
+
+        #endregion
+
+        #region 题目管理 - 简化版本
+
+        /// <summary>
+        /// 加载下一个本地题目（单机模式）
+        /// </summary>
+        private void LoadNextLocalQuestion()
+        {
+            if (!gameStarted)
+            {
+                LogDebug("游戏已停止，不加载新题目");
+                return;
+            }
+
+            LogDebug("加载本地题目...");
+
+            // 清理当前管理器
+            CleanupCurrentManager();
+
+            // 选择题目类型并创建管理器
+            var selectedType = SelectRandomTypeByWeight();
+            currentManager = CreateQuestionManager(selectedType, false);
+
+            if (currentManager != null)
+            {
+                // 绑定管理器到血量系统
+                if (hpManager != null)
+                    hpManager.BindManager(currentManager);
+
+                // 绑定答案结果事件
+                currentManager.OnAnswerResult += HandleLocalAnswerResult;
+
+                // 延迟加载题目
                 StartCoroutine(DelayedLoadQuestion());
+
+                LogDebug($"本地题目管理器创建成功: {selectedType}");
             }
             else
             {
@@ -302,13 +340,16 @@ namespace Core.Network
             }
         }
 
+        /// <summary>
+        /// 请求网络题目（多人模式）
+        /// </summary>
         private void RequestNetworkQuestion()
         {
             if (NetworkManager.Instance?.IsConnected == true)
             {
                 isWaitingForNetworkQuestion = true;
                 NetworkManager.Instance.RequestQuestion();
-                Debug.Log("[NQMC] 请求网络题目...");
+                LogDebug("请求网络题目...");
             }
             else
             {
@@ -317,6 +358,9 @@ namespace Core.Network
             }
         }
 
+        /// <summary>
+        /// 加载网络题目
+        /// </summary>
         private void LoadNetworkQuestion(NetworkQuestionData networkQuestion)
         {
             if (networkQuestion == null)
@@ -325,16 +369,30 @@ namespace Core.Network
                 return;
             }
 
+            LogDebug($"加载网络题目: {networkQuestion.questionType}");
+
+            // 清理当前管理器
+            CleanupCurrentManager();
+
+            // 保存网络题目数据
             currentNetworkQuestion = networkQuestion;
-            manager = CreateManager(networkQuestion.questionType);
 
-            if (manager != null)
+            // 创建对应的管理器
+            currentManager = CreateQuestionManager(networkQuestion.questionType, true);
+
+            if (currentManager != null)
             {
+                // 绑定管理器到血量系统
                 if (hpManager != null)
-                    hpManager.BindManager(manager);
+                    hpManager.BindManager(currentManager);
 
-                manager.OnAnswerResult += HandleNetworkAnswerResult;
+                // 绑定网络答案结果事件
+                currentManager.OnAnswerResult += HandleNetworkAnswerSubmission;
+
+                // 延迟加载题目
                 StartCoroutine(DelayedLoadQuestion());
+
+                LogDebug($"网络题目管理器创建成功: {networkQuestion.questionType}");
             }
             else
             {
@@ -342,133 +400,85 @@ namespace Core.Network
             }
         }
 
+        /// <summary>
+        /// 延迟加载题目
+        /// </summary>
         private IEnumerator DelayedLoadQuestion()
         {
             yield return null;
-            if (manager != null)
+            if (currentManager != null)
             {
-                manager.LoadQuestion();
-                if (timerManager != null)
-                    timerManager.StartTimer();
+                currentManager.LoadQuestion();
+                StartTimer();
+                LogDebug("题目已加载并开始计时");
             }
         }
 
+        /// <summary>
+        /// 创建题目管理器（使用工厂）
+        /// </summary>
+        private QuestionManagerBase CreateQuestionManager(QuestionType questionType, bool isNetworkMode)
+        {
+            // 使用工厂创建管理器
+            return QuestionManagerFactory.CreateManagerOnGameObject(
+                this.gameObject,
+                questionType,
+                isNetworkMode,
+                false // 不是仅数据模式，需要UI
+            );
+        }
+
+        /// <summary>
+        /// 清理当前题目管理器
+        /// </summary>
+        private void CleanupCurrentManager()
+        {
+            if (currentManager != null)
+            {
+                LogDebug($"清理题目管理器: {currentManager.GetType().Name}");
+
+                // 移除事件监听
+                currentManager.OnAnswerResult -= HandleLocalAnswerResult;
+                currentManager.OnAnswerResult -= HandleNetworkAnswerSubmission;
+
+                // 使用工厂安全销毁
+                QuestionManagerFactory.DestroyManager(currentManager);
+                currentManager = null;
+            }
+        }
+
+        /// <summary>
+        /// 根据权重选择随机题目类型
+        /// </summary>
         private QuestionType SelectRandomTypeByWeight()
         {
             var typeWeights = TypeWeights;
             float total = typeWeights.Values.Sum();
             float r = Random.Range(0, total);
             float acc = 0f;
+
             foreach (var pair in typeWeights)
             {
                 acc += pair.Value;
                 if (r <= acc)
                     return pair.Key;
             }
-            return typeWeights.Keys.First();
-        }
 
-        private QuestionManagerBase CreateManager(QuestionType type)
-        {
-            switch (type)
-            {
-                //case QuestionType.HandWriting: return gameObject.AddComponent<HandWritingQuestionManager>();
-                case QuestionType.IdiomChain: return gameObject.AddComponent<IdiomChainQuestionManager>();
-                case QuestionType.TextPinyin: return gameObject.AddComponent<TextPinyinQuestionManager>();
-                case QuestionType.HardFill: return gameObject.AddComponent<HardFillQuestionManager>();
-                case QuestionType.SoftFill: return gameObject.AddComponent<SoftFillQuestionManager>();
-                //case QuestionType.AbbrFill: return gameObject.AddComponent<AbbrFillQuestionManager>();
-                case QuestionType.SentimentTorF: return gameObject.AddComponent<SentimentTorFQuestionManager>();
-                case QuestionType.SimularWordChoice: return gameObject.AddComponent<SimularWordChoiceQuestionManager>();
-                case QuestionType.UsageTorF: return gameObject.AddComponent<UsageTorFQuestionManager>();
-                case QuestionType.ExplanationChoice: return gameObject.AddComponent<ExplanationChoiceQuestionManager>();
-                default:
-                    Debug.LogError($"[NQMC] 未实现的题型：{type}");
-                    return null;
-            }
+            return typeWeights.Keys.First();
         }
 
         #endregion
 
         #region 答题结果处理
 
-        private void HandleAnswerResult(bool isCorrect)
+        /// <summary>
+        /// 处理本地答题结果（单机模式）
+        /// </summary>
+        private void HandleLocalAnswerResult(bool isCorrect)
         {
-            Debug.Log($"[NQMC] 单机模式答题结果: {isCorrect}");
+            LogDebug($"单机模式答题结果: {(isCorrect ? "正确" : "错误")}");
 
-            if (timerManager != null)
-                timerManager.StopTimer();
-
-            if (!isCorrect && hpManager != null)
-            {
-                hpManager.HPHandleAnswerResult(false);
-
-                // 检查是否游戏结束
-                if (hpManager.CurrentHealth <= 0)
-                {
-                    Debug.Log("[NQMC] 血量归零，游戏结束");
-                    OnGameEnded?.Invoke(false);
-                    return;
-                }
-            }
-
-            OnAnswerCompleted?.Invoke(isCorrect);
-            Invoke(nameof(LoadNextQuestion), timeUpDelay);
-        }
-
-        private void HandleNetworkAnswerResult(bool isCorrect)
-        {
-            Debug.Log($"[NQMC] 网络模式本地答题，等待服务器确认");
-            // 网络模式下，本地答题结果不直接处理，等待服务器结果
-            if (timerManager != null)
-                timerManager.StopTimer();
-        }
-
-        private void HandleTimeUp()
-        {
-            Debug.Log("[NQMC] 答题超时");
-
-            if (timerManager != null)
-                timerManager.StopTimer();
-
-            if (isMultiplayerMode)
-            {
-                // 网络模式：提交空答案表示超时
-                if (isMyTurn && NetworkManager.Instance?.IsConnected == true)
-                {
-                    NetworkManager.Instance.SubmitAnswer("");
-                }
-            }
-            else
-            {
-                // 单机模式：直接处理超时
-                if (manager != null)
-                    manager.OnAnswerResult?.Invoke(false);
-                else
-                    Invoke(nameof(LoadNextQuestion), timeUpDelay);
-            }
-        }
-
-        #endregion
-
-        #region 网络事件处理
-
-        private void OnNetworkQuestionReceived(NetworkQuestionData question)
-        {
-            if (!isMultiplayerMode || !isWaitingForNetworkQuestion)
-                return;
-
-            Debug.Log($"[NQMC] 收到网络题目: {question.questionType}");
-            isWaitingForNetworkQuestion = false;
-            LoadNetworkQuestion(question);
-        }
-
-        private void OnNetworkAnswerResult(bool isCorrect, string correctAnswer)
-        {
-            if (!isMultiplayerMode)
-                return;
-
-            Debug.Log($"[NQMC] 收到服务器答题结果: {(isCorrect ? "正确" : "错误")}");
+            StopTimer();
 
             // 处理血量变化
             if (!isCorrect && hpManager != null)
@@ -478,17 +488,110 @@ namespace Core.Network
                 // 检查是否游戏结束
                 if (hpManager.CurrentHealth <= 0)
                 {
-                    Debug.Log("[NQMC] 血量归零，游戏结束");
+                    LogDebug("血量耗尽，游戏结束");
                     OnGameEnded?.Invoke(false);
                     return;
                 }
             }
 
-            // 显示结果反馈
+            // 通知答题完成
+            OnAnswerCompleted?.Invoke(isCorrect);
+
+            // 延迟加载下一题
+            Invoke(nameof(LoadNextLocalQuestion), timeUpDelay);
+        }
+
+        /// <summary>
+        /// 处理网络答案提交（多人模式）
+        /// </summary>
+        private void HandleNetworkAnswerSubmission(bool isCorrect)
+        {
+            LogDebug("多人模式本地答题，等待服务器确认");
+            // 多人模式下，本地答题结果不立即处理，等待服务器结果
+            StopTimer();
+        }
+
+        /// <summary>
+        /// 处理超时
+        /// </summary>
+        private void HandleTimeUp()
+        {
+            LogDebug("答题超时");
+
+            StopTimer();
+
+            if (isMultiplayerMode)
+            {
+                // 网络模式：提交空答案表示超时
+                if (isMyTurn && NetworkManager.Instance?.IsConnected == true)
+                {
+                    NetworkManager.Instance.SubmitAnswer("");
+                    LogDebug("超时，提交空答案");
+                }
+            }
+            else
+            {
+                // 单机模式：直接处理超时
+                if (currentManager != null)
+                {
+                    currentManager.OnAnswerResult?.Invoke(false);
+                }
+                else
+                {
+                    Invoke(nameof(LoadNextLocalQuestion), timeUpDelay);
+                }
+            }
+        }
+
+        #endregion
+
+        #region 网络事件处理
+
+        /// <summary>
+        /// 接收到网络题目
+        /// </summary>
+        private void OnNetworkQuestionReceived(NetworkQuestionData question)
+        {
+            if (!isMultiplayerMode || !isWaitingForNetworkQuestion)
+                return;
+
+            LogDebug($"收到网络题目: {question.questionType}");
+            isWaitingForNetworkQuestion = false;
+            LoadNetworkQuestion(question);
+        }
+
+        /// <summary>
+        /// 接收到网络答案结果
+        /// </summary>
+        private void OnNetworkAnswerResult(bool isCorrect, string correctAnswer)
+        {
+            if (!isMultiplayerMode)
+                return;
+
+            LogDebug($"收到服务器答题结果: {(isCorrect ? "正确" : "错误")}");
+
+            // 处理血量变化
+            if (!isCorrect && hpManager != null)
+            {
+                hpManager.HPHandleAnswerResult(false);
+
+                // 检查是否游戏结束
+                if (hpManager.CurrentHealth <= 0)
+                {
+                    LogDebug("血量耗尽，游戏结束");
+                    OnGameEnded?.Invoke(false);
+                    return;
+                }
+            }
+
+            // 显示答案反馈
             ShowAnswerFeedback(isCorrect, correctAnswer);
             OnAnswerCompleted?.Invoke(isCorrect);
         }
 
+        /// <summary>
+        /// 玩家回合变更
+        /// </summary>
         private void OnNetworkPlayerTurnChanged(ushort playerId)
         {
             if (!isMultiplayerMode)
@@ -497,30 +600,30 @@ namespace Core.Network
             bool wasMyTurn = isMyTurn;
             isMyTurn = (playerId == NetworkManager.Instance?.ClientId);
 
-            Debug.Log($"[NQMC] 回合变更: {(isMyTurn ? "轮到我了" : $"轮到玩家{playerId}")}");
+            LogDebug($"回合变更: {(isMyTurn ? "轮到我了" : $"轮到玩家{playerId}")}");
 
             if (isMyTurn && !wasMyTurn)
             {
                 // 轮到我答题
-                LoadNextQuestion();
+                RequestNetworkQuestion();
             }
             else if (!isMyTurn && wasMyTurn)
             {
                 // 不再是我的回合，停止当前题目
-                if (timerManager != null)
-                    timerManager.StopTimer();
+                StopTimer();
+                // 可以选择清理当前管理器或保持显示状态
             }
         }
 
+        /// <summary>
+        /// 网络断开连接
+        /// </summary>
         private void OnNetworkDisconnected()
         {
             if (isMultiplayerMode && gameStarted)
             {
                 Debug.LogWarning("[NQMC] 网络断开，游戏将结束");
-
-                if (timerManager != null)
-                    timerManager.StopTimer();
-
+                StopTimer();
                 OnGameEnded?.Invoke(false);
             }
         }
@@ -537,11 +640,16 @@ namespace Core.Network
             if (isMultiplayerMode && isMyTurn && NetworkManager.Instance?.IsConnected == true)
             {
                 NetworkManager.Instance.SubmitAnswer(answer);
-                Debug.Log($"[NQMC] 提交网络答案: {answer}");
+                LogDebug($"提交网络答案: {answer}");
             }
-            else if (!isMultiplayerMode && manager != null)
+            else if (!isMultiplayerMode && currentManager != null)
             {
-                manager.CheckAnswer(answer);
+                currentManager.CheckAnswer(answer);
+                LogDebug($"提交本地答案: {answer}");
+            }
+            else
+            {
+                LogDebug("无法提交答案：模式不匹配或状态异常");
             }
         }
 
@@ -557,17 +665,55 @@ namespace Core.Network
 
         #region 辅助方法
 
+        /// <summary>
+        /// 开始计时器
+        /// </summary>
+        private void StartTimer()
+        {
+            if (timerManager != null)
+            {
+                timerManager.StartTimer();
+                LogDebug("计时器已开始");
+            }
+        }
+
+        /// <summary>
+        /// 停止计时器
+        /// </summary>
+        private void StopTimer()
+        {
+            if (timerManager != null)
+            {
+                timerManager.StopTimer();
+                LogDebug("计时器已停止");
+            }
+        }
+
+        /// <summary>
+        /// 显示答案反馈
+        /// </summary>
         private void ShowAnswerFeedback(bool isCorrect, string correctAnswer)
         {
             string feedback = isCorrect ? "回答正确！" : $"回答错误，正确答案是：{correctAnswer}";
-            Debug.Log($"[NQMC] 答题反馈: {feedback}");
+            LogDebug($"答题反馈: {feedback}");
 
-            // 这里可以通过UI系统显示反馈
-            // 或者让当前的题目管理器显示反馈
-            if (manager != null)
+            // 如果当前管理器支持显示网络结果，调用相应方法
+            if (currentManager != null)
             {
-                // 如果题目管理器支持显示网络结果，可以调用相应方法
-                // 例如: manager.ShowNetworkResult(isCorrect, correctAnswer);
+                // 可以通过反射或接口调用管理器的显示方法
+                // 例如: if (currentManager is INetworkResultDisplayer displayer)
+                //           displayer.ShowNetworkResult(isCorrect, correctAnswer);
+            }
+        }
+
+        /// <summary>
+        /// 调试日志
+        /// </summary>
+        private void LogDebug(string message)
+        {
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[NQMC] {message}");
             }
         }
 
@@ -586,7 +732,7 @@ namespace Core.Network
             info += $"多人模式: {isMultiplayerMode}\n";
             info += $"我的回合: {isMyTurn}\n";
             info += $"等待网络题目: {isWaitingForNetworkQuestion}\n";
-            info += $"当前管理器: {(manager != null ? manager.GetType().Name : "无")}\n";
+            info += $"当前管理器: {(currentManager != null ? currentManager.GetType().Name : "无")}\n";
 
             if (hpManager != null)
                 info += $"当前血量: {hpManager.CurrentHealth}\n";
@@ -595,6 +741,22 @@ namespace Core.Network
                 info += $"计时器状态: {(timerManager.IsRunning ? "运行中" : "已停止")}\n";
 
             return info;
+        }
+
+        /// <summary>
+        /// 重置组件状态（调试用）
+        /// </summary>
+        [ContextMenu("重置状态")]
+        public void ResetState()
+        {
+            if (Application.isPlaying)
+            {
+                LogDebug("重置状态");
+                StopGame();
+                CleanupCurrentManager();
+                currentNetworkQuestion = null;
+                isWaitingForNetworkQuestion = false;
+            }
         }
 
         #endregion
