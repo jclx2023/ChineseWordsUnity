@@ -127,15 +127,19 @@ namespace Core.Network
                 case QuestionType.SimularWordChoice:
                     var simManager = FindObjectOfType<GameLogic.Choice.SimularWordChoiceQuestionManager>();
                     return simManager as IQuestionDataProvider;
+
                 case QuestionType.IdiomChain:
                     var idiomManager = FindObjectOfType<GameLogic.FillBlank.IdiomChainQuestionManager>();
                     return idiomManager as IQuestionDataProvider;
+
                 case QuestionType.SentimentTorF:
                     var sentimentManager = FindObjectOfType<GameLogic.TorF.SentimentTorFQuestionManager>();
                     return sentimentManager as IQuestionDataProvider;
+
                 case QuestionType.UsageTorF:
                     var usageManager = FindObjectOfType<GameLogic.TorF.UsageTorFQuestionManager>();
                     return usageManager as IQuestionDataProvider;
+
                 default:
                     return null;
             }
@@ -274,6 +278,9 @@ namespace Core.Network
                 QuestionType.SoftFill,
                 QuestionType.TextPinyin,
                 QuestionType.SimularWordChoice,
+                QuestionType.IdiomChain,
+                QuestionType.SentimentTorF,
+                QuestionType.UsageTorF,
                 // 添加其他支持的题型...
             };
         }

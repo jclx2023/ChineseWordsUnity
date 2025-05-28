@@ -684,7 +684,7 @@ namespace Core.Network
             // 预加载题目数据
             if (questionDataService != null)
             {
-                LogDebug("预加载题目数据提供者...");
+                LogDebug("1预加载题目数据提供者...");
                 questionDataService.PreloadAllProviders();
             }
 
