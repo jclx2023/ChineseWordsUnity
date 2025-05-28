@@ -16,7 +16,7 @@ namespace Managers
     public class TimerManager : MonoBehaviour
     {
         [Header("µπº∆ ±≈‰÷√")]
-        [SerializeField] private float defaultTimeLimit = 10f;
+        [SerializeField] private float defaultTimeLimit = 20f;
         [SerializeField] private bool autoStartOnEnable = false;
         [SerializeField] private bool loopTimer = false;
 

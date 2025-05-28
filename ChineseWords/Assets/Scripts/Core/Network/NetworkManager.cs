@@ -17,7 +17,7 @@ namespace Core.Network
         [Header("ÍøÂçÅäÖÃ")]
         [SerializeField] private ushort defaultPort = 7777;
         [SerializeField] private ushort maxClients = 8;
-        [SerializeField] private ushort timeoutTime = 10000;
+        [SerializeField] private ushort timeoutTime = 20000;
 
         [Header("µ÷ÊÔÉèÖÃ")]
         [SerializeField] private bool enableDebugLogs = true;

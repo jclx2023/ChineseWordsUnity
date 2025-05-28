@@ -9,17 +9,17 @@ using Managers;
 namespace Core.Network
 {
     /// <summary>
-    /// 优化后的网络题目管理控制器
-    /// 专注于：客户端题目显示 + 网络消息处理 + 答案提交
-    /// 移除了：题目生成逻辑（由Host负责）+ 重复的管理器创建逻辑
+    /// 统一网络和本地题目管理控制器
+    /// 专门用于单机和多人模式的题目管理 + 网络消息处理 + 答案提交
+    /// 已经统一了单机题目生成逻辑（用于Host端分发）+ 重复的管理器创建逻辑
     /// </summary>
     public class NetworkQuestionManagerController : MonoBehaviour
     {
-        [Header("游戏管理器组件")]
+        [Header("依赖管理器引用")]
         [SerializeField] private TimerManager timerManager;
         [SerializeField] private PlayerHealthManager hpManager;
 
-        [Header("游戏配置")]
+        [Header("依赖配置")]
         [SerializeField] private float timeUpDelay = 1f;
         [SerializeField] private bool isMultiplayerMode = false;
 
@@ -36,7 +36,7 @@ namespace Core.Network
         private bool gameStarted = false;
         private bool isInitialized = false;
 
-        // 题目类型权重（供Host使用）
+        // 题目类型权重（重置用于供Host使用）
         public Dictionary<QuestionType, float> TypeWeights = new Dictionary<QuestionType, float>()
         {
             { QuestionType.IdiomChain, 1f },
@@ -73,7 +73,7 @@ namespace Core.Network
                 return;
             }
 
-            // 初始化组件但不启动游戏
+            // 初始化引用但不启动依赖
             InitializeComponents();
         }
 
@@ -81,7 +81,7 @@ namespace Core.Network
         {
             RegisterNetworkEvents();
             isInitialized = true;
-            LogDebug("组件已初始化，等待游戏开始指令");
+            LogDebug("引用已初始化，等待依赖开始指令");
         }
 
         private void OnDestroy()
@@ -96,11 +96,11 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 初始化组件依赖
+        /// 初始化引用组件
         /// </summary>
         private void InitializeComponents()
         {
-            LogDebug("初始化组件依赖...");
+            LogDebug("初始化引用组件...");
 
             // 获取或查找必要组件
             if (timerManager == null)
@@ -110,13 +110,13 @@ namespace Core.Network
 
             if (timerManager == null)
             {
-                Debug.LogError("[NQMC] 找不到TimerManager组件");
+                Debug.LogError("[NQMC] 找不到TimerManager引用");
                 return;
             }
 
             if (hpManager == null)
             {
-                Debug.LogError("[NQMC] 找不到PlayerHealthManager组件");
+                Debug.LogError("[NQMC] 找不到PlayerHealthManager引用");
                 return;
             }
 
@@ -131,7 +131,7 @@ namespace Core.Network
             // 绑定计时器事件
             timerManager.OnTimeUp += HandleTimeUp;
 
-            LogDebug("组件依赖初始化完成");
+            LogDebug("引用组件初始化完成");
         }
 
         /// <summary>
@@ -160,17 +160,17 @@ namespace Core.Network
             LogDebug("网络事件已取消注册");
         }
 
-        #region 公共接口 - 由外部系统调用
+        #region 公共接口 - 用于外部系统调用
 
         /// <summary>
-        /// 开始游戏（由外部系统调用）
+        /// 开始游戏（用于外部系统调用）
         /// </summary>
         /// <param name="multiplayerMode">是否为多人模式</param>
         public void StartGame(bool multiplayerMode = false)
         {
             if (!isInitialized)
             {
-                Debug.LogError("[NQMC] 组件未初始化，无法开始游戏");
+                Debug.LogError("[NQMC] 引用未初始化，无法开始游戏");
                 return;
             }
 
@@ -190,7 +190,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 停止游戏（由外部系统调用）
+        /// 停止游戏（用于外部系统调用）
         /// </summary>
         public void StopGame()
         {
@@ -204,7 +204,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 暂停游戏（由外部系统调用）
+        /// 暂停游戏（用于外部系统调用）
         /// </summary>
         public void PauseGame()
         {
@@ -214,7 +214,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 恢复游戏（由外部系统调用）
+        /// 恢复游戏（用于外部系统调用）
         /// </summary>
         public void ResumeGame()
         {
@@ -224,7 +224,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 强制开始下一题（由外部系统调用）
+        /// 强制开始下一题（用于外部系统调用）
         /// </summary>
         public void ForceNextQuestion()
         {
@@ -300,7 +300,7 @@ namespace Core.Network
         #region 题目管理 - 简化版本
 
         /// <summary>
-        /// 加载下一个本地题目（单机模式）
+        /// 加载下一本地题目（单机模式）
         /// </summary>
         private void LoadNextLocalQuestion()
         {
@@ -321,7 +321,7 @@ namespace Core.Network
 
             if (currentManager != null)
             {
-                // 绑定管理器到血量系统
+                // 绑定管理器到生命系统
                 if (hpManager != null)
                     hpManager.BindManager(currentManager);
 
@@ -359,7 +359,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 加载网络题目
+        /// 加载网络题目 - 修复版本
         /// </summary>
         private void LoadNetworkQuestion(NetworkQuestionData networkQuestion)
         {
@@ -382,15 +382,15 @@ namespace Core.Network
 
             if (currentManager != null)
             {
-                // 绑定管理器到血量系统
+                // 绑定管理器到生命系统
                 if (hpManager != null)
                     hpManager.BindManager(currentManager);
 
-                // 绑定网络答案结果事件
+                // 绑定网络答案提交事件
                 currentManager.OnAnswerResult += HandleNetworkAnswerSubmission;
 
-                // 延迟加载题目
-                StartCoroutine(DelayedLoadQuestion());
+                // 延迟加载题目 - 修复：传递网络数据
+                StartCoroutine(DelayedLoadNetworkQuestion(networkQuestion));
 
                 LogDebug($"网络题目管理器创建成功: {networkQuestion.questionType}");
             }
@@ -401,7 +401,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 延迟加载题目
+        /// 延迟加载题目 - 本地模式
         /// </summary>
         private IEnumerator DelayedLoadQuestion()
         {
@@ -411,6 +411,45 @@ namespace Core.Network
                 currentManager.LoadQuestion();
                 StartTimer();
                 LogDebug("题目已加载并开始计时");
+            }
+        }
+
+        /// <summary>
+        /// 延迟加载网络题目 - 修复版本
+        /// </summary>
+        private IEnumerator DelayedLoadNetworkQuestion(NetworkQuestionData networkData)
+        {
+            yield return null;
+            if (currentManager != null)
+            {
+                // 修复：检查管理器是否支持网络数据加载
+                if (currentManager is NetworkQuestionManagerBase networkManager)
+                {
+                    // 调用网络管理器的专用加载方法
+                    var loadMethod = networkManager.GetType().GetMethod("LoadNetworkQuestion",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (loadMethod != null)
+                    {
+                        LogDebug($"通过反射调用网络题目加载方法: {networkData.questionType}");
+                        loadMethod.Invoke(networkManager, new object[] { networkData });
+                    }
+                    else
+                    {
+                        // 备用方案：尝试公共方法
+                        Debug.LogWarning($"[NQMC] 未找到LoadNetworkQuestion方法，尝试备用加载方式");
+                        currentManager.LoadQuestion();
+                    }
+                }
+                else
+                {
+                    // 不是网络管理器，使用普通加载
+                    Debug.LogWarning($"[NQMC] 管理器不是NetworkQuestionManagerBase类型: {currentManager.GetType()}");
+                    currentManager.LoadQuestion();
+                }
+
+                StartTimer();
+                LogDebug("网络题目已加载并开始计时");
             }
         }
 
@@ -480,7 +519,7 @@ namespace Core.Network
 
             StopTimer();
 
-            // 处理血量变化
+            // 处理生命变化
             if (!isCorrect && hpManager != null)
             {
                 hpManager.HPHandleAnswerResult(false);
@@ -488,7 +527,7 @@ namespace Core.Network
                 // 检查是否游戏结束
                 if (hpManager.CurrentHealth <= 0)
                 {
-                    LogDebug("血量耗尽，游戏结束");
+                    LogDebug("生命耗尽，游戏结束");
                     OnGameEnded?.Invoke(false);
                     return;
                 }
@@ -570,7 +609,7 @@ namespace Core.Network
 
             LogDebug($"收到服务器答题结果: {(isCorrect ? "正确" : "错误")}");
 
-            // 处理血量变化
+            // 处理生命变化
             if (!isCorrect && hpManager != null)
             {
                 hpManager.HPHandleAnswerResult(false);
@@ -578,7 +617,7 @@ namespace Core.Network
                 // 检查是否游戏结束
                 if (hpManager.CurrentHealth <= 0)
                 {
-                    LogDebug("血量耗尽，游戏结束");
+                    LogDebug("生命耗尽，游戏结束");
                     OnGameEnded?.Invoke(false);
                     return;
                 }
@@ -735,7 +774,7 @@ namespace Core.Network
             info += $"当前管理器: {(currentManager != null ? currentManager.GetType().Name : "无")}\n";
 
             if (hpManager != null)
-                info += $"当前血量: {hpManager.CurrentHealth}\n";
+                info += $"当前生命: {hpManager.CurrentHealth}\n";
 
             if (timerManager != null)
                 info += $"计时器状态: {(timerManager.IsRunning ? "运行中" : "已停止")}\n";
@@ -744,7 +783,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 重置组件状态（调试用）
+        /// 重置引用状态（调试用）
         /// </summary>
         [ContextMenu("重置状态")]
         public void ResetState()

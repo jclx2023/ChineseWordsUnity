@@ -1824,7 +1824,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e72c46d9e1e7fe848a4f6caec199f9cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  defaultTimeLimit: 10
+  defaultTimeLimit: 30
   autoStartOnEnable: 0
   loopTimer: 0
   timerText: {fileID: 1157705177}
