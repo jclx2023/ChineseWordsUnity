@@ -460,7 +460,6 @@ namespace Core.Network
         {
             // 创建独立的子GameObject用于题目管理器
             GameObject managerObj = new GameObject($"{questionType}Manager");
-            managerObj.transform.SetParent(this.transform);
 
             // 添加UI环境标记
             managerObj.AddComponent<UIEnvironmentMarker>();
