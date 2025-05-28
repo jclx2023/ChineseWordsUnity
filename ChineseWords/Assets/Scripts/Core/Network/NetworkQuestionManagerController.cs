@@ -458,13 +458,21 @@ namespace Core.Network
         /// </summary>
         private QuestionManagerBase CreateQuestionManager(QuestionType questionType, bool isNetworkMode)
         {
-            // 使用工厂创建管理器
-            return QuestionManagerFactory.CreateManagerOnGameObject(
-                this.gameObject,
+            // 创建独立的子GameObject用于题目管理器
+            GameObject managerObj = new GameObject($"{questionType}Manager");
+            managerObj.transform.SetParent(this.transform);
+
+            // 添加UI环境标记
+            managerObj.AddComponent<UIEnvironmentMarker>();
+
+            var manager = QuestionManagerFactory.CreateManagerOnGameObject(
+                managerObj,
                 questionType,
                 isNetworkMode,
-                false // 不是仅数据模式，需要UI
+                false
             );
+
+            return manager;
         }
 
         /// <summary>
