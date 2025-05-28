@@ -10,7 +10,7 @@ namespace Core.Network
 {
     /// <summary>
     /// 网络管理器（支持Host-Client架构）
-    /// 支持Host-Client架构：既可以作为主机（服务器+客户端），也可以作为纯客户端
+    /// 修复版本：解决Host ID不一致问题，统一Host玩家身份管理
     /// </summary>
     public class NetworkManager : MonoBehaviour
     {
@@ -36,6 +36,10 @@ namespace Core.Network
         public ushort ClientId => client?.Id ?? 0;
         public ushort Port { get; private set; }
 
+        // **关键修复：统一Host身份管理**
+        private ushort hostPlayerId = 0;  // Host作为玩家的真实ID
+        private bool isHostClientReady = false;  // Host客户端是否准备就绪
+
         // Host模式下的服务器信息
         public string RoomName { get; private set; }
         public int MaxPlayers { get; private set; }
@@ -55,8 +59,11 @@ namespace Core.Network
         // 新增Host-Client特有事件
         public static event Action OnHostStarted;
         public static event Action OnHostStopped;
-        public static event Action<ushort> OnPlayerJoined;  // 有新玩家加入
-        public static event Action<ushort> OnPlayerLeft;    // 有玩家离开
+        public static event Action<ushort> OnPlayerJoined;
+        public static event Action<ushort> OnPlayerLeft;
+
+        // **新增：Host玩家准备就绪事件**
+        public static event Action OnHostPlayerReady;  // Host作为玩家准备就绪
 
         private void Awake()
         {
@@ -93,12 +100,12 @@ namespace Core.Network
             // 只有在网络游戏场景才根据主菜单选择的模式进行初始化
             InitializeFromMainMenu();
         }
+
         /// <summary>
         /// 检查是否为主菜单场景
         /// </summary>
         private bool IsMainMenuScene(string sceneName)
         {
-            // 添加你的主菜单场景名称
             string[] mainMenuScenes = { "MainMenuScene", "MainMenu", "Menu" };
 
             foreach (string menuScene in mainMenuScenes)
@@ -216,7 +223,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 作为主机启动（Host模式）
+        /// 作为主机启动（Host模式）- 修复版本
         /// </summary>
         public void StartAsHost(ushort port, string roomName, int maxPlayers)
         {
@@ -229,6 +236,10 @@ namespace Core.Network
             Port = port;
             RoomName = roomName;
             MaxPlayers = maxPlayers;
+
+            // **重置Host状态**
+            hostPlayerId = 0;
+            isHostClientReady = false;
 
             LogDebug($"启动主机模式 - 房间: {roomName}, 端口: {port}, 最大玩家: {maxPlayers}");
 
@@ -247,11 +258,11 @@ namespace Core.Network
                 IsHost = true;
                 LogDebug($"IsHost 设置为: {IsHost}");
 
-                // 立即触发 OnHostStarted 事件
-                LogDebug("触发 OnHostStarted 事件");
+                // **修改：先触发服务器启动事件，但不触发Host玩家准备事件**
+                LogDebug("触发 OnHostStarted 事件（服务器层启动）");
                 OnHostStarted?.Invoke();
 
-                // 同时作为客户端连接到自己的服务器（延迟一点确保服务器完全启动）
+                // 同时作为客户端连接到自己的服务器
                 StartCoroutine(ConnectSelfClientWithDelay(port));
             }
             catch (System.Exception e)
@@ -341,8 +352,11 @@ namespace Core.Network
             // 断开客户端
             DisconnectClient();
 
+            // **重置Host状态**
             IsHost = false;
             isHostInitialized = false;
+            hostPlayerId = 0;
+            isHostClientReady = false;
 
             LogDebug("触发 OnHostStopped 事件");
             OnHostStopped?.Invoke();
@@ -382,6 +396,39 @@ namespace Core.Network
             StopHost();
             DisconnectClient();
         }
+
+        #region 统一Host身份管理接口
+
+        /// <summary>
+        /// 获取Host玩家ID（统一接口）
+        /// </summary>
+        public ushort GetHostPlayerId()
+        {
+            return hostPlayerId;
+        }
+
+        /// <summary>
+        /// 检查指定ID是否为Host玩家
+        /// </summary>
+        public bool IsHostPlayer(ushort playerId)
+        {
+            return IsHost && playerId == hostPlayerId;
+        }
+
+        /// <summary>
+        /// Host客户端是否准备就绪
+        /// </summary>
+        public bool IsHostClientReady => isHostClientReady;
+
+        /// <summary>
+        /// 获取用于房间创建的Host信息
+        /// </summary>
+        public (ushort hostId, bool isReady) GetHostRoomInfo()
+        {
+            return (hostPlayerId, isHostClientReady);
+        }
+
+        #endregion
 
         /// <summary>
         /// 发送消息（保持与原NetworkManager兼容）
@@ -539,19 +586,36 @@ namespace Core.Network
 
         private void OnServerClientConnected(object sender, ServerConnectedEventArgs e)
         {
-            // 检查是否是Host自己的客户端连接
-            if (IsHost && e.Client.Id == ClientId)
+            LogDebug($"客户端连接到服务器: ID={e.Client.Id}");
+
+            // **关键修复：区分Host自己的客户端和其他玩家**
+            if (IsHost && !isHostClientReady)
             {
-                LogDebug($"Host自己的客户端连接成功: ID={e.Client.Id}，不触发玩家加入事件");
+                // 这是Host自己的客户端连接
+                hostPlayerId = e.Client.Id;
+                LogDebug($"Host玩家ID确定为: {hostPlayerId}");
+                // 不在这里设置isHostClientReady，等待OnSelfClientConnected
                 return;
             }
 
-            LogDebug($"玩家加入房间: ID={e.Client.Id}");
+            // 其他玩家加入
+            LogDebug($"新玩家加入房间: ID={e.Client.Id}");
             OnPlayerJoined?.Invoke(e.Client.Id);
         }
 
         private void OnServerClientDisconnected(object sender, ServerDisconnectedEventArgs e)
         {
+            LogDebug($"客户端断开连接: ID={e.Client.Id}");
+
+            // 检查是否是Host玩家断开
+            if (IsHost && e.Client.Id == hostPlayerId)
+            {
+                LogDebug("Host玩家客户端断开连接");
+                isHostClientReady = false;
+                return;
+            }
+
+            // 其他玩家离开
             LogDebug($"玩家离开房间: ID={e.Client.Id}");
             OnPlayerLeft?.Invoke(e.Client.Id);
         }
@@ -562,30 +626,41 @@ namespace Core.Network
 
         private void OnSelfClientConnected(object sender, EventArgs e)
         {
-            LogDebug($"主机客户端连接成功! ID: {ClientId}");
+            LogDebug($"Host客户端连接成功! 玩家ID: {ClientId}");
+
+            // **关键修复：确保hostPlayerId与ClientId一致**
+            if (hostPlayerId == 0 || hostPlayerId != ClientId)
+            {
+                hostPlayerId = ClientId;
+                LogDebug($"Host玩家ID更新为: {hostPlayerId}");
+            }
+
+            // 标记Host客户端准备就绪
+            isHostClientReady = true;
 
             if (!isHostInitialized)
             {
                 isHostInitialized = true;
-                LogDebug("主机完全初始化完成");
-
-                // 如果还没有触发过 OnHostStarted，在这里再次触发
-                // 这确保了即使时序有问题也能正确通知
-                OnHostStarted?.Invoke();
+                LogDebug("Host完全初始化完成");
             }
+
+            // **新增：触发Host玩家准备就绪事件**
+            LogDebug("触发 OnHostPlayerReady 事件");
+            OnHostPlayerReady?.Invoke();
 
             OnConnected?.Invoke(); // 触发兼容事件
         }
 
         private void OnSelfClientDisconnected(object sender, EventArgs e)
         {
-            LogDebug("主机客户端断开连接");
+            LogDebug("Host客户端断开连接");
+            isHostClientReady = false;
             OnDisconnected?.Invoke(); // 触发兼容事件
         }
 
         private void OnSelfClientConnectionFailed(object sender, EventArgs e)
         {
-            Debug.LogError("主机客户端连接失败");
+            Debug.LogError("Host客户端连接失败");
             StopHost();
         }
 
@@ -750,12 +825,16 @@ namespace Core.Network
         [MessageHandler((ushort)NetworkMessageType.GameStartRequest)]
         private static void HandleGameStartRequest(Message message)
         {
-            Debug.Log("[NetworkManager] 收到游戏开始命令");
+            Debug.Log("[NetworkManager] 收到游戏开始请求");
 
-            // 通知RoomManager
             if (RoomManager.Instance != null)
             {
                 RoomManager.Instance.OnNetworkGameStart();
+                Debug.Log("[NetworkManager] 已通知RoomManager处理游戏开始");
+            }
+            else
+            {
+                Debug.LogError("[NetworkManager] RoomManager实例不存在，无法处理游戏开始请求");
             }
         }
 
@@ -770,7 +849,7 @@ namespace Core.Network
         {
             if (IsHost)
             {
-                return $"房间: {RoomName} | 玩家: {ConnectedPlayerCount}/{MaxPlayers} | 端口: {Port}";
+                return $"房间: {RoomName} | 玩家: {ConnectedPlayerCount}/{MaxPlayers} | 端口: {Port} | Host玩家ID: {hostPlayerId}";
             }
             else if (IsClient)
             {
@@ -822,6 +901,7 @@ namespace Core.Network
         {
             return $"IsHost: {IsHost}, IsServer: {IsServer}, IsClient: {IsClient}, " +
                    $"IsConnected: {IsConnected}, ClientId: {ClientId}, " +
+                   $"HostPlayerId: {hostPlayerId}, HostClientReady: {isHostClientReady}, " +
                    $"HostInitialized: {isHostInitialized}";
         }
 
@@ -842,6 +922,4 @@ namespace Core.Network
 
         #endregion
     }
-
-
 }

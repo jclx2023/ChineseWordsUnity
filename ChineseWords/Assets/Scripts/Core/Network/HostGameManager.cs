@@ -143,7 +143,7 @@ namespace Core.Network
 
         private void Start()
         {
-            LogDebug($"Start 执行时间: {Time.time}");
+            LogDebug($"[HostGameManager]Start 执行时间: {Time.time}");
 
             // 检查是否应该激活（只在确定的游戏模式下）
             if (MainMenuManager.SelectedGameMode != MainMenuManager.GameMode.Host)
@@ -342,7 +342,7 @@ namespace Core.Network
         /// </summary>
         private void SyncPlayersFromRoomSystem()
         {
-            LogDebug("尝试从房间系统同步玩家数据");
+            LogDebug("同步房间系统玩家数据");
 
             // 清空现有玩家状态，避免重复
             playerStates.Clear();
@@ -358,9 +358,9 @@ namespace Core.Network
                     AddPlayerFromRoom(roomPlayer.playerId, roomPlayer.playerName);
                 }
 
-                LogDebug($"房间玩家同步完成，最终玩家数: {playerStates.Count}");
+                LogDebug($"房间玩家同步完成，总计玩家数: {playerStates.Count}");
 
-                // 验证房主数量
+                // 验证Host数量
                 ValidateHostCount();
                 return;
             }
@@ -369,18 +369,21 @@ namespace Core.Network
             if (NetworkManager.Instance != null)
             {
                 LogDebug($"从NetworkManager同步，连接玩家数: {NetworkManager.Instance.ConnectedPlayerCount}");
-                LogDebug($"NetworkManager Host ClientId: {NetworkManager.Instance.ClientId}");
 
-                // 如果有连接的玩家但房间数据为空，使用网络连接信息
-                var connectedCount = NetworkManager.Instance.ConnectedPlayerCount;
-                if (connectedCount > 0)
+                // **关键修复：使用统一的Host玩家ID接口**
+                ushort hostPlayerId = NetworkManager.Instance.GetHostPlayerId();
+                if (hostPlayerId != 0 && NetworkManager.Instance.IsHostClientReady)
                 {
-                    // 只添加Host自己，使用当前的ClientId
-                    AddPlayerFromRoom(NetworkManager.Instance.ClientId, "房主");
+                    AddPlayerFromRoom(hostPlayerId, "房主");
+                    LogDebug($"添加Host玩家: ID={hostPlayerId}");
+                }
+                else
+                {
+                    LogDebug($"Host玩家尚未准备就绪: ID={hostPlayerId}, Ready={NetworkManager.Instance.IsHostClientReady}");
                 }
             }
 
-            LogDebug($"玩家同步完成，最终玩家数: {playerStates.Count}");
+            LogDebug($"玩家同步完成，总计玩家数: {playerStates.Count}");
             ValidateHostCount();
         }
 
@@ -400,18 +403,29 @@ namespace Core.Network
                     LogDebug($"重复房主: ID={host.playerId}, Name={host.playerName}");
                 }
 
-                // 修复：只保留NetworkManager当前的ClientId作为房主
+                // 修复重复Host
                 FixDuplicateHosts();
             }
             else if (hostPlayers.Count == 1)
             {
-                LogDebug($"房主验证通过: ID={hostPlayers[0].playerId}");
+                LogDebug($"Host验证通过: ID={hostPlayers[0].playerId}");
+
+                // **验证与NetworkManager的一致性**
+                if (NetworkManager.Instance != null)
+                {
+                    ushort networkHostId = NetworkManager.Instance.GetHostPlayerId();
+                    if (hostPlayers[0].playerId != networkHostId)
+                    {
+                        Debug.LogError($"[HostGameManager] Host ID不一致！游戏中: {hostPlayers[0].playerId}, NetworkManager: {networkHostId}");
+                    }
+                }
             }
             else
             {
                 Debug.LogWarning("[HostGameManager] 没有找到房主");
             }
         }
+
 
         /// <summary>
         /// 修复重复房主问题（增强版）
@@ -420,8 +434,8 @@ namespace Core.Network
         {
             if (NetworkManager.Instance == null) return;
 
-            var currentHostId = NetworkManager.Instance.ClientId;
-            LogDebug($"修复重复房主，当前NetworkManager Host ID: {currentHostId}");
+            ushort correctHostId = NetworkManager.Instance.GetHostPlayerId();
+            LogDebug($"修复重复房主，正确的Host ID: {correctHostId}");
 
             // 获取所有房主玩家
             var hostPlayers = playerStates.Where(p => p.Value.playerName.Contains("房主")).ToList();
@@ -434,17 +448,34 @@ namespace Core.Network
 
             LogDebug($"发现 {hostPlayers.Count} 个房主，开始修复");
 
-            // 策略：保留ID最小的房主，移除其他的
-            var primaryHost = hostPlayers.OrderBy(h => h.Key).First();
-            var duplicateHosts = hostPlayers.Skip(1).ToList();
+            // 保留正确ID的房主，移除其他的
+            var correctHost = hostPlayers.FirstOrDefault(h => h.Key == correctHostId);
 
-            LogDebug($"保留主房主: ID={primaryHost.Key}, 移除重复房主: {string.Join(", ", duplicateHosts.Select(h => h.Key))}");
-
-            // 移除重复的房主
-            foreach (var duplicateHost in duplicateHosts)
+            if (correctHost.Value != null)
             {
-                playerStates.Remove(duplicateHost.Key);
-                LogDebug($"移除重复房主: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
+                LogDebug($"保留正确房主: ID={correctHost.Key}, Name={correctHost.Value.playerName}");
+
+                // 移除其他房主
+                var duplicateHosts = hostPlayers.Where(h => h.Key != correctHostId).ToList();
+                foreach (var duplicateHost in duplicateHosts)
+                {
+                    playerStates.Remove(duplicateHost.Key);
+                    LogDebug($"移除重复房主: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
+                }
+            }
+            else
+            {
+                // 如果没有找到正确ID的房主，保留最小ID的房主
+                var primaryHost = hostPlayers.OrderBy(h => h.Key).First();
+                var duplicateHosts = hostPlayers.Skip(1).ToList();
+
+                LogDebug($"保留主房主: ID={primaryHost.Key}, 移除重复房主: {string.Join(", ", duplicateHosts.Select(h => h.Key))}");
+
+                foreach (var duplicateHost in duplicateHosts)
+                {
+                    playerStates.Remove(duplicateHost.Key);
+                    LogDebug($"移除重复房主: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
+                }
             }
 
             // 重新验证
@@ -453,7 +484,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 从房间数据添加玩家
+        /// 从房间数据添加玩家（修复版本）
         /// </summary>
         private void AddPlayerFromRoom(ushort playerId, string playerName)
         {
@@ -463,16 +494,19 @@ namespace Core.Network
                 return;
             }
 
+            // **使用NetworkManager的统一接口判断是否为Host**
+            bool isHostPlayer = NetworkManager.Instance?.IsHostPlayer(playerId) ?? false;
+
             playerStates[playerId] = new PlayerGameState
             {
                 playerId = playerId,
-                playerName = playerName,
+                playerName = isHostPlayer ? "房主" : playerName,
                 health = initialPlayerHealth,
                 isAlive = true,
                 isReady = true // 从房间来的都是准备好的
             };
 
-            LogDebug($"从房间添加玩家: {playerName} (ID: {playerId})");
+            LogDebug($"从房间添加玩家: {playerName} (ID: {playerId}, IsHost: {isHostPlayer})");
         }
 
         /// <summary>
@@ -630,8 +664,65 @@ namespace Core.Network
                 return;
             }
 
-            LogDebug("从房间系统启动游戏");
-            StartHostGame();
+            LogDebug("从房间系统启动游戏 - 准备游戏数据");
+
+
+            PrepareGameData();
+
+            LogDebug("HostGameManager游戏数据准备完成，等待场景切换");
+        }
+        /// <summary>
+        /// 准备游戏数据（新增方法）
+        /// </summary>
+        private void PrepareGameData()
+        {
+            LogDebug("准备游戏数据...");
+
+            // 同步房间系统的玩家数据
+            SyncPlayersFromRoomSystem();
+
+            // 预加载题目数据
+            if (questionDataService != null)
+            {
+                LogDebug("预加载题目数据提供者...");
+                questionDataService.PreloadAllProviders();
+            }
+
+            // 验证必要组件
+            if (!ValidateGameComponents())
+            {
+                Debug.LogError("[HostGameManager] 游戏组件验证失败");
+                return;
+            }
+
+            LogDebug("游戏数据准备完成");
+        }
+        /// <summary>
+        /// 验证游戏组件（新增方法）
+        /// </summary>
+        private bool ValidateGameComponents()
+        {
+            bool isValid = true;
+
+            if (questionDataService == null)
+            {
+                Debug.LogError("QuestionDataService 未初始化");
+                isValid = false;
+            }
+
+            if (NetworkManager.Instance == null)
+            {
+                Debug.LogError("NetworkManager 实例不存在");
+                isValid = false;
+            }
+
+            if (playerStates == null || playerStates.Count == 0)
+            {
+                Debug.LogError("玩家数据为空");
+                isValid = false;
+            }
+
+            return isValid;
         }
 
         /// <summary>
@@ -750,11 +841,14 @@ namespace Core.Network
         {
             return new Dictionary<QuestionType, float>
             {
-                { QuestionType.ExplanationChoice, 100f },
-                { QuestionType.SimularWordChoice, 1f },
+                { QuestionType.IdiomChain, 1f },
                 { QuestionType.TextPinyin, 1f },
                 { QuestionType.HardFill, 1f },
-                { QuestionType.SoftFill, 1f }
+                { QuestionType.SoftFill, 1f },
+                { QuestionType.SentimentTorF, 1f },
+                { QuestionType.SimularWordChoice, 1f },
+                { QuestionType.UsageTorF, 1f },
+                { QuestionType.ExplanationChoice, 1f },
             };
         }
 
@@ -814,7 +908,7 @@ namespace Core.Network
 
             gameInProgress = true;
 
-            // 关键修复：确保NQMC也启动多人游戏
+            // **关键修改：确保NQMC也启动多人游戏模式**
             if (NetworkQuestionManagerController.Instance != null)
             {
                 LogDebug("启动NQMC多人游戏模式");
@@ -843,6 +937,19 @@ namespace Core.Network
                 gameInProgress = false;
             }
         }
+        /// <summary>
+        /// 添加新的公共方法：场景切换完成后的初始化
+        /// </summary>
+        public void OnGameSceneLoaded()
+        {
+            LogDebug("游戏场景加载完成，启动游戏逻辑");
+
+            if (isInitialized && !gameInProgress)
+            {
+                // 延迟启动，确保所有组件都已就绪
+                Invoke(nameof(StartHostGame), 1f);
+            }
+        }
 
         /// <summary>
         /// 结束游戏
@@ -865,9 +972,23 @@ namespace Core.Network
         /// </summary>
         public void HandlePlayerAnswer(ushort playerId, string answer)
         {
-            if (!isInitialized || !gameInProgress || playerId != currentTurnPlayerId || currentQuestion == null)
+            if (!isInitialized || !gameInProgress || currentQuestion == null)
             {
-                LogDebug($"无效的答案提交: playerId={playerId}, currentTurn={currentTurnPlayerId}, gameInProgress={gameInProgress}, initialized={isInitialized}");
+                LogDebug($"无效的答案提交状态: initialized={isInitialized}, gameInProgress={gameInProgress}, hasQuestion={currentQuestion != null}");
+                return;
+            }
+
+            // **使用统一接口验证玩家身份**
+            if (!playerStates.ContainsKey(playerId))
+            {
+                LogDebug($"未知玩家提交答案: {playerId}");
+                return;
+            }
+
+            // 检查是否轮到当前玩家
+            if (playerId != currentTurnPlayerId)
+            {
+                LogDebug($"不是当前玩家的回合: 提交者={playerId}, 当前回合={currentTurnPlayerId}");
                 return;
             }
 
@@ -1180,7 +1301,38 @@ namespace Core.Network
                 StartCoroutine(InitializeHostManagerCoroutine());
             }
         }
+        public string GetGameStats()
+        {
+            var stats = "=== 游戏统计 ===\n";
+            stats += $"游戏状态: {(gameInProgress ? "进行中" : "未开始")}\n";
+            stats += $"初始化完成: {isInitialized}\n";
+            stats += $"当前回合玩家: {currentTurnPlayerId}\n";
+            stats += $"玩家数量: {playerStates?.Count ?? 0}\n";
 
+            if (NetworkManager.Instance != null)
+            {
+                stats += $"Host玩家ID: {NetworkManager.Instance.GetHostPlayerId()}\n";
+                stats += $"Host客户端就绪: {NetworkManager.Instance.IsHostClientReady}\n";
+            }
+
+            if (playerStates != null)
+            {
+                stats += "玩家状态:\n";
+                foreach (var player in playerStates.Values)
+                {
+                    stats += $"  - {player.playerName} (ID: {player.playerId}, 血量: {player.health}, 存活: {player.isAlive})\n";
+                }
+            }
+
+            if (RoomManager.Instance?.CurrentRoom != null)
+            {
+                var room = RoomManager.Instance.CurrentRoom;
+                stats += $"房间玩家数: {room.players.Count}\n";
+                stats += $"房间Host ID: {room.hostId}\n";
+            }
+
+            return stats;
+        }
         /// <summary>
         /// 手动同步房间数据（调试用）
         /// </summary>
@@ -1205,6 +1357,8 @@ namespace Core.Network
                    $"CurrentTurn: {currentTurnPlayerId}, " +
                    $"NetworkManager: {NetworkManager.Instance != null}, " +
                    $"IsHost: {NetworkManager.Instance?.IsHost}, " +
+                   $"HostPlayerId: {NetworkManager.Instance?.GetHostPlayerId()}, " +
+                   $"HostClientReady: {NetworkManager.Instance?.IsHostClientReady}, " +
                    $"QuestionDataService: {questionDataService != null}, " +
                    $"RoomManager: {RoomManager.Instance != null}, " +
                    $"CurrentRoom: {RoomManager.Instance?.CurrentRoom != null}";

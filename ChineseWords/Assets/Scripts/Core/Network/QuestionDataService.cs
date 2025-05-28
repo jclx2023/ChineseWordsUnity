@@ -127,8 +127,15 @@ namespace Core.Network
                 case QuestionType.SimularWordChoice:
                     var simManager = FindObjectOfType<GameLogic.Choice.SimularWordChoiceQuestionManager>();
                     return simManager as IQuestionDataProvider;
-
-                // 添加其他题型...
+                case QuestionType.IdiomChain:
+                    var idiomManager = FindObjectOfType<GameLogic.FillBlank.IdiomChainQuestionManager>();
+                    return idiomManager as IQuestionDataProvider;
+                case QuestionType.SentimentTorF:
+                    var sentimentManager = FindObjectOfType<GameLogic.TorF.SentimentTorFQuestionManager>();
+                    return sentimentManager as IQuestionDataProvider;
+                case QuestionType.UsageTorF:
+                    var usageManager = FindObjectOfType<GameLogic.TorF.UsageTorFQuestionManager>();
+                    return usageManager as IQuestionDataProvider;
                 default:
                     return null;
             }
@@ -185,7 +192,15 @@ namespace Core.Network
                     case QuestionType.SimularWordChoice:
                         manager = tempObj.AddComponent<GameLogic.Choice.SimularWordChoiceQuestionManager>();
                         break;
-                    // 添加其他题型...
+                    case QuestionType.IdiomChain:
+                        manager = tempObj.AddComponent<GameLogic.FillBlank.IdiomChainQuestionManager>();
+                        break;
+                    case QuestionType.SentimentTorF:
+                        manager = tempObj.AddComponent<GameLogic.TorF.SentimentTorFQuestionManager>();
+                        break;
+                    case QuestionType.UsageTorF:
+                        manager = tempObj.AddComponent<GameLogic.TorF.UsageTorFQuestionManager>();
+                        break;
                     default:
                         Destroy(tempObj);
                         LogDebug($"不支持的题目类型: {questionType}");

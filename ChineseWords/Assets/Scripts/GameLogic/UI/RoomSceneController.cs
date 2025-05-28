@@ -4,12 +4,14 @@ using UnityEngine.SceneManagement;
 using TMPro;
 using System.Collections.Generic;
 using Core.Network;
+using Core; // 添加这个引用
 
 namespace UI
 {
     /// <summary>
     /// 房间场景控制器
     /// 管理房间UI显示和用户交互
+    /// 现在作为场景切换的唯一执行者
     /// </summary>
     public class RoomSceneController : MonoBehaviour
     {
@@ -46,6 +48,7 @@ namespace UI
         // 状态管理
         private bool isInitialized = false;
         private float lastUIUpdateTime = 0f;
+        private bool hasHandledGameStart = false; // 防止重复处理游戏开始
 
         private void Start()
         {
@@ -120,11 +123,14 @@ namespace UI
             RoomManager.OnPlayerJoinedRoom += OnPlayerJoinedRoom;
             RoomManager.OnPlayerLeftRoom += OnPlayerLeftRoom;
             RoomManager.OnPlayerReadyChanged += OnPlayerReadyChanged;
-            RoomManager.OnGameStarting += OnGameStarting;
+            RoomManager.OnGameStarting += OnGameStarting; // 唯一的游戏开始处理点
             RoomManager.OnRoomLeft += OnRoomLeft;
 
             // 订阅网络事件
             NetworkManager.OnDisconnected += OnNetworkDisconnected;
+
+            // 订阅场景切换事件
+            SceneTransitionManager.OnSceneTransitionStarted += OnSceneTransitionStarted;
         }
 
         /// <summary>
@@ -141,6 +147,7 @@ namespace UI
             RoomManager.OnRoomLeft -= OnRoomLeft;
 
             NetworkManager.OnDisconnected -= OnNetworkDisconnected;
+            SceneTransitionManager.OnSceneTransitionStarted -= OnSceneTransitionStarted;
         }
 
         private void Update()
@@ -511,12 +518,24 @@ namespace UI
             }
         }
 
+        /// <summary>
+        /// 游戏开始事件处理 - 唯一的场景切换执行点
+        /// </summary>
         private void OnGameStarting()
         {
-            LogDebug("游戏开始");
+            // 防止重复处理
+            if (hasHandledGameStart)
+            {
+                LogDebug("游戏开始事件已处理，忽略重复调用");
+                return;
+            }
+
+            hasHandledGameStart = true;
+            LogDebug("收到游戏开始事件 - 开始场景切换流程");
+
             ShowLoadingPanel("游戏启动中，请稍候...");
 
-            // 触发HostGameManager开始游戏（仅Host调用）
+            // 触发HostGameManager开始游戏（仅Host端）
             if (RoomManager.Instance?.IsHost == true)
             {
                 if (HostGameManager.Instance != null)
@@ -530,21 +549,38 @@ namespace UI
                 }
             }
 
-            // 延迟切换场景，给玩家一些反应时间
-            Invoke(nameof(SwitchToGameScene), 2f);
+            // 执行场景切换 - 统一的切换点
+            bool switchSuccess = SceneTransitionManager.SwitchToGameScene("RoomSceneController");
+
+            if (!switchSuccess)
+            {
+                LogDebug("场景切换请求失败，可能已在切换中");
+                // 如果切换失败，重置处理标志
+                hasHandledGameStart = false;
+                HideLoadingPanel();
+            }
         }
 
         private void OnRoomLeft()
         {
             LogDebug("离开房间");
-            ReturnToMainMenu();
+            SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
         }
 
         private void OnNetworkDisconnected()
         {
             LogDebug("网络断开连接");
             ShowError("网络连接断开，将返回主菜单");
-            Invoke(nameof(ReturnToMainMenu), 3f);
+            Invoke(nameof(ReturnToMainMenuDelayed), 3f);
+        }
+
+        /// <summary>
+        /// 场景切换开始事件
+        /// </summary>
+        private void OnSceneTransitionStarted(string sceneName)
+        {
+            LogDebug($"场景切换开始: {sceneName}");
+            ShowLoadingPanel($"正在切换到 {sceneName}...");
         }
 
         #endregion
@@ -582,6 +618,8 @@ namespace UI
             }
 
             LogDebug("房主启动游戏");
+
+            // 统一通过RoomManager启动游戏
             RoomManager.Instance.StartGame();
         }
 
@@ -595,7 +633,7 @@ namespace UI
             if (RoomManager.Instance != null)
                 RoomManager.Instance.LeaveRoom();
 
-            ReturnToMainMenu();
+            SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
         }
 
         /// <summary>
@@ -618,26 +656,11 @@ namespace UI
         #region 场景控制
 
         /// <summary>
-        /// 切换到游戏场景
+        /// 延迟返回主菜单
         /// </summary>
-        private void SwitchToGameScene()
+        private void ReturnToMainMenuDelayed()
         {
-            LogDebug("切换到游戏场景");
-            SceneManager.LoadScene("NetworkGameScene");
-        }
-
-        /// <summary>
-        /// 返回主菜单
-        /// </summary>
-        private void ReturnToMainMenu()
-        {
-            LogDebug("返回主菜单");
-
-            // 清理网络连接
-            if (NetworkManager.Instance != null)
-                NetworkManager.Instance.Disconnect();
-
-            SceneManager.LoadScene("MainMenuScene");
+            SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
         }
 
         #endregion

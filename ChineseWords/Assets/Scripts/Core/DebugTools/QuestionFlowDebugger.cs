@@ -265,7 +265,11 @@ namespace Debugging
                 QuestionType.HardFill,
                 QuestionType.SoftFill,
                 QuestionType.TextPinyin,
-                QuestionType.SimularWordChoice
+                QuestionType.SimularWordChoice,
+                QuestionType.IdiomChain,
+                QuestionType.SentimentTorF,
+                QuestionType.UsageTorF,
+                
             };
 
             foreach (var questionType in testTypes)

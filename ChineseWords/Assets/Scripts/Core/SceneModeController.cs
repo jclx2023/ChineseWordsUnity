@@ -407,12 +407,29 @@ namespace Core
                         case MainMenuManager.GameMode.Client:
                             LogDebug("启动NQMC多人模式");
                             nqmc.StartGame(true);
+
+                            // **新增：通知HostGameManager场景已加载**
+                            if (gameMode == MainMenuManager.GameMode.Host && HostGameManager.Instance != null)
+                            {
+                                LogDebug("通知HostGameManager场景加载完成");
+                                HostGameManager.Instance.OnGameSceneLoaded();
+                            }
                             break;
                     }
                 }
                 else
                 {
                     LogDebug($"NQMC已启动 - 模式: {(nqmc.IsMultiplayerMode ? "多人" : "单机")}");
+
+                    // **新增：如果NQMC已启动但HostGameManager未启动游戏，则通知它**
+                    if (gameMode == MainMenuManager.GameMode.Host && HostGameManager.Instance != null)
+                    {
+                        if (!HostGameManager.Instance.IsGameInProgress)
+                        {
+                            LogDebug("NQMC已启动但Host游戏未开始，通知HostGameManager");
+                            HostGameManager.Instance.OnGameSceneLoaded();
+                        }
+                    }
                 }
             }
             else
