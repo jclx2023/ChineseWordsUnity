@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -11,28 +11,28 @@ using Managers;
 namespace GameLogic.FillBlank
 {
     /// <summary>
-    /// ³ÉÓï½ÓÁúÌâ¹ÜÀíÆ÷
-    /// - Ö§³Öµ¥»úºÍÍøÂçÄ£Ê½
-    /// - ÊµÏÖIQuestionDataProvider½Ó¿Ú£¬Ö§³ÖHost³éÌâ
-    /// - µ¥»úÄ£Ê½£º´ÓÔ¤¼ÓÔØµÄÊ×ÌâºòÑ¡ÖĞËæ»úÑ¡Ôñ£¬Íæ¼Ò½ÓÁú
-    /// - ÍøÂçÄ£Ê½£ºÊ¹ÓÃ·şÎñÆ÷Ìá¹©µÄÌâÄ¿Êı¾İ
-    /// - ¸ßÁÁÏÔÊ¾ĞèÒª½ÓÁúµÄ×Ö·û£¬Íæ¼ÒÊäÈëÏÂÒ»¸ö³ÉÓï
-    /// - ÑéÖ¤¿ªÍ·×Ö·ûºÍ³ÉÓï´æÔÚĞÔ
-    /// - ÌØÊâÂß¼­£º´ğ¶ÔºóÓÃ´ğ°¸×÷ÎªÏÂÒ»Ìâ¼ÌĞø½ÓÁú
+    /// æˆè¯­æ¥é¾™é¢˜ç®¡ç†å™¨
+    /// - æ”¯æŒå•æœºå’Œç½‘ç»œæ¨¡å¼
+    /// - å®ç°IQuestionDataProvideræ¥å£ï¼Œæ”¯æŒHostæŠ½é¢˜
+    /// - å•æœºæ¨¡å¼ï¼šä»é¢„åŠ è½½çš„é¦–é¢˜å€™é€‰ä¸­éšæœºé€‰æ‹©ï¼Œç©å®¶æ¥é¾™
+    /// - ç½‘ç»œæ¨¡å¼ï¼šä½¿ç”¨æœåŠ¡å™¨æä¾›çš„é¢˜ç›®æ•°æ®
+    /// - é«˜äº®æ˜¾ç¤ºéœ€è¦æ¥é¾™çš„å­—ç¬¦ï¼Œç©å®¶è¾“å…¥ä¸‹ä¸€ä¸ªæˆè¯­
+    /// - éªŒè¯å¼€å¤´å­—ç¬¦å’Œæˆè¯­å­˜åœ¨æ€§
+    /// - ç‰¹æ®Šé€»è¾‘ï¼šç­”å¯¹åç”¨ç­”æ¡ˆä½œä¸ºä¸‹ä¸€é¢˜ç»§ç»­æ¥é¾™
     /// </summary>
     public class IdiomChainQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
         private string dbPath;
 
-        [Header("UIÉèÖÃ")]
+        [Header("UIè®¾ç½®")]
         [SerializeField] private string uiPrefabPath = "Prefabs/InGame/HardFillUI";
 
-        [Header("µ¥»úÄ£Ê½ÅäÖÃ")]
-        [Header("³ÉÓïÆµÂÊÇø¼ä")]
+        [Header("å•æœºæ¨¡å¼é…ç½®")]
+        [Header("æˆè¯­é¢‘ç‡åŒºé—´")]
         [SerializeField] private int minFreq = 0;
         [SerializeField] private int maxFreq = 9;
 
-        [Header("UI×é¼şÒıÓÃ")]
+        [Header("UIç»„ä»¶å¼•ç”¨")]
         private TMP_Text questionText;
         private TMP_InputField answerInput;
         private Button submitButton;
@@ -40,163 +40,207 @@ namespace GameLogic.FillBlank
         private TMP_Text feedbackText;
         private TimerManager timerManager;
 
-        // »º´æÊ×ÌâºòÑ¡£¨µ¥»úÄ£Ê½£©
+        // ç¼“å­˜é¦–é¢˜å€™é€‰ï¼ˆå•æœºæ¨¡å¼ï¼‰
         private List<string> firstCandidates = new List<string>();
 
-        // µ±Ç°×´Ì¬
+        // å½“å‰çŠ¶æ€
         private string currentIdiom;
         private bool hasAnswered = false;
         private bool isGameInProgress = false;
 
-        // IQuestionDataProvider½Ó¿ÚÊµÏÖ
+        // IQuestionDataProvideræ¥å£å®ç°
         public QuestionType QuestionType => QuestionType.IdiomChain;
 
         protected override void Awake()
         {
-            base.Awake(); // µ÷ÓÃÍøÂç»ùÀà³õÊ¼»¯
+            base.Awake(); // è°ƒç”¨ç½‘ç»œåŸºç±»åˆå§‹åŒ–
             dbPath = Application.streamingAssetsPath + "/dictionary.db";
 
-            // Ô¤¼ÓÔØÊ×ÌâºòÑ¡£¨µ¥»úÄ£Ê½ÓÃ£©
+            // é¢„åŠ è½½é¦–é¢˜å€™é€‰ï¼ˆå•æœºæ¨¡å¼ç”¨ï¼‰
             LoadFirstCandidates();
         }
 
         private void Start()
         {
-            // ¼ì²éÊÇ·ñĞèÒªUI£¨Host³éÌâÄ£Ê½¿ÉÄÜ²»ĞèÒªUI£©
+            // æ£€æŸ¥æ˜¯å¦éœ€è¦UIï¼ˆHostæŠ½é¢˜æ¨¡å¼å¯èƒ½ä¸éœ€è¦UIï¼‰
             if (NeedsUI())
             {
                 InitializeUI();
             }
             else
             {
-                Debug.Log("[IdiomChain] Host³éÌâÄ£Ê½£¬Ìø¹ıUI³õÊ¼»¯");
+                Debug.Log("[IdiomChain] HostæŠ½é¢˜æ¨¡å¼ï¼Œè·³è¿‡UIåˆå§‹åŒ–");
             }
         }
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñĞèÒªUI
+        /// æ£€æŸ¥æ˜¯å¦éœ€è¦UI
         /// </summary>
         private bool NeedsUI()
         {
-            // Èç¹ûÊÇHostGameManagerµÄ×Ó¶ÔÏó£¬ËµÃ÷ÊÇÓÃÓÚ³éÌâµÄÁÙÊ±¹ÜÀíÆ÷£¬²»ĞèÒªUI
-            // »òÕßÈç¹ûÊÇQuestionDataServiceµÄ×Ó¶ÔÏó£¬Ò²²»ĞèÒªUI
+            // å¦‚æœæ˜¯HostGameManagerçš„å­å¯¹è±¡ï¼Œè¯´æ˜æ˜¯ç”¨äºæŠ½é¢˜çš„ä¸´æ—¶ç®¡ç†å™¨ï¼Œä¸éœ€è¦UI
+            // æˆ–è€…å¦‚æœæ˜¯QuestionDataServiceçš„å­å¯¹è±¡ï¼Œä¹Ÿä¸éœ€è¦UI
             return transform.parent == null ||
                    (transform.parent.GetComponent<HostGameManager>() == null &&
                     transform.parent.GetComponent<QuestionDataService>() == null);
         }
 
         /// <summary>
-        /// »ñÈ¡ÌâÄ¿Êı¾İ£¨IQuestionDataProvider½Ó¿ÚÊµÏÖ£©
-        /// ×¨ÃÅÎªHost³éÌâÊ¹ÓÃ£¬²»ÏÔÊ¾UI
+        /// è·å–é¢˜ç›®æ•°æ®ï¼ˆIQuestionDataProvideræ¥å£å®ç°ï¼‰
+        /// ä¸“é—¨ä¸ºHostæŠ½é¢˜ä½¿ç”¨ï¼Œä¸æ˜¾ç¤ºUI
+        /// </summary>
+        /// <summary>
+        /// è·å–é¢˜ç›®æ•°æ®ï¼ˆå¢å¼ºç‰ˆï¼Œæ”¯æŒæ˜¾ç¤ºæ ¼å¼ï¼‰
         /// </summary>
         public NetworkQuestionData GetQuestionData()
         {
-            Debug.Log("[IdiomChain] HostÇëÇó³éÌâÊı¾İ");
+            Debug.Log("[IdiomChain] Hostè¯·æ±‚æŠ½é¢˜æ•°æ®");
 
-            // Ëæ»úÑ¡ÔñÒ»¸öÊ×Ìâ³ÉÓï
             string selectedIdiom = GetRandomFirstIdiom();
-
             if (string.IsNullOrEmpty(selectedIdiom))
             {
-                Debug.LogWarning("[IdiomChain] Host³éÌâ£ºÃ»ÓĞ¿ÉÓÃµÄ³ÉÓïÌâÄ¿");
+                Debug.LogWarning("[IdiomChain] HostæŠ½é¢˜ï¼šæ²¡æœ‰å¯ç”¨çš„æˆè¯­é¢˜ç›®");
                 return null;
             }
 
-            // ´´½¨ÏÔÊ¾ÎÄ±¾£¨¸ßÁÁ×îºóÒ»¸ö×Ö£©
-            string displayText = CreateDisplayText(selectedIdiom);
+            // åˆ›å»ºåŸºç¡€æ˜¾ç¤ºæ–‡æœ¬
+            string basicDisplayText = CreateDisplayText(selectedIdiom);
 
-            // ´´½¨¸½¼ÓÊı¾İ
+            // åˆ›å»ºå¢å¼ºæ˜¾ç¤ºæ–‡æœ¬ï¼ˆé¦–é¢˜ï¼ŒchainCount = 0ï¼‰
+            string enhancedDisplayText = CreateEnhancedIdiomChainText(basicDisplayText, 0, null);
+
             var additionalData = new IdiomChainAdditionalData
             {
-                displayText = displayText,
+                displayText = enhancedDisplayText,
                 currentIdiom = selectedIdiom,
                 targetChar = selectedIdiom[selectedIdiom.Length - 1]
             };
 
-            // ´´½¨ÍøÂçÌâÄ¿Êı¾İ
             var questionData = new NetworkQuestionData
             {
                 questionType = QuestionType.IdiomChain,
-                questionText = displayText,
-                correctAnswer = selectedIdiom, // µ±Ç°³ÉÓï×÷Îª»ù×¼
-                options = new string[0], // ³ÉÓï½ÓÁú²»ĞèÒªÑ¡Ïî
-                timeLimit = 30f,
-                additionalData = JsonUtility.ToJson(additionalData)
-            };
-
-            Debug.Log($"[IdiomChain] Host³éÌâ³É¹¦: {selectedIdiom} -> {displayText}");
-            return questionData;
-        }
-
-        /// <summary>
-        /// ´´½¨³ÉÓï½ÓÁúµÄÌØÊâÌâÄ¿£¨ÓÃÓÚ´ğ¶ÔºóµÄÁ¬Ğø½ÓÁú£©
-        /// </summary>
-        /// <param name="baseIdiom">»ù×¼³ÉÓï£¨Íæ¼Ò¸Õ»Ø´ğµÄ³ÉÓï£©</param>
-        /// <returns>ĞÂµÄÌâÄ¿Êı¾İ</returns>
-        public NetworkQuestionData CreateContinuationQuestion(string baseIdiom)
-        {
-            Debug.Log($"[IdiomChain] ´´½¨Á¬Ğø½ÓÁúÌâÄ¿£¬»ùÓÚ: {baseIdiom}");
-
-            if (string.IsNullOrEmpty(baseIdiom))
-                return null;
-
-            // ´´½¨ÏÔÊ¾ÎÄ±¾£¨¸ßÁÁ×îºóÒ»¸ö×Ö£©
-            string displayText = CreateDisplayText(baseIdiom);
-
-            // ´´½¨¸½¼ÓÊı¾İ
-            var additionalData = new IdiomChainAdditionalData
-            {
-                displayText = displayText,
-                currentIdiom = baseIdiom,
-                targetChar = baseIdiom[baseIdiom.Length - 1]
-            };
-
-            // ´´½¨ÍøÂçÌâÄ¿Êı¾İ
-            var questionData = new NetworkQuestionData
-            {
-                questionType = QuestionType.IdiomChain,
-                questionText = displayText,
-                correctAnswer = baseIdiom, // µ±Ç°³ÉÓï×÷Îª»ù×¼
+                questionText = enhancedDisplayText, // ä½¿ç”¨å¢å¼ºåçš„æ–‡æœ¬
+                correctAnswer = "",
                 options = new string[0],
                 timeLimit = 30f,
                 additionalData = JsonUtility.ToJson(additionalData)
             };
 
-            Debug.Log($"[IdiomChain] Á¬Ğø½ÓÁúÌâÄ¿´´½¨³É¹¦: {baseIdiom} -> {displayText}");
+            Debug.Log($"[IdiomChain] HostæŠ½é¢˜æˆåŠŸ: {selectedIdiom}");
             return questionData;
         }
 
         /// <summary>
-        /// ´´½¨ÏÔÊ¾ÎÄ±¾£¨¸ßÁÁ×îºóÒ»¸ö×Ö£©
+        /// åˆ›å»ºæˆè¯­æ¥é¾™çš„ç‰¹æ®Šé¢˜ç›®ï¼ˆç”¨äºç­”å¯¹åçš„è¿ç»­æ¥é¾™ï¼‰
+        /// </summary>
+        public NetworkQuestionData CreateContinuationQuestion(string baseIdiom, int chainCount = 0, string previousIdiom = null)
+        {
+            Debug.Log($"[IdiomChain] åˆ›å»ºè¿ç»­æ¥é¾™é¢˜ç›®ï¼ŒåŸºäº: {baseIdiom}, ç¬¬{chainCount + 1}ä¸ª");
+
+            if (string.IsNullOrEmpty(baseIdiom))
+                return null;
+
+            // åˆ›å»ºåŸºç¡€æ˜¾ç¤ºæ–‡æœ¬ï¼ˆé«˜äº®æœ€åä¸€ä¸ªå­—ï¼‰
+            string basicDisplayText = CreateDisplayText(baseIdiom);
+
+            // åˆ›å»ºå¢å¼ºçš„æ˜¾ç¤ºæ–‡æœ¬ï¼ˆåŒ…å«æ¥é¾™ä¿¡æ¯ï¼‰
+            string enhancedDisplayText = CreateEnhancedIdiomChainText(basicDisplayText, chainCount, previousIdiom);
+
+            // åˆ›å»ºé™„åŠ æ•°æ®
+            var additionalData = new IdiomChainAdditionalData
+            {
+                displayText = enhancedDisplayText,
+                currentIdiom = baseIdiom,
+                targetChar = baseIdiom[baseIdiom.Length - 1]
+            };
+
+            // åˆ›å»ºç½‘ç»œé¢˜ç›®æ•°æ®
+            var questionData = new NetworkQuestionData
+            {
+                questionType = QuestionType.IdiomChain,
+                questionText = enhancedDisplayText, // ç›´æ¥ä½¿ç”¨å¢å¼ºåçš„æ–‡æœ¬
+                correctAnswer = "", // æˆè¯­æ¥é¾™æ²¡æœ‰å›ºå®šç­”æ¡ˆ
+                options = new string[0],
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(additionalData)
+            };
+
+            Debug.Log($"[IdiomChain] è¿ç»­æ¥é¾™é¢˜ç›®åˆ›å»ºæˆåŠŸ: {baseIdiom}");
+            return questionData;
+        }
+
+        /// <summary>
+        /// é‡è½½åŸæœ‰æ–¹æ³•ä»¥ä¿æŒå…¼å®¹æ€§
+        /// </summary>
+        public NetworkQuestionData CreateContinuationQuestion(string baseIdiom)
+        {
+            return CreateContinuationQuestion(baseIdiom, 0, null);
+        }
+
+        /// <summary>
+        /// åˆ›å»ºå¢å¼ºçš„æˆè¯­æ¥é¾™æ˜¾ç¤ºæ–‡æœ¬
+        /// </summary>
+        private string CreateEnhancedIdiomChainText(string basicText, int chainCount, string previousIdiom)
+        {
+            if (string.IsNullOrEmpty(basicText))
+                return "<color=orange><b>æˆè¯­æ¥é¾™</b></color>\næˆè¯­æ¥é¾™é¢˜ç›®";
+
+            string enhanced = "<color=orange><b>æˆè¯­æ¥é¾™</b></color>\n";
+
+            if (chainCount == 0)
+            {
+                enhanced += "<color=green>å¼€å§‹æ¥é¾™ï¼</color>\n";
+            }
+            else
+            {
+                enhanced += $"<color=green>æ¥é¾™ç¬¬ {chainCount + 1} ä¸ª</color>\n";
+                if (!string.IsNullOrEmpty(previousIdiom))
+                {
+                    enhanced += $"<color=yellow>ä¸Šä¸€ä¸ª: {previousIdiom}</color>\n";
+                }
+            }
+
+            enhanced += $"\n{basicText}";
+
+            if (chainCount == 0)
+            {
+                enhanced += "\n\n<size=10><color=gray>ç”¨æœ€åä¸€å­—å¼€å¤´æ¥é¾™</color></size>";
+            }
+
+            return enhanced;
+        }
+
+        /// <summary>
+        /// åˆ›å»ºæ˜¾ç¤ºæ–‡æœ¬ï¼ˆé«˜äº®æœ€åä¸€ä¸ªå­—ï¼‰
         /// </summary>
         private string CreateDisplayText(string idiom)
         {
             if (string.IsNullOrEmpty(idiom))
                 return "";
 
-            // ¸ßÁÁ×îºóÒ»¸ö×Ö
+            // é«˜äº®æœ€åä¸€ä¸ªå­—
             char lastChar = idiom[idiom.Length - 1];
             return idiom.Substring(0, idiom.Length - 1) + $"<color=red>{lastChar}</color>";
         }
 
         /// <summary>
-        /// Ëæ»ú»ñÈ¡Ê×Ìâ³ÉÓï
+        /// éšæœºè·å–é¦–é¢˜æˆè¯­
         /// </summary>
         private string GetRandomFirstIdiom()
         {
             if (firstCandidates.Count == 0)
             {
-                Debug.LogError("[IdiomChain] Ê×ÌâºòÑ¡ÁĞ±íÎª¿Õ");
+                Debug.LogError("[IdiomChain] é¦–é¢˜å€™é€‰åˆ—è¡¨ä¸ºç©º");
                 return null;
             }
 
-            // Ëæ»úÑ¡Ôñ£¨²»ÒÆ³ı£¬ÒòÎªHost¶Ë¿ÉÄÜĞèÒª¶à´Î³éÌâ£©
+            // éšæœºé€‰æ‹©ï¼ˆä¸ç§»é™¤ï¼Œå› ä¸ºHostç«¯å¯èƒ½éœ€è¦å¤šæ¬¡æŠ½é¢˜ï¼‰
             int index = Random.Range(0, firstCandidates.Count);
             return firstCandidates[index];
         }
 
         /// <summary>
-        /// Ô¤¼ÓÔØÊ×ÌâºòÑ¡³ÉÓï
+        /// é¢„åŠ è½½é¦–é¢˜å€™é€‰æˆè¯­
         /// </summary>
         private void LoadFirstCandidates()
         {
@@ -232,38 +276,38 @@ namespace GameLogic.FillBlank
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"¼ÓÔØÊ×ÌâºòÑ¡Ê§°Ü: {e.Message}");
+                Debug.LogError($"åŠ è½½é¦–é¢˜å€™é€‰å¤±è´¥: {e.Message}");
             }
 
             if (firstCandidates.Count == 0)
             {
-                Debug.LogError("Ê×ÌâºòÑ¡ÁĞ±íÎª¿Õ£¬³ÉÓï½ÓÁú¿ÉÄÜÎŞ·¨Õı³£¹¤×÷");
+                Debug.LogError("é¦–é¢˜å€™é€‰åˆ—è¡¨ä¸ºç©ºï¼Œæˆè¯­æ¥é¾™å¯èƒ½æ— æ³•æ­£å¸¸å·¥ä½œ");
             }
             else
             {
-                Debug.Log($"ÒÑ¼ÓÔØ {firstCandidates.Count} ¸öÊ×ÌâºòÑ¡³ÉÓï");
+                Debug.Log($"å·²åŠ è½½ {firstCandidates.Count} ä¸ªé¦–é¢˜å€™é€‰æˆè¯­");
             }
         }
 
         /// <summary>
-        /// ³õÊ¼»¯UI×é¼ş
+        /// åˆå§‹åŒ–UIç»„ä»¶
         /// </summary>
         private void InitializeUI()
         {
             if (UIManager.Instance == null)
             {
-                Debug.LogError("[IdiomChain] UIManagerÊµÀı²»´æÔÚ");
+                Debug.LogError("[IdiomChain] UIManagerå®ä¾‹ä¸å­˜åœ¨");
                 return;
             }
 
             var ui = UIManager.Instance.LoadUI(uiPrefabPath);
             if (ui == null)
             {
-                Debug.LogError($"[IdiomChain] ÎŞ·¨¼ÓÔØUIÔ¤ÖÆÌå: {uiPrefabPath}");
+                Debug.LogError($"[IdiomChain] æ— æ³•åŠ è½½UIé¢„åˆ¶ä½“: {uiPrefabPath}");
                 return;
             }
 
-            // »ñÈ¡UI×é¼ş
+            // è·å–UIç»„ä»¶
             questionText = ui.Find("QuestionText")?.GetComponent<TMP_Text>();
             answerInput = ui.Find("AnswerInput")?.GetComponent<TMP_InputField>();
             submitButton = ui.Find("SubmitButton")?.GetComponent<Button>();
@@ -273,48 +317,48 @@ namespace GameLogic.FillBlank
             if (questionText == null || answerInput == null || submitButton == null ||
                 surrenderButton == null || feedbackText == null)
             {
-                Debug.LogError("[IdiomChain] UI×é¼ş»ñÈ¡Ê§°Ü£¬¼ì²éÔ¤ÖÆÌå½á¹¹");
+                Debug.LogError("[IdiomChain] UIç»„ä»¶è·å–å¤±è´¥ï¼Œæ£€æŸ¥é¢„åˆ¶ä½“ç»“æ„");
                 return;
             }
 
-            // »ñÈ¡¼ÆÊ±Æ÷¹ÜÀíÆ÷
+            // è·å–è®¡æ—¶å™¨ç®¡ç†å™¨
             timerManager = GetComponent<TimerManager>();
 
-            // °ó¶¨°´Å¥ÊÂ¼ş
+            // ç»‘å®šæŒ‰é’®äº‹ä»¶
             submitButton.onClick.RemoveAllListeners();
             submitButton.onClick.AddListener(OnSubmit);
 
             surrenderButton.onClick.RemoveAllListeners();
             surrenderButton.onClick.AddListener(OnSurrender);
 
-            // °ó¶¨ÊäÈë¿ò»Ø³µÊÂ¼ş
+            // ç»‘å®šè¾“å…¥æ¡†å›è½¦äº‹ä»¶
             answerInput.onSubmit.RemoveAllListeners();
             answerInput.onSubmit.AddListener(OnInputSubmit);
 
             feedbackText.text = string.Empty;
 
-            Debug.Log("[IdiomChain] UI³õÊ¼»¯Íê³É");
+            Debug.Log("[IdiomChain] UIåˆå§‹åŒ–å®Œæˆ");
         }
 
         /// <summary>
-        /// ¼ÓÔØ±¾µØÌâÄ¿£¨µ¥»úÄ£Ê½£©
+        /// åŠ è½½æœ¬åœ°é¢˜ç›®ï¼ˆå•æœºæ¨¡å¼ï¼‰
         /// </summary>
         protected override void LoadLocalQuestion()
         {
-            Debug.Log("[IdiomChain] ¼ÓÔØ±¾µØÌâÄ¿");
+            Debug.Log("[IdiomChain] åŠ è½½æœ¬åœ°é¢˜ç›®");
 
-            // Ê¹ÓÃGetQuestionData()·½·¨¸´ÓÃ³éÌâÂß¼­
+            // ä½¿ç”¨GetQuestionData()æ–¹æ³•å¤ç”¨æŠ½é¢˜é€»è¾‘
             var questionData = GetQuestionData();
             if (questionData == null)
             {
-                DisplayErrorMessage("Ã»ÓĞ¿ÉÓÃµÄ³ÉÓïÌâÄ¿");
+                DisplayErrorMessage("æ²¡æœ‰å¯ç”¨çš„æˆè¯­é¢˜ç›®");
                 return;
             }
 
-            // ½âÎöÌâÄ¿Êı¾İ
+            // è§£æé¢˜ç›®æ•°æ®
             currentIdiom = questionData.correctAnswer;
 
-            // ´Ó¸½¼ÓÊı¾İÖĞ»ñÈ¡ÏÔÊ¾ĞÅÏ¢
+            // ä»é™„åŠ æ•°æ®ä¸­è·å–æ˜¾ç¤ºä¿¡æ¯
             if (!string.IsNullOrEmpty(questionData.additionalData))
             {
                 try
@@ -324,7 +368,7 @@ namespace GameLogic.FillBlank
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogWarning($"½âÎö¸½¼ÓÊı¾İÊ§°Ü: {e.Message}");
+                    Debug.LogWarning($"è§£æé™„åŠ æ•°æ®å¤±è´¥: {e.Message}");
                     ShowQuestion(currentIdiom);
                 }
             }
@@ -337,59 +381,109 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ¼ÓÔØÍøÂçÌâÄ¿£¨ÍøÂçÄ£Ê½£©
+        /// åŠ è½½ç½‘ç»œé¢˜ç›®ï¼ˆç½‘ç»œæ¨¡å¼ï¼‰
         /// </summary>
         protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
         {
-            Debug.Log("[IdiomChain] ¼ÓÔØÍøÂçÌâÄ¿");
+            Debug.Log("[IdiomChain] åŠ è½½ç½‘ç»œé¢˜ç›®");
 
             if (networkData == null)
             {
-                Debug.LogError("[IdiomChain] ÍøÂçÌâÄ¿Êı¾İÎª¿Õ");
-                DisplayErrorMessage("ÍøÂçÌâÄ¿Êı¾İ´íÎó");
+                Debug.LogError("[IdiomChain] ç½‘ç»œé¢˜ç›®æ•°æ®ä¸ºç©º");
+                DisplayErrorMessage("ç½‘ç»œé¢˜ç›®æ•°æ®é”™è¯¯");
                 return;
             }
 
             if (networkData.questionType != QuestionType.IdiomChain)
             {
-                Debug.LogError($"[IdiomChain] ÌâÄ¿ÀàĞÍ²»Æ¥Åä: ÆÚÍû{QuestionType.IdiomChain}, Êµ¼Ê{networkData.questionType}");
-                DisplayErrorMessage("ÌâÄ¿ÀàĞÍ´íÎó");
+                Debug.LogError($"[IdiomChain] é¢˜ç›®ç±»å‹ä¸åŒ¹é…: æœŸæœ›{QuestionType.IdiomChain}, å®é™…{networkData.questionType}");
+                DisplayErrorMessage("é¢˜ç›®ç±»å‹é”™è¯¯");
                 return;
             }
-
-            // Ê¹ÓÃÍøÂçÌá¹©µÄ³ÉÓï
-            currentIdiom = networkData.correctAnswer;
             isGameInProgress = true;
-
-            // Èç¹ûÓĞÌØÊâÏÔÊ¾¸ñÊ½£¬´ÓadditionalDataÖĞ»ñÈ¡
+            hasAnswered = false;
             if (!string.IsNullOrEmpty(networkData.additionalData))
             {
                 try
                 {
                     var additionalInfo = JsonUtility.FromJson<IdiomChainAdditionalData>(networkData.additionalData);
+                    currentIdiom = additionalInfo.currentIdiom;
+
                     if (!string.IsNullOrEmpty(additionalInfo.displayText))
                     {
-                        DisplayQuestionDirect(additionalInfo.displayText);
+                        Debug.Log("[IdiomChain] ä½¿ç”¨additionalDataä¸­çš„æ˜¾ç¤ºæ–‡æœ¬");
+                        string enhancedText = EnhanceIdiomChainDisplayText(additionalInfo.displayText);
+                        DisplayQuestionDirect(enhancedText);
                         return;
                     }
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogWarning($"½âÎöÍøÂç¸½¼ÓÊı¾İÊ§°Ü: {e.Message}");
+                    Debug.LogWarning($"è§£æç½‘ç»œé™„åŠ æ•°æ®å¤±è´¥: {e.Message}");
                 }
             }
+            currentIdiom = ExtractIdiomFromDisplayText(networkData.questionText);
+            Debug.Log("[IdiomChain] ä½¿ç”¨å¤‡ç”¨æ˜¾ç¤ºæ–¹æ¡ˆ");
+            ShowEnhancedQuestion(currentIdiom);
+        }
+        private string ExtractIdiomFromDisplayText(string displayText)
+        {
+            if (string.IsNullOrEmpty(displayText))
+                return "";
+            string cleanText = System.Text.RegularExpressions.Regex.Replace(displayText, "<.*?>", "");
+            var matches = System.Text.RegularExpressions.Regex.Matches(cleanText, @"[\u4e00-\u9fa5]{4}");
 
-            ShowQuestion(currentIdiom);
+            return matches.Count > 0 ? matches[0].Value : "";
+        }
+        /// <summary>
+        /// å¢å¼ºæˆè¯­æ¥é¾™æ˜¾ç¤ºæ–‡æœ¬
+        /// </summary>
+        private string EnhanceIdiomChainDisplayText(string originalText)
+        {
+            if (string.IsNullOrEmpty(originalText))
+                return "<color=orange><b>æˆè¯­æ¥é¾™</b></color>\næˆè¯­æ¥é¾™é¢˜ç›®åŠ è½½å¤±è´¥";
+
+            // å¦‚æœå·²ç»åŒ…å«æˆè¯­æ¥é¾™æ ‡è¯†ï¼Œç›´æ¥è¿”å›
+            if (originalText.Contains("æˆè¯­æ¥é¾™"))
+                return originalText;
+
+            // ä¸ºåŸå§‹æ–‡æœ¬æ·»åŠ æˆè¯­æ¥é¾™æ ‡è¯†
+            string enhanced = "<color=orange><b>æˆè¯­æ¥é¾™</b></color>\n";
+            enhanced += "<color=green>è¯·å®Œæˆæ¥é¾™ï¼š</color>\n\n";
+            enhanced += originalText;
+            enhanced += "\n\n<size=10><color=gray>ğŸ’¡ è§„åˆ™ï¼šç”¨å‰ä¸€ä¸ªæˆè¯­çš„æœ€åä¸€ä¸ªå­—å¼€å¤´</color></size>";
+
+            return enhanced;
         }
 
         /// <summary>
-        /// ÏÔÊ¾ÌâÄ¿£¨¸ßÁÁ×îºóÒ»¸ö×Ö£©
+        /// æ˜¾ç¤ºå¢å¼ºç‰ˆæˆè¯­é¢˜ç›®ï¼ˆå¤‡ç”¨æ–¹æ¡ˆï¼‰
+        /// </summary>
+        private void ShowEnhancedQuestion(string idiom)
+        {
+            if (string.IsNullOrEmpty(idiom))
+            {
+                DisplayErrorMessage("æˆè¯­æ•°æ®é”™è¯¯");
+                return;
+            }
+
+            hasAnswered = false;
+
+            // åˆ›å»ºå¢å¼ºçš„æ˜¾ç¤ºæ–‡æœ¬
+            string displayText = CreateDisplayText(idiom); // åŸæœ‰çš„æ˜¾ç¤ºé€»è¾‘
+            string enhancedText = EnhanceIdiomChainDisplayText(displayText);
+
+            DisplayQuestionDirect(enhancedText);
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºé¢˜ç›®ï¼ˆé«˜äº®æœ€åä¸€ä¸ªå­—ï¼‰
         /// </summary>
         private void ShowQuestion(string idiom)
         {
             if (string.IsNullOrEmpty(idiom))
             {
-                DisplayErrorMessage("³ÉÓïÊı¾İ´íÎó");
+                DisplayErrorMessage("æˆè¯­æ•°æ®é”™è¯¯");
                 return;
             }
 
@@ -399,7 +493,7 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// Ö±½ÓÏÔÊ¾ÌâÄ¿ÎÄ±¾£¨ÓÃÓÚÍøÂçÄ£Ê½µÄÔ¤¸ñÊ½»¯ÎÄ±¾£©
+        /// ç›´æ¥æ˜¾ç¤ºé¢˜ç›®æ–‡æœ¬ï¼ˆç”¨äºç½‘ç»œæ¨¡å¼çš„é¢„æ ¼å¼åŒ–æ–‡æœ¬ï¼‰
         /// </summary>
         private void DisplayQuestionDirect(string displayText)
         {
@@ -407,19 +501,19 @@ namespace GameLogic.FillBlank
             answerInput.text = string.Empty;
             feedbackText.text = string.Empty;
 
-            // ÆôÓÃ½»»¥
+            // å¯ç”¨äº¤äº’
             answerInput.interactable = true;
             submitButton.interactable = true;
             surrenderButton.interactable = true;
 
-            // ¼¤»îÊäÈë¿ò
+            // æ¿€æ´»è¾“å…¥æ¡†
             answerInput.ActivateInputField();
 
-            Debug.Log($"[IdiomChain] ÌâÄ¿ÏÔÊ¾Íê³É: {displayText}");
+            Debug.Log($"[IdiomChain] é¢˜ç›®æ˜¾ç¤ºå®Œæˆ: {displayText}");
         }
 
         /// <summary>
-        /// ÏÔÊ¾´íÎóĞÅÏ¢
+        /// æ˜¾ç¤ºé”™è¯¯ä¿¡æ¯
         /// </summary>
         private void DisplayErrorMessage(string message)
         {
@@ -447,22 +541,22 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ¼ì²é±¾µØ´ğ°¸£¨µ¥»úÄ£Ê½£©
+        /// æ£€æŸ¥æœ¬åœ°ç­”æ¡ˆï¼ˆå•æœºæ¨¡å¼ï¼‰
         /// </summary>
         protected override void CheckLocalAnswer(string answer)
         {
-            Debug.Log($"[IdiomChain] ¼ì²é±¾µØ´ğ°¸: {answer}");
+            Debug.Log($"[IdiomChain] æ£€æŸ¥æœ¬åœ°ç­”æ¡ˆ: {answer}");
 
             bool isCorrect = ValidateIdiomChain(answer);
 
             if (isCorrect)
             {
-                // µ¥»úÄ£Ê½ÏÂ¼ÌĞø½ÓÁú
+                // å•æœºæ¨¡å¼ä¸‹ç»§ç»­æ¥é¾™
                 currentIdiom = answer;
-                feedbackText.text = "»Ø´ğÕıÈ·£¡¼ÌĞø½ÓÁú...";
+                feedbackText.text = "å›ç­”æ­£ç¡®ï¼ç»§ç»­æ¥é¾™...";
                 feedbackText.color = Color.green;
 
-                // ÖØÆô¼ÆÊ±Æ÷²¢ÏÔÊ¾ÏÂÒ»Ìâ
+                // é‡å¯è®¡æ—¶å™¨å¹¶æ˜¾ç¤ºä¸‹ä¸€é¢˜
                 if (timerManager != null)
                 {
                     timerManager.StopTimer();
@@ -473,7 +567,7 @@ namespace GameLogic.FillBlank
             }
             else
             {
-                // ´ğ´íÁË£¬ÓÎÏ·½áÊø
+                // ç­”é”™äº†ï¼Œæ¸¸æˆç»“æŸ
                 feedbackText.text = GetValidationErrorMessage(answer);
                 feedbackText.color = Color.red;
 
@@ -482,23 +576,38 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ÑéÖ¤³ÉÓï½ÓÁú´ğ°¸
+        /// éªŒè¯æˆè¯­æ¥é¾™ç­”æ¡ˆ
         /// </summary>
-        private bool ValidateIdiomChain(string answer)
+        public bool ValidateIdiomChain(string answer)
         {
             if (string.IsNullOrEmpty(answer) || string.IsNullOrEmpty(currentIdiom))
                 return false;
 
-            // 1. ¼ì²é¿ªÍ·×Ö·ûÊÇ·ñÕıÈ·
+            // 1. æ£€æŸ¥å¼€å¤´å­—ç¬¦æ˜¯å¦æ­£ç¡®
             if (answer[0] != currentIdiom[currentIdiom.Length - 1])
                 return false;
 
-            // 2. ¼ì²é³ÉÓïÊÇ·ñ´æÔÚÓÚ´Ê¿âÖĞ
+            // 2. æ£€æŸ¥æˆè¯­æ˜¯å¦å­˜åœ¨äºè¯åº“ä¸­
+            return IsIdiomInDatabase(answer);
+        }
+        /// <summary>
+        /// éªŒè¯æˆè¯­æ¥é¾™ç­”æ¡ˆï¼ˆæ–°å¢é‡è½½æ–¹æ³•ï¼Œä¾›Hostç«¯è°ƒç”¨ï¼‰
+        /// </summary>
+        public bool ValidateIdiomChain(string answer, string baseIdiom)
+        {
+            if (string.IsNullOrEmpty(answer) || string.IsNullOrEmpty(baseIdiom))
+                return false;
+
+            // 1. æ£€æŸ¥å¼€å¤´å­—ç¬¦æ˜¯å¦æ­£ç¡®
+            if (answer[0] != baseIdiom[baseIdiom.Length - 1])
+                return false;
+
+            // 2. æ£€æŸ¥æˆè¯­æ˜¯å¦å­˜åœ¨äºè¯åº“ä¸­
             return IsIdiomInDatabase(answer);
         }
 
         /// <summary>
-        /// ¼ì²é³ÉÓïÊÇ·ñÔÚÊı¾İ¿âÖĞ
+        /// æ£€æŸ¥æˆè¯­æ˜¯å¦åœ¨æ•°æ®åº“ä¸­
         /// </summary>
         private bool IsIdiomInDatabase(string idiom)
         {
@@ -524,30 +633,30 @@ namespace GameLogic.FillBlank
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"Êı¾İ¿â²éÑ¯Ê§°Ü: {e.Message}");
+                Debug.LogError($"æ•°æ®åº“æŸ¥è¯¢å¤±è´¥: {e.Message}");
                 return false;
             }
         }
 
         /// <summary>
-        /// »ñÈ¡ÑéÖ¤´íÎóĞÅÏ¢
+        /// è·å–éªŒè¯é”™è¯¯ä¿¡æ¯
         /// </summary>
         private string GetValidationErrorMessage(string answer)
         {
             if (string.IsNullOrEmpty(answer))
-                return "´ğ°¸²»ÄÜÎª¿Õ£¡";
+                return "ç­”æ¡ˆä¸èƒ½ä¸ºç©ºï¼";
 
             if (string.IsNullOrEmpty(currentIdiom))
-                return "ÌâÄ¿Êı¾İ´íÎó£¡";
+                return "é¢˜ç›®æ•°æ®é”™è¯¯ï¼";
 
             if (answer[0] != currentIdiom[currentIdiom.Length - 1])
-                return $"¿ªÍ·´íÎó£¡Ó¦ÒÔ'{currentIdiom[currentIdiom.Length - 1]}'¿ªÍ·";
+                return $"å¼€å¤´é”™è¯¯ï¼åº”ä»¥'{currentIdiom[currentIdiom.Length - 1]}'å¼€å¤´";
 
-            return "´Ê¿âÖĞÎŞ´Ë³ÉÓï£¡";
+            return "è¯åº“ä¸­æ— æ­¤æˆè¯­ï¼";
         }
 
         /// <summary>
-        /// ÏÔÊ¾ÏÂÒ»Ìâ£¨µ¥»úÄ£Ê½Á¬Ğø½ÓÁú£©
+        /// æ˜¾ç¤ºä¸‹ä¸€é¢˜ï¼ˆå•æœºæ¨¡å¼è¿ç»­æ¥é¾™ï¼‰
         /// </summary>
         private void ShowNextQuestion()
         {
@@ -558,7 +667,7 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// Ìá½»°´Å¥µã»÷
+        /// æäº¤æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnSubmit()
         {
@@ -573,7 +682,7 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ÊäÈë¿ò»Ø³µÌá½»
+        /// è¾“å…¥æ¡†å›è½¦æäº¤
         /// </summary>
         private void OnInputSubmit(string value)
         {
@@ -584,25 +693,25 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// Í¶½µ°´Å¥µã»÷
+        /// æŠ•é™æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnSurrender()
         {
             if (hasAnswered || !isGameInProgress)
                 return;
 
-            Debug.Log("[IdiomChain] Íæ¼ÒÍ¶½µ");
+            Debug.Log("[IdiomChain] ç©å®¶æŠ•é™");
 
             StopAllCoroutines();
             isGameInProgress = false;
-            feedbackText.text = "ÒÑÍ¶½µ£¡";
+            feedbackText.text = "å·²æŠ•é™ï¼";
             feedbackText.color = Color.yellow;
 
             OnAnswerResult?.Invoke(false);
         }
 
         /// <summary>
-        /// Ìá½»´ğ°¸
+        /// æäº¤ç­”æ¡ˆ
         /// </summary>
         private void SubmitAnswer(string answer)
         {
@@ -611,12 +720,12 @@ namespace GameLogic.FillBlank
 
             hasAnswered = true;
 
-            // ½ûÓÃ½»»¥
+            // ç¦ç”¨äº¤äº’
             answerInput.interactable = false;
             submitButton.interactable = false;
             surrenderButton.interactable = false;
 
-            Debug.Log($"[IdiomChain] Ìá½»´ğ°¸: '{answer}'");
+            Debug.Log($"[IdiomChain] æäº¤ç­”æ¡ˆ: '{answer}'");
 
             if (IsNetworkMode())
             {
@@ -629,29 +738,29 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ´¦ÀíÍøÂçÄ£Ê½´ğ°¸
+        /// å¤„ç†ç½‘ç»œæ¨¡å¼ç­”æ¡ˆ
         /// </summary>
         private void HandleNetworkAnswer(string answer)
         {
-            Debug.Log($"[IdiomChain] ÍøÂçÄ£Ê½Ìá½»´ğ°¸: {answer}");
+            Debug.Log($"[IdiomChain] ç½‘ç»œæ¨¡å¼æäº¤ç­”æ¡ˆ: {answer}");
 
-            // ÏÔÊ¾Ìá½»×´Ì¬
-            feedbackText.text = "ÒÑÌá½»´ğ°¸£¬µÈ´ı·şÎñÆ÷½á¹û...";
+            // æ˜¾ç¤ºæäº¤çŠ¶æ€
+            feedbackText.text = "å·²æäº¤ç­”æ¡ˆï¼Œç­‰å¾…æœåŠ¡å™¨ç»“æœ...";
             feedbackText.color = Color.yellow;
 
-            // Ìá½»´ğ°¸µ½·şÎñÆ÷
+            // æäº¤ç­”æ¡ˆåˆ°æœåŠ¡å™¨
             if (NetworkManager.Instance != null)
             {
                 NetworkManager.Instance.SubmitAnswer(answer);
             }
             else
             {
-                Debug.LogError("[IdiomChain] NetworkManagerÊµÀı²»´æÔÚ£¬ÎŞ·¨Ìá½»´ğ°¸");
+                Debug.LogError("[IdiomChain] NetworkManagerå®ä¾‹ä¸å­˜åœ¨ï¼Œæ— æ³•æäº¤ç­”æ¡ˆ");
             }
         }
 
         /// <summary>
-        /// ´¦Àíµ¥»úÄ£Ê½´ğ°¸
+        /// å¤„ç†å•æœºæ¨¡å¼ç­”æ¡ˆ
         /// </summary>
         private void HandleLocalAnswer(string answer)
         {
@@ -659,36 +768,36 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ÏÔÊ¾·´À¡ĞÅÏ¢²¢Í¨Öª½á¹û
+        /// æ˜¾ç¤ºåé¦ˆä¿¡æ¯å¹¶é€šçŸ¥ç»“æœ
         /// </summary>
         private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
         {
-            // µÈ´ıÒ»¶ÎÊ±¼äÏÔÊ¾·´À¡
+            // ç­‰å¾…ä¸€æ®µæ—¶é—´æ˜¾ç¤ºåé¦ˆ
             yield return new WaitForSeconds(1.5f);
 
-            // Í¨Öª´ğÌâ½á¹û
+            // é€šçŸ¥ç­”é¢˜ç»“æœ
             OnAnswerResult?.Invoke(isCorrect);
 
             isGameInProgress = false;
         }
 
         /// <summary>
-        /// ÏÔÊ¾ÍøÂç´ğÌâ½á¹û£¨ÓÉÍøÂçÏµÍ³µ÷ÓÃ£©
+        /// æ˜¾ç¤ºç½‘ç»œç­”é¢˜ç»“æœï¼ˆç”±ç½‘ç»œç³»ç»Ÿè°ƒç”¨ï¼‰
         /// </summary>
         public void ShowNetworkResult(bool isCorrect, string correctAnswer)
         {
-            Debug.Log($"[IdiomChain] ÊÕµ½ÍøÂç½á¹û: {(isCorrect ? "ÕıÈ·" : "´íÎó")}");
+            Debug.Log($"[IdiomChain] æ”¶åˆ°ç½‘ç»œç»“æœ: {(isCorrect ? "æ­£ç¡®" : "é”™è¯¯")}");
 
             isGameInProgress = false;
 
             if (isCorrect)
             {
-                feedbackText.text = "»Ø´ğÕıÈ·£¡";
+                feedbackText.text = "å›ç­”æ­£ç¡®ï¼";
                 feedbackText.color = Color.green;
             }
             else
             {
-                feedbackText.text = $"»Ø´ğ´íÎó£¬ÕıÈ·´ğ°¸Ê¾Àı£º{correctAnswer}";
+                feedbackText.text = $"å›ç­”é”™è¯¯ï¼Œæ­£ç¡®ç­”æ¡ˆç¤ºä¾‹ï¼š{correctAnswer}";
                 feedbackText.color = Color.red;
             }
 
@@ -696,11 +805,11 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// ÇåÀí×ÊÔ´
+        /// æ¸…ç†èµ„æº
         /// </summary>
         private void OnDestroy()
         {
-            // ÇåÀíÊÂ¼ş¼àÌı
+            // æ¸…ç†äº‹ä»¶ç›‘å¬
             if (submitButton != null)
                 submitButton.onClick.RemoveAllListeners();
             if (surrenderButton != null)
@@ -711,13 +820,13 @@ namespace GameLogic.FillBlank
     }
 
     /// <summary>
-    /// ³ÉÓï½ÓÁú¸½¼ÓÊı¾İ½á¹¹£¨ÓÃÓÚÍøÂç´«Êä£©
+    /// æˆè¯­æ¥é¾™é™„åŠ æ•°æ®ç»“æ„ï¼ˆç”¨äºç½‘ç»œä¼ è¾“ï¼‰
     /// </summary>
     [System.Serializable]
     public class IdiomChainAdditionalData
     {
-        public string displayText;      // Ô¤¸ñÊ½»¯µÄÏÔÊ¾ÎÄ±¾
-        public string currentIdiom;     // µ±Ç°³ÉÓï
-        public char targetChar;         // ĞèÒª½ÓÁúµÄ×Ö·û
+        public string displayText;      // é¢„æ ¼å¼åŒ–çš„æ˜¾ç¤ºæ–‡æœ¬
+        public string currentIdiom;     // å½“å‰æˆè¯­
+        public char targetChar;         // éœ€è¦æ¥é¾™çš„å­—ç¬¦
     }
 }

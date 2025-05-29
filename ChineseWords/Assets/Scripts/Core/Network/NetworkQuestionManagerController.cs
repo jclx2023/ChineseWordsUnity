@@ -39,14 +39,7 @@ namespace Core.Network
         // 题目类型权重（重置用于供Host使用）
         public Dictionary<QuestionType, float> TypeWeights = new Dictionary<QuestionType, float>()
         {
-            { QuestionType.IdiomChain, 1f },
-            { QuestionType.TextPinyin, 1f },
-            { QuestionType.HardFill, 1f },
-            { QuestionType.SoftFill, 1f },
-            { QuestionType.SentimentTorF, 1f },
-            { QuestionType.SimularWordChoice, 1f },
-            { QuestionType.UsageTorF, 1f },
-            { QuestionType.ExplanationChoice, 1f },
+
         };
 
         // 事件
@@ -498,19 +491,30 @@ namespace Core.Network
         /// </summary>
         private QuestionType SelectRandomTypeByWeight()
         {
-            var typeWeights = TypeWeights;
-            float total = typeWeights.Values.Sum();
-            float r = Random.Range(0, total);
-            float acc = 0f;
-
-            foreach (var pair in typeWeights)
+            // 优先使用新的权重管理器
+            try
             {
-                acc += pair.Value;
-                if (r <= acc)
-                    return pair.Key;
+                return QuestionWeightManager.SelectRandomQuestionType();
             }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"权重管理器选择失败，使用旧版逻辑: {e.Message}");
 
-            return typeWeights.Keys.First();
+                // 回退到旧的权重逻辑
+                var typeWeights = TypeWeights;
+                float total = typeWeights.Values.Sum();
+                float r = Random.Range(0, total);
+                float acc = 0f;
+
+                foreach (var pair in typeWeights)
+                {
+                    acc += pair.Value;
+                    if (r <= acc)
+                        return pair.Key;
+                }
+
+                return typeWeights.Keys.First();
+            }
         }
 
         #endregion

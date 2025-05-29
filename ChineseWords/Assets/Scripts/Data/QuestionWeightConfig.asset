@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b75142020b8cedc4ca5ed9d01149a412, type: 3}
+  m_Name: QuestionWeightConfig
+  m_EditorClassIdentifier: 
+  questionWeights:
+  - questionType: 1
+    weight: 1
+    enabled: 1
+  - questionType: 2
+    weight: 1
+    enabled: 1
+  - questionType: 3
+    weight: 1
+    enabled: 1
+  - questionType: 4
+    weight: 1
+    enabled: 1
+  - questionType: 6
+    weight: 1
+    enabled: 1
+  - questionType: 7
+    weight: 1
+    enabled: 1
+  - questionType: 8
+    weight: 1
+    enabled: 1
+  - questionType: 9
+    weight: 1
+    enabled: 1
+  showDebugLogs: 0

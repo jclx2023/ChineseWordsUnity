@@ -1,54 +1,66 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using Riptide;
 using Core.Network;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UI;
+using GameLogic.FillBlank; 
 
 namespace Core.Network
 {
     /// <summary>
-    /// ĞŞ¸´ÍøÂçÍ¬²½ÎÊÌâµÄHostÓÎÏ·¹ÜÀíÆ÷
-    /// Ö÷ÒªĞŞ¸´£º1. ´Ó·¿¼äÏµÍ³ÕıÈ·Í¬²½Íæ¼ÒÊı¾İ 2. ¼ò»¯ÓÎÏ·¿ªÊ¼Âß¼­
+    /// ä¿®å¤ç½‘ç»œåŒæ­¥é—®é¢˜çš„Hostæ¸¸æˆç®¡ç†å™¨
+    /// ä¸»è¦ä¿®å¤ï¼š1. ä»æˆ¿é—´ç³»ç»Ÿæ­£ç¡®åŒæ­¥ç©å®¶æ•°æ® 2. ç®€åŒ–æ¸¸æˆå¼€å§‹é€»è¾‘
     /// </summary>
     public class HostGameManager : MonoBehaviour
     {
-        [Header("ÓÎÏ·ÅäÖÃ")]
+        [Header("æ¸¸æˆé…ç½®")]
         [SerializeField] private float questionTimeLimit = 30f;
         [SerializeField] private int initialPlayerHealth = 100;
         [SerializeField] private int damagePerWrongAnswer = 20;
         [SerializeField] private bool autoStartGame = true;
 
-        [Header("Ë«²ã¼Ü¹¹ÉèÖÃ")]
+        [Header("åŒå±‚æ¶æ„è®¾ç½®")]
         [SerializeField] private bool isDualLayerArchitecture = true;
-        [SerializeField] private bool isServerLayerOnly = false; // ÊÇ·ñÖ»×÷Îª·şÎñÆ÷²ãÔËĞĞ
+        [SerializeField] private bool isServerLayerOnly = false; // æ˜¯å¦åªä½œä¸ºæœåŠ¡å™¨å±‚è¿è¡Œ
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // Ë«²ã¼Ü¹¹Ïà¹Ø
-        private NetworkManager serverNetworkManager;    // ID=0, ´¿·şÎñÆ÷
-        private NetworkManager playerHostNetworkManager; // ID=1, Íæ¼ÒHost
+        [Header("é¢˜ç›®é…ç½®")]
+        [SerializeField] private QuestionWeightConfig questionWeightConfig;
+
+        [Header("æˆè¯­æ¥é¾™è®¾ç½®")]
+        [SerializeField] private bool enableIdiomChain = true;
+
+        private bool isIdiomChainActive = false;
+        private string currentIdiomChainWord = null;
+        private int idiomChainCount = 0;
+        private const int MAX_IDIOM_CHAIN = 10;
+
+        // åŒå±‚æ¶æ„ç›¸å…³
+        private NetworkManager serverNetworkManager;    // ID=0, çº¯æœåŠ¡å™¨
+        private NetworkManager playerHostNetworkManager; // ID=1, ç©å®¶Host
 
         public static HostGameManager Instance { get; private set; }
 
-        // ³õÊ¼»¯×´Ì¬
+        // åˆå§‹åŒ–çŠ¶æ€
         private bool isInitialized = false;
         private bool isWaitingForNetworkManager = false;
 
-        // ÓÎÏ·×´Ì¬
+        // æ¸¸æˆçŠ¶æ€
         private Dictionary<ushort, PlayerGameState> playerStates;
         private ushort currentTurnPlayerId;
         private bool gameInProgress;
         private NetworkQuestionData currentQuestion;
         private float gameStartDelay = 2f;
 
-        // ÌâÄ¿Ïà¹Ø - ÏÖÔÚÊ¹ÓÃ·şÎñ¶ø²»ÊÇÖ±½Ó¹ÜÀí
+        // é¢˜ç›®ç›¸å…³ - ç°åœ¨ä½¿ç”¨æœåŠ¡è€Œä¸æ˜¯ç›´æ¥ç®¡ç†
         private QuestionDataService questionDataService;
         private NetworkQuestionManagerController questionController;
 
-        // ÊôĞÔ
+        // å±æ€§
         public bool IsGameInProgress => gameInProgress;
         public int PlayerCount => playerStates?.Count ?? 0;
         public ushort CurrentTurnPlayer => currentTurnPlayerId;
@@ -56,66 +68,66 @@ namespace Core.Network
 
         private void Awake()
         {
-            LogDebug($"Awake Ö´ĞĞÊ±¼ä: {Time.time}");
+            LogDebug($"Awake æ‰§è¡Œæ—¶é—´: {Time.time}");
 
             if (Instance == null)
             {
                 Instance = this;
-                LogDebug("HostGameManager µ¥ÀıÒÑ´´½¨");
+                LogDebug("HostGameManager å•ä¾‹å·²åˆ›å»º");
             }
             else
             {
-                LogDebug("Ïú»ÙÖØ¸´µÄHostGameManagerÊµÀı");
+                LogDebug("é”€æ¯é‡å¤çš„HostGameManagerå®ä¾‹");
                 Destroy(gameObject);
                 return;
             }
 
-            // ¼ì²éÊÇ·ñÎªË«²ã¼Ü¹¹
+            // æ£€æŸ¥æ˜¯å¦ä¸ºåŒå±‚æ¶æ„
             CheckDualLayerArchitecture();
         }
 
         /// <summary>
-        /// ¼ì²éË«²ã¼Ü¹¹ÅäÖÃ
+        /// æ£€æŸ¥åŒå±‚æ¶æ„é…ç½®
         /// </summary>
         private void CheckDualLayerArchitecture()
         {
             if (!isDualLayerArchitecture)
             {
-                LogDebug("Ê¹ÓÃ´«Í³µ¥²ã¼Ü¹¹");
+                LogDebug("ä½¿ç”¨ä¼ ç»Ÿå•å±‚æ¶æ„");
                 return;
             }
 
-            // ¼ì²éµ±Ç°ÊÇ·ñÎª·şÎñÆ÷²ã
+            // æ£€æŸ¥å½“å‰æ˜¯å¦ä¸ºæœåŠ¡å™¨å±‚
             var serverMarker = GetComponent<ServerLayerMarker>();
             var playerHostMarker = GetComponent<PlayerHostLayerMarker>();
 
             if (serverMarker != null)
             {
                 isServerLayerOnly = true;
-                LogDebug("µ±Ç°HostGameManagerÔËĞĞÔÚ·şÎñÆ÷²ã (ID=0)");
+                LogDebug("å½“å‰HostGameManagerè¿è¡Œåœ¨æœåŠ¡å™¨å±‚ (ID=0)");
             }
             else if (playerHostMarker != null)
             {
                 isServerLayerOnly = false;
-                LogDebug("µ±Ç°HostGameManagerÔËĞĞÔÚÍæ¼ÒHost²ã (ID=1)");
+                LogDebug("å½“å‰HostGameManagerè¿è¡Œåœ¨ç©å®¶Hostå±‚ (ID=1)");
             }
             else
             {
-                // ³¢ÊÔÍ¨¹ıNetworkManagerÅĞ¶Ï
+                // å°è¯•é€šè¿‡NetworkManageråˆ¤æ–­
                 var localNetworkManager = GetComponentInParent<NetworkManager>() ?? FindObjectOfType<NetworkManager>();
                 if (localNetworkManager != null)
                 {
                     isServerLayerOnly = (localNetworkManager.ClientId == 0);
-                    LogDebug($"Í¨¹ıNetworkManager ClientIdÅĞ¶Ï²ã¼¶: {(isServerLayerOnly ? "·şÎñÆ÷²ã" : "Íæ¼Ò²ã")}");
+                    LogDebug($"é€šè¿‡NetworkManager ClientIdåˆ¤æ–­å±‚çº§: {(isServerLayerOnly ? "æœåŠ¡å™¨å±‚" : "ç©å®¶å±‚")}");
                 }
             }
 
-            // ²éÕÒË«²ã¼Ü¹¹ÖĞµÄNetworkManagerÊµÀı
+            // æŸ¥æ‰¾åŒå±‚æ¶æ„ä¸­çš„NetworkManagerå®ä¾‹
             FindDualLayerNetworkManagers();
         }
 
         /// <summary>
-        /// ²éÕÒË«²ã¼Ü¹¹ÖĞµÄNetworkManagerÊµÀı
+        /// æŸ¥æ‰¾åŒå±‚æ¶æ„ä¸­çš„NetworkManagerå®ä¾‹
         /// </summary>
         private void FindDualLayerNetworkManagers()
         {
@@ -126,63 +138,63 @@ namespace Core.Network
                 if (nm.ClientId == 0)
                 {
                     serverNetworkManager = nm;
-                    LogDebug($"ÕÒµ½·şÎñÆ÷²ãNetworkManager: ClientId={nm.ClientId}");
+                    LogDebug($"æ‰¾åˆ°æœåŠ¡å™¨å±‚NetworkManager: ClientId={nm.ClientId}");
                 }
                 else if (nm.ClientId == 1)
                 {
                     playerHostNetworkManager = nm;
-                    LogDebug($"ÕÒµ½Íæ¼ÒHost²ãNetworkManager: ClientId={nm.ClientId}");
+                    LogDebug($"æ‰¾åˆ°ç©å®¶Hostå±‚NetworkManager: ClientId={nm.ClientId}");
                 }
             }
 
             if (isDualLayerArchitecture)
             {
-                LogDebug($"Ë«²ã¼Ü¹¹×´Ì¬ - ·şÎñÆ÷²ã: {serverNetworkManager != null}, Íæ¼ÒHost²ã: {playerHostNetworkManager != null}");
+                LogDebug($"åŒå±‚æ¶æ„çŠ¶æ€ - æœåŠ¡å™¨å±‚: {serverNetworkManager != null}, ç©å®¶Hostå±‚: {playerHostNetworkManager != null}");
             }
         }
 
         private void Start()
         {
-            LogDebug($"[HostGameManager]Start Ö´ĞĞÊ±¼ä: {Time.time}");
+            LogDebug($"[HostGameManager]Start æ‰§è¡Œæ—¶é—´: {Time.time}");
 
-            // ¼ì²éÊÇ·ñÓ¦¸Ã¼¤»î£¨Ö»ÔÚÈ·¶¨µÄÓÎÏ·Ä£Ê½ÏÂ£©
+            // æ£€æŸ¥æ˜¯å¦åº”è¯¥æ¿€æ´»ï¼ˆåªåœ¨ç¡®å®šçš„æ¸¸æˆæ¨¡å¼ä¸‹ï¼‰
             if (MainMenuManager.SelectedGameMode != MainMenuManager.GameMode.Host)
             {
-                LogDebug($"µ±Ç°ÓÎÏ·Ä£Ê½: {MainMenuManager.SelectedGameMode}£¬·ÇHostÄ£Ê½£¬½ûÓÃHostGameManager");
+                LogDebug($"å½“å‰æ¸¸æˆæ¨¡å¼: {MainMenuManager.SelectedGameMode}ï¼ŒéHostæ¨¡å¼ï¼Œç¦ç”¨HostGameManager");
                 this.enabled = false;
                 return;
             }
 
-            // ¿ªÊ¼³õÊ¼»¯Á÷³Ì
+            // å¼€å§‹åˆå§‹åŒ–æµç¨‹
             StartCoroutine(InitializeHostManagerCoroutine());
         }
 
         /// <summary>
-        /// ³õÊ¼»¯Ö÷»ú¹ÜÀíÆ÷µÄĞ­³Ì
+        /// åˆå§‹åŒ–ä¸»æœºç®¡ç†å™¨çš„åç¨‹
         /// </summary>
         private IEnumerator InitializeHostManagerCoroutine()
         {
-            LogDebug("¿ªÊ¼³õÊ¼»¯HostGameManager");
+            LogDebug("å¼€å§‹åˆå§‹åŒ–HostGameManager");
 
-            // 1. µÈ´ı NetworkManager ×¼±¸¾ÍĞ÷
+            // 1. ç­‰å¾… NetworkManager å‡†å¤‡å°±ç»ª
             yield return StartCoroutine(WaitForNetworkManager());
 
-            // 2. ¼ì²éÍøÂç×´Ì¬²¢¶©ÔÄÊÂ¼ş
+            // 2. æ£€æŸ¥ç½‘ç»œçŠ¶æ€å¹¶è®¢é˜…äº‹ä»¶
             yield return StartCoroutine(CheckNetworkStatusAndSubscribe());
 
-            LogDebug("HostGameManager ³õÊ¼»¯Á÷³ÌÍê³É");
+            LogDebug("HostGameManager åˆå§‹åŒ–æµç¨‹å®Œæˆ");
         }
 
         /// <summary>
-        /// µÈ´ı NetworkManager ÊµÀı×¼±¸¾ÍĞ÷
+        /// ç­‰å¾… NetworkManager å®ä¾‹å‡†å¤‡å°±ç»ª
         /// </summary>
         private IEnumerator WaitForNetworkManager()
         {
-            LogDebug("µÈ´ı NetworkManager ÊµÀı×¼±¸¾ÍĞ÷...");
+            LogDebug("ç­‰å¾… NetworkManager å®ä¾‹å‡†å¤‡å°±ç»ª...");
             isWaitingForNetworkManager = true;
 
             int waitFrames = 0;
-            const int maxWaitFrames = 300; // 5Ãë³¬Ê±£¨60fps£©
+            const int maxWaitFrames = 300; // 5ç§’è¶…æ—¶ï¼ˆ60fpsï¼‰
 
             while (NetworkManager.Instance == null && waitFrames < maxWaitFrames)
             {
@@ -194,40 +206,40 @@ namespace Core.Network
 
             if (NetworkManager.Instance == null)
             {
-                Debug.LogError("[HostGameManager] µÈ´ı NetworkManager ³¬Ê±£¬½ûÓÃ HostGameManager");
+                Debug.LogError("[HostGameManager] ç­‰å¾… NetworkManager è¶…æ—¶ï¼Œç¦ç”¨ HostGameManager");
                 this.enabled = false;
                 yield break;
             }
 
-            LogDebug($"NetworkManager ÊµÀıÒÑ×¼±¸¾ÍĞ÷£¬µÈ´ıÁË {waitFrames} Ö¡");
+            LogDebug($"NetworkManager å®ä¾‹å·²å‡†å¤‡å°±ç»ªï¼Œç­‰å¾…äº† {waitFrames} å¸§");
         }
 
         /// <summary>
-        /// ¼ì²éÍøÂç×´Ì¬²¢¶©ÔÄÏà¹ØÊÂ¼ş
+        /// æ£€æŸ¥ç½‘ç»œçŠ¶æ€å¹¶è®¢é˜…ç›¸å…³äº‹ä»¶
         /// </summary>
         private IEnumerator CheckNetworkStatusAndSubscribe()
         {
-            LogDebug($"NetworkManager ×´Ì¬¼ì²é - IsHost: {NetworkManager.Instance.IsHost}, IsConnected: {NetworkManager.Instance.IsConnected}");
+            LogDebug($"NetworkManager çŠ¶æ€æ£€æŸ¥ - IsHost: {NetworkManager.Instance.IsHost}, IsConnected: {NetworkManager.Instance.IsConnected}");
 
             if (NetworkManager.Instance.IsHost)
             {
-                // ÒÑ¾­ÊÇÖ÷»ú£¬Ö±½Ó³õÊ¼»¯
-                LogDebug("¼ì²âµ½ÒÑÊÇHostÄ£Ê½£¬Á¢¼´³õÊ¼»¯");
+                // å·²ç»æ˜¯ä¸»æœºï¼Œç›´æ¥åˆå§‹åŒ–
+                LogDebug("æ£€æµ‹åˆ°å·²æ˜¯Hostæ¨¡å¼ï¼Œç«‹å³åˆå§‹åŒ–");
                 yield return StartCoroutine(InitializeHostGameCoroutine());
             }
             else
             {
-                // »¹²»ÊÇÖ÷»ú£¬¶©ÔÄÖ÷»úÆô¶¯ÊÂ¼ş
-                LogDebug("µÈ´ıÖ÷»úÆô¶¯ÊÂ¼ş...");
+                // è¿˜ä¸æ˜¯ä¸»æœºï¼Œè®¢é˜…ä¸»æœºå¯åŠ¨äº‹ä»¶
+                LogDebug("ç­‰å¾…ä¸»æœºå¯åŠ¨äº‹ä»¶...");
                 SubscribeToNetworkEvents();
 
-                // ÉèÖÃ³¬Ê±¼ì²é
+                // è®¾ç½®è¶…æ—¶æ£€æŸ¥
                 StartCoroutine(HostStartTimeoutCheck());
             }
         }
 
         /// <summary>
-        /// ¶©ÔÄÍøÂçÊÂ¼ş
+        /// è®¢é˜…ç½‘ç»œäº‹ä»¶
         /// </summary>
         private void SubscribeToNetworkEvents()
         {
@@ -236,12 +248,12 @@ namespace Core.Network
                 NetworkManager.OnHostStarted += OnHostStarted;
                 NetworkManager.OnPlayerJoined += OnPlayerJoined;
                 NetworkManager.OnPlayerLeft += OnPlayerLeft;
-                LogDebug("ÒÑ¶©ÔÄÍøÂçÊÂ¼ş");
+                LogDebug("å·²è®¢é˜…ç½‘ç»œäº‹ä»¶");
             }
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄÍøÂçÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…ç½‘ç»œäº‹ä»¶
         /// </summary>
         private void UnsubscribeFromNetworkEvents()
         {
@@ -250,30 +262,30 @@ namespace Core.Network
                 NetworkManager.OnHostStarted -= OnHostStarted;
                 NetworkManager.OnPlayerJoined -= OnPlayerJoined;
                 NetworkManager.OnPlayerLeft -= OnPlayerLeft;
-                LogDebug("ÒÑÈ¡Ïû¶©ÔÄÍøÂçÊÂ¼ş");
+                LogDebug("å·²å–æ¶ˆè®¢é˜…ç½‘ç»œäº‹ä»¶");
             }
         }
 
         /// <summary>
-        /// Ö÷»úÆô¶¯³¬Ê±¼ì²é
+        /// ä¸»æœºå¯åŠ¨è¶…æ—¶æ£€æŸ¥
         /// </summary>
         private IEnumerator HostStartTimeoutCheck()
         {
-            yield return new WaitForSeconds(10f); // 10Ãë³¬Ê±
+            yield return new WaitForSeconds(10f); // 10ç§’è¶…æ—¶
 
             if (!isInitialized && this.enabled)
             {
-                Debug.LogWarning("[HostGameManager] Ö÷»úÆô¶¯³¬Ê±£¬¿ÉÄÜ²»ÊÇHostÄ£Ê½£¬½ûÓÃHostGameManager");
+                Debug.LogWarning("[HostGameManager] ä¸»æœºå¯åŠ¨è¶…æ—¶ï¼Œå¯èƒ½ä¸æ˜¯Hostæ¨¡å¼ï¼Œç¦ç”¨HostGameManager");
                 this.enabled = false;
             }
         }
 
         /// <summary>
-        /// Ö÷»úÆô¶¯ÊÂ¼ş´¦Àí
+        /// ä¸»æœºå¯åŠ¨äº‹ä»¶å¤„ç†
         /// </summary>
         private void OnHostStarted()
         {
-            LogDebug("ÊÕµ½Ö÷»úÆô¶¯ÊÂ¼ş");
+            LogDebug("æ”¶åˆ°ä¸»æœºå¯åŠ¨äº‹ä»¶");
 
             if (!isInitialized)
             {
@@ -282,279 +294,279 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ³õÊ¼»¯Ö÷»úÓÎÏ·µÄĞ­³Ì£¨ĞŞ¸´ÖØ¸´·¿Ö÷ÎÊÌâ£©
+        /// åˆå§‹åŒ–ä¸»æœºæ¸¸æˆçš„åç¨‹ï¼ˆä¿®å¤é‡å¤æˆ¿ä¸»é—®é¢˜ï¼‰
         /// </summary>
         private IEnumerator InitializeHostGameCoroutine()
         {
             if (isInitialized)
             {
-                LogDebug("HostGameManager ÒÑ¾­³õÊ¼»¯£¬Ìø¹ıÖØ¸´³õÊ¼»¯");
+                LogDebug("HostGameManager å·²ç»åˆå§‹åŒ–ï¼Œè·³è¿‡é‡å¤åˆå§‹åŒ–");
                 yield break;
             }
 
-            LogDebug("¿ªÊ¼³õÊ¼»¯Ö÷»úÓÎÏ·Âß¼­");
+            LogDebug("å¼€å§‹åˆå§‹åŒ–ä¸»æœºæ¸¸æˆé€»è¾‘");
 
-            // ³õÊ¼»¯ÓÎÏ·×´Ì¬
+            // åˆå§‹åŒ–æ¸¸æˆçŠ¶æ€
             playerStates = new Dictionary<ushort, PlayerGameState>();
             gameInProgress = false;
             currentQuestion = null;
 
-            // ³õÊ¼»¯·şÎñÒÀÀµ
+            // åˆå§‹åŒ–æœåŠ¡ä¾èµ–
             yield return StartCoroutine(InitializeServices());
 
             if (questionDataService == null)
             {
-                Debug.LogError("[HostGameManager] QuestionDataService ³õÊ¼»¯Ê§°Ü");
+                Debug.LogError("[HostGameManager] QuestionDataService åˆå§‹åŒ–å¤±è´¥");
                 this.enabled = false;
                 yield break;
             }
 
-            // ¼ÇÂ¼NetworkManagerµÄµ±Ç°×´Ì¬
+            // è®°å½•NetworkManagerçš„å½“å‰çŠ¶æ€
             if (NetworkManager.Instance != null)
             {
-                LogDebug($"NetworkManager×´Ì¬ - ClientId: {NetworkManager.Instance.ClientId}, IsHost: {NetworkManager.Instance.IsHost}, IsConnected: {NetworkManager.Instance.IsConnected}");
+                LogDebug($"NetworkManagerçŠ¶æ€ - ClientId: {NetworkManager.Instance.ClientId}, IsHost: {NetworkManager.Instance.IsHost}, IsConnected: {NetworkManager.Instance.IsConnected}");
             }
 
-            // ¹Ø¼üĞŞ¸´£º´Ó·¿¼äÏµÍ³Í¬²½Íæ¼ÒÊı¾İ
+            // å…³é”®ä¿®å¤ï¼šä»æˆ¿é—´ç³»ç»ŸåŒæ­¥ç©å®¶æ•°æ®
             SyncPlayersFromRoomSystem();
 
-            // ±ê¼ÇÎªÒÑ³õÊ¼»¯£¨ÔÚÍ¬²½Íæ¼ÒºóÁ¢¼´±ê¼Ç£¬±ÜÃâÍøÂçÊÂ¼şÖØ¸´Ìí¼Ó£©
+            // æ ‡è®°ä¸ºå·²åˆå§‹åŒ–ï¼ˆåœ¨åŒæ­¥ç©å®¶åç«‹å³æ ‡è®°ï¼Œé¿å…ç½‘ç»œäº‹ä»¶é‡å¤æ·»åŠ ï¼‰
             isInitialized = true;
-            LogDebug($"Ö÷»úÓÎÏ·³õÊ¼»¯Íê³É£¬µ±Ç°Íæ¼ÒÊı: {playerStates.Count}");
+            LogDebug($"ä¸»æœºæ¸¸æˆåˆå§‹åŒ–å®Œæˆï¼Œå½“å‰ç©å®¶æ•°: {playerStates.Count}");
 
-            // ĞŞ¸´£ºÍêÈ«ÒÆ³ı×Ô¶¯Ìí¼ÓHostµÄÂß¼­
-            // ·¿¼äÏµÍ³ÒÑ¾­´¦ÀíÁËËùÓĞÍæ¼ÒÊı¾İ£¬²»ĞèÒª¶îÍâÌí¼Ó
-            LogDebug("Ìø¹ıHost×Ô¶¯Ìí¼Ó£¬ÍêÈ«ÒÀÀµ·¿¼äÊı¾İ");
+            // ä¿®å¤ï¼šå®Œå…¨ç§»é™¤è‡ªåŠ¨æ·»åŠ Hostçš„é€»è¾‘
+            // æˆ¿é—´ç³»ç»Ÿå·²ç»å¤„ç†äº†æ‰€æœ‰ç©å®¶æ•°æ®ï¼Œä¸éœ€è¦é¢å¤–æ·»åŠ 
+            LogDebug("è·³è¿‡Hostè‡ªåŠ¨æ·»åŠ ï¼Œå®Œå…¨ä¾èµ–æˆ¿é—´æ•°æ®");
 
-            // ÑéÖ¤·¿Ö÷ÊıÁ¿
+            // éªŒè¯æˆ¿ä¸»æ•°é‡
             ValidateHostCount();
 
-            // ¼ò»¯¿ªÊ¼Âß¼­£º´Ó·¿¼äÀ´µÄ¾ÍÖ±½Ó¿ªÊ¼
+            // ç®€åŒ–å¼€å§‹é€»è¾‘ï¼šä»æˆ¿é—´æ¥çš„å°±ç›´æ¥å¼€å§‹
             if (autoStartGame && playerStates.Count > 0)
             {
-                LogDebug("´Ó·¿¼äÏµÍ³½øÈë£¬Ö±½Ó¿ªÊ¼ÓÎÏ·");
+                LogDebug("ä»æˆ¿é—´ç³»ç»Ÿè¿›å…¥ï¼Œç›´æ¥å¼€å§‹æ¸¸æˆ");
                 Invoke(nameof(StartHostGame), gameStartDelay);
             }
         }
 
         /// <summary>
-        /// ´Ó·¿¼äÏµÍ³Í¬²½Íæ¼ÒÊı¾İ£¨ĞŞ¸´ÖØ¸´·¿Ö÷ÎÊÌâ£©
+        /// ä»æˆ¿é—´ç³»ç»ŸåŒæ­¥ç©å®¶æ•°æ®ï¼ˆä¿®å¤é‡å¤æˆ¿ä¸»é—®é¢˜ï¼‰
         /// </summary>
         private void SyncPlayersFromRoomSystem()
         {
-            LogDebug("Í¬²½·¿¼äÏµÍ³Íæ¼ÒÊı¾İ");
+            LogDebug("åŒæ­¥æˆ¿é—´ç³»ç»Ÿç©å®¶æ•°æ®");
 
-            // Çå¿ÕÏÖÓĞÍæ¼Ò×´Ì¬£¬±ÜÃâÖØ¸´
+            // æ¸…ç©ºç°æœ‰ç©å®¶çŠ¶æ€ï¼Œé¿å…é‡å¤
             playerStates.Clear();
 
-            // ·½·¨1£º´ÓRoomManager»ñÈ¡
+            // æ–¹æ³•1ï¼šä»RoomManagerè·å–
             if (RoomManager.Instance?.CurrentRoom != null)
             {
                 var room = RoomManager.Instance.CurrentRoom;
-                LogDebug($"´ÓRoomManagerÍ¬²½£¬·¿¼äÍæ¼ÒÊı: {room.players.Count}");
+                LogDebug($"ä»RoomManageråŒæ­¥ï¼Œæˆ¿é—´ç©å®¶æ•°: {room.players.Count}");
 
                 foreach (var roomPlayer in room.players.Values)
                 {
                     AddPlayerFromRoom(roomPlayer.playerId, roomPlayer.playerName);
                 }
 
-                LogDebug($"·¿¼äÍæ¼ÒÍ¬²½Íê³É£¬×Ü¼ÆÍæ¼ÒÊı: {playerStates.Count}");
+                LogDebug($"æˆ¿é—´ç©å®¶åŒæ­¥å®Œæˆï¼Œæ€»è®¡ç©å®¶æ•°: {playerStates.Count}");
 
-                // ÑéÖ¤HostÊıÁ¿
+                // éªŒè¯Hostæ•°é‡
                 ValidateHostCount();
                 return;
             }
 
-            // ·½·¨2£º´ÓNetworkManagerµÄÁ¬½Ó×´Ì¬»ñÈ¡
+            // æ–¹æ³•2ï¼šä»NetworkManagerçš„è¿æ¥çŠ¶æ€è·å–
             if (NetworkManager.Instance != null)
             {
-                LogDebug($"´ÓNetworkManagerÍ¬²½£¬Á¬½ÓÍæ¼ÒÊı: {NetworkManager.Instance.ConnectedPlayerCount}");
+                LogDebug($"ä»NetworkManageråŒæ­¥ï¼Œè¿æ¥ç©å®¶æ•°: {NetworkManager.Instance.ConnectedPlayerCount}");
 
-                // **¹Ø¼üĞŞ¸´£ºÊ¹ÓÃÍ³Ò»µÄHostÍæ¼ÒID½Ó¿Ú**
+                // **å…³é”®ä¿®å¤ï¼šä½¿ç”¨ç»Ÿä¸€çš„Hostç©å®¶IDæ¥å£**
                 ushort hostPlayerId = NetworkManager.Instance.GetHostPlayerId();
                 if (hostPlayerId != 0 && NetworkManager.Instance.IsHostClientReady)
                 {
-                    AddPlayerFromRoom(hostPlayerId, "·¿Ö÷");
-                    LogDebug($"Ìí¼ÓHostÍæ¼Ò: ID={hostPlayerId}");
+                    AddPlayerFromRoom(hostPlayerId, "æˆ¿ä¸»");
+                    LogDebug($"æ·»åŠ Hostç©å®¶: ID={hostPlayerId}");
                 }
                 else
                 {
-                    LogDebug($"HostÍæ¼ÒÉĞÎ´×¼±¸¾ÍĞ÷: ID={hostPlayerId}, Ready={NetworkManager.Instance.IsHostClientReady}");
+                    LogDebug($"Hostç©å®¶å°šæœªå‡†å¤‡å°±ç»ª: ID={hostPlayerId}, Ready={NetworkManager.Instance.IsHostClientReady}");
                 }
             }
 
-            LogDebug($"Íæ¼ÒÍ¬²½Íê³É£¬×Ü¼ÆÍæ¼ÒÊı: {playerStates.Count}");
+            LogDebug($"ç©å®¶åŒæ­¥å®Œæˆï¼Œæ€»è®¡ç©å®¶æ•°: {playerStates.Count}");
             ValidateHostCount();
         }
 
         /// <summary>
-        /// ÑéÖ¤·¿Ö÷ÊıÁ¿£¨µ÷ÊÔÓÃ£©
+        /// éªŒè¯æˆ¿ä¸»æ•°é‡ï¼ˆè°ƒè¯•ç”¨ï¼‰
         /// </summary>
         private void ValidateHostCount()
         {
-            var hostPlayers = playerStates.Values.Where(p => p.playerName.Contains("·¿Ö÷")).ToList();
+            var hostPlayers = playerStates.Values.Where(p => p.playerName.Contains("æˆ¿ä¸»")).ToList();
 
             if (hostPlayers.Count > 1)
             {
-                Debug.LogError($"[HostGameManager] ¼ì²âµ½¶à¸ö·¿Ö÷: {hostPlayers.Count} ¸ö");
+                Debug.LogError($"[HostGameManager] æ£€æµ‹åˆ°å¤šä¸ªæˆ¿ä¸»: {hostPlayers.Count} ä¸ª");
 
                 foreach (var host in hostPlayers)
                 {
-                    LogDebug($"ÖØ¸´·¿Ö÷: ID={host.playerId}, Name={host.playerName}");
+                    LogDebug($"é‡å¤æˆ¿ä¸»: ID={host.playerId}, Name={host.playerName}");
                 }
 
-                // ĞŞ¸´ÖØ¸´Host
+                // ä¿®å¤é‡å¤Host
                 FixDuplicateHosts();
             }
             else if (hostPlayers.Count == 1)
             {
-                LogDebug($"HostÑéÖ¤Í¨¹ı: ID={hostPlayers[0].playerId}");
+                LogDebug($"HostéªŒè¯é€šè¿‡: ID={hostPlayers[0].playerId}");
 
-                // **ÑéÖ¤ÓëNetworkManagerµÄÒ»ÖÂĞÔ**
+                // **éªŒè¯ä¸NetworkManagerçš„ä¸€è‡´æ€§**
                 if (NetworkManager.Instance != null)
                 {
                     ushort networkHostId = NetworkManager.Instance.GetHostPlayerId();
                     if (hostPlayers[0].playerId != networkHostId)
                     {
-                        Debug.LogError($"[HostGameManager] Host ID²»Ò»ÖÂ£¡ÓÎÏ·ÖĞ: {hostPlayers[0].playerId}, NetworkManager: {networkHostId}");
+                        Debug.LogError($"[HostGameManager] Host IDä¸ä¸€è‡´ï¼æ¸¸æˆä¸­: {hostPlayers[0].playerId}, NetworkManager: {networkHostId}");
                     }
                 }
             }
             else
             {
-                Debug.LogWarning("[HostGameManager] Ã»ÓĞÕÒµ½·¿Ö÷");
+                Debug.LogWarning("[HostGameManager] æ²¡æœ‰æ‰¾åˆ°æˆ¿ä¸»");
             }
         }
 
 
         /// <summary>
-        /// ĞŞ¸´ÖØ¸´·¿Ö÷ÎÊÌâ£¨ÔöÇ¿°æ£©
+        /// ä¿®å¤é‡å¤æˆ¿ä¸»é—®é¢˜ï¼ˆå¢å¼ºç‰ˆï¼‰
         /// </summary>
         private void FixDuplicateHosts()
         {
             if (NetworkManager.Instance == null) return;
 
             ushort correctHostId = NetworkManager.Instance.GetHostPlayerId();
-            LogDebug($"ĞŞ¸´ÖØ¸´·¿Ö÷£¬ÕıÈ·µÄHost ID: {correctHostId}");
+            LogDebug($"ä¿®å¤é‡å¤æˆ¿ä¸»ï¼Œæ­£ç¡®çš„Host ID: {correctHostId}");
 
-            // »ñÈ¡ËùÓĞ·¿Ö÷Íæ¼Ò
-            var hostPlayers = playerStates.Where(p => p.Value.playerName.Contains("·¿Ö÷")).ToList();
+            // è·å–æ‰€æœ‰æˆ¿ä¸»ç©å®¶
+            var hostPlayers = playerStates.Where(p => p.Value.playerName.Contains("æˆ¿ä¸»")).ToList();
 
             if (hostPlayers.Count <= 1)
             {
-                LogDebug("·¿Ö÷ÊıÁ¿Õı³££¬ÎŞĞèĞŞ¸´");
+                LogDebug("æˆ¿ä¸»æ•°é‡æ­£å¸¸ï¼Œæ— éœ€ä¿®å¤");
                 return;
             }
 
-            LogDebug($"·¢ÏÖ {hostPlayers.Count} ¸ö·¿Ö÷£¬¿ªÊ¼ĞŞ¸´");
+            LogDebug($"å‘ç° {hostPlayers.Count} ä¸ªæˆ¿ä¸»ï¼Œå¼€å§‹ä¿®å¤");
 
-            // ±£ÁôÕıÈ·IDµÄ·¿Ö÷£¬ÒÆ³ıÆäËûµÄ
+            // ä¿ç•™æ­£ç¡®IDçš„æˆ¿ä¸»ï¼Œç§»é™¤å…¶ä»–çš„
             var correctHost = hostPlayers.FirstOrDefault(h => h.Key == correctHostId);
 
             if (correctHost.Value != null)
             {
-                LogDebug($"±£ÁôÕıÈ··¿Ö÷: ID={correctHost.Key}, Name={correctHost.Value.playerName}");
+                LogDebug($"ä¿ç•™æ­£ç¡®æˆ¿ä¸»: ID={correctHost.Key}, Name={correctHost.Value.playerName}");
 
-                // ÒÆ³ıÆäËû·¿Ö÷
+                // ç§»é™¤å…¶ä»–æˆ¿ä¸»
                 var duplicateHosts = hostPlayers.Where(h => h.Key != correctHostId).ToList();
                 foreach (var duplicateHost in duplicateHosts)
                 {
                     playerStates.Remove(duplicateHost.Key);
-                    LogDebug($"ÒÆ³ıÖØ¸´·¿Ö÷: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
+                    LogDebug($"ç§»é™¤é‡å¤æˆ¿ä¸»: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
                 }
             }
             else
             {
-                // Èç¹ûÃ»ÓĞÕÒµ½ÕıÈ·IDµÄ·¿Ö÷£¬±£Áô×îĞ¡IDµÄ·¿Ö÷
+                // å¦‚æœæ²¡æœ‰æ‰¾åˆ°æ­£ç¡®IDçš„æˆ¿ä¸»ï¼Œä¿ç•™æœ€å°IDçš„æˆ¿ä¸»
                 var primaryHost = hostPlayers.OrderBy(h => h.Key).First();
                 var duplicateHosts = hostPlayers.Skip(1).ToList();
 
-                LogDebug($"±£ÁôÖ÷·¿Ö÷: ID={primaryHost.Key}, ÒÆ³ıÖØ¸´·¿Ö÷: {string.Join(", ", duplicateHosts.Select(h => h.Key))}");
+                LogDebug($"ä¿ç•™ä¸»æˆ¿ä¸»: ID={primaryHost.Key}, ç§»é™¤é‡å¤æˆ¿ä¸»: {string.Join(", ", duplicateHosts.Select(h => h.Key))}");
 
                 foreach (var duplicateHost in duplicateHosts)
                 {
                     playerStates.Remove(duplicateHost.Key);
-                    LogDebug($"ÒÆ³ıÖØ¸´·¿Ö÷: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
+                    LogDebug($"ç§»é™¤é‡å¤æˆ¿ä¸»: ID={duplicateHost.Key}, Name={duplicateHost.Value.playerName}");
                 }
             }
 
-            // ÖØĞÂÑéÖ¤
-            LogDebug($"ĞŞ¸´Íê³É£¬µ±Ç°Íæ¼ÒÊı: {playerStates.Count}");
+            // é‡æ–°éªŒè¯
+            LogDebug($"ä¿®å¤å®Œæˆï¼Œå½“å‰ç©å®¶æ•°: {playerStates.Count}");
             ValidateHostCount();
         }
 
         /// <summary>
-        /// ´Ó·¿¼äÊı¾İÌí¼ÓÍæ¼Ò£¨ĞŞ¸´°æ±¾£©
+        /// ä»æˆ¿é—´æ•°æ®æ·»åŠ ç©å®¶ï¼ˆä¿®å¤ç‰ˆæœ¬ï¼‰
         /// </summary>
         private void AddPlayerFromRoom(ushort playerId, string playerName)
         {
             if (playerStates.ContainsKey(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} ÒÑ´æÔÚ£¬Ìø¹ıÌí¼Ó");
+                LogDebug($"ç©å®¶ {playerId} å·²å­˜åœ¨ï¼Œè·³è¿‡æ·»åŠ ");
                 return;
             }
 
-            // **Ê¹ÓÃNetworkManagerµÄÍ³Ò»½Ó¿ÚÅĞ¶ÏÊÇ·ñÎªHost**
+            // **ä½¿ç”¨NetworkManagerçš„ç»Ÿä¸€æ¥å£åˆ¤æ–­æ˜¯å¦ä¸ºHost**
             bool isHostPlayer = NetworkManager.Instance?.IsHostPlayer(playerId) ?? false;
 
             playerStates[playerId] = new PlayerGameState
             {
                 playerId = playerId,
-                playerName = isHostPlayer ? "·¿Ö÷" : playerName,
+                playerName = isHostPlayer ? "æˆ¿ä¸»" : playerName,
                 health = initialPlayerHealth,
                 isAlive = true,
-                isReady = true // ´Ó·¿¼äÀ´µÄ¶¼ÊÇ×¼±¸ºÃµÄ
+                isReady = true // ä»æˆ¿é—´æ¥çš„éƒ½æ˜¯å‡†å¤‡å¥½çš„
             };
 
-            LogDebug($"´Ó·¿¼äÌí¼ÓÍæ¼Ò: {playerName} (ID: {playerId}, IsHost: {isHostPlayer})");
+            LogDebug($"ä»æˆ¿é—´æ·»åŠ ç©å®¶: {playerName} (ID: {playerId}, IsHost: {isHostPlayer})");
         }
 
         /// <summary>
-        /// ³õÊ¼»¯·şÎñÒÀÀµ
+        /// åˆå§‹åŒ–æœåŠ¡ä¾èµ–
         /// </summary>
         private IEnumerator InitializeServices()
         {
-            LogDebug("³õÊ¼»¯·şÎñÒÀÀµ...");
+            LogDebug("åˆå§‹åŒ–æœåŠ¡ä¾èµ–...");
 
-            // 1. »ñÈ¡»ò´´½¨ QuestionDataService
+            // 1. è·å–æˆ–åˆ›å»º QuestionDataService
             questionDataService = QuestionDataService.Instance;
             if (questionDataService == null)
             {
-                // ÔÚ³¡¾°ÖĞ²éÕÒ
+                // åœ¨åœºæ™¯ä¸­æŸ¥æ‰¾
                 questionDataService = FindObjectOfType<QuestionDataService>();
 
                 if (questionDataService == null)
                 {
-                    // ´´½¨ĞÂµÄ·şÎñÊµÀı
+                    // åˆ›å»ºæ–°çš„æœåŠ¡å®ä¾‹
                     GameObject serviceObj = new GameObject("QuestionDataService");
                     questionDataService = serviceObj.AddComponent<QuestionDataService>();
-                    LogDebug("´´½¨ÁËĞÂµÄ QuestionDataService ÊµÀı");
+                    LogDebug("åˆ›å»ºäº†æ–°çš„ QuestionDataService å®ä¾‹");
                 }
                 else
                 {
-                    LogDebug("ÕÒµ½ÏÖÓĞµÄ QuestionDataService ÊµÀı");
+                    LogDebug("æ‰¾åˆ°ç°æœ‰çš„ QuestionDataService å®ä¾‹");
                 }
             }
 
-            // 2. ²éÕÒÌâÄ¿¿ØÖÆÆ÷ÒıÓÃ
+            // 2. æŸ¥æ‰¾é¢˜ç›®æ§åˆ¶å™¨å¼•ç”¨
             yield return StartCoroutine(FindQuestionController());
 
-            // 3. Ô¤¼ÓÔØ³£ÓÃµÄÊı¾İÌá¹©Õß£¨¿ÉÑ¡ÓÅ»¯£©
+            // 3. é¢„åŠ è½½å¸¸ç”¨çš„æ•°æ®æä¾›è€…ï¼ˆå¯é€‰ä¼˜åŒ–ï¼‰
             if (questionDataService != null)
             {
-                LogDebug("Ô¤¼ÓÔØÌâÄ¿Êı¾İÌá¹©Õß...");
+                LogDebug("é¢„åŠ è½½é¢˜ç›®æ•°æ®æä¾›è€…...");
                 questionDataService.PreloadAllProviders();
             }
 
-            LogDebug("·şÎñÒÀÀµ³õÊ¼»¯Íê³É");
+            LogDebug("æœåŠ¡ä¾èµ–åˆå§‹åŒ–å®Œæˆ");
         }
 
         /// <summary>
-        /// ²éÕÒÌâÄ¿¿ØÖÆÆ÷
+        /// æŸ¥æ‰¾é¢˜ç›®æ§åˆ¶å™¨
         /// </summary>
         private IEnumerator FindQuestionController()
         {
-            LogDebug("²éÕÒ NetworkQuestionManagerController...");
+            LogDebug("æŸ¥æ‰¾ NetworkQuestionManagerController...");
 
             int attempts = 0;
             const int maxAttempts = 10;
@@ -565,7 +577,7 @@ namespace Core.Network
 
                 if (questionController == null)
                 {
-                    LogDebug($"µÚ {attempts + 1} ´Î²éÕÒ NetworkQuestionManagerController Ê§°Ü£¬¼ÌĞø³¢ÊÔ...");
+                    LogDebug($"ç¬¬ {attempts + 1} æ¬¡æŸ¥æ‰¾ NetworkQuestionManagerController å¤±è´¥ï¼Œç»§ç»­å°è¯•...");
                     yield return new WaitForSeconds(0.5f);
                     attempts++;
                 }
@@ -573,46 +585,46 @@ namespace Core.Network
 
             if (questionController != null)
             {
-                LogDebug("NetworkQuestionManagerController ÕÒµ½");
+                LogDebug("NetworkQuestionManagerController æ‰¾åˆ°");
             }
             else
             {
-                Debug.LogError("[HostGameManager] ²éÕÒ NetworkQuestionManagerController Ê§°Ü");
+                Debug.LogError("[HostGameManager] æŸ¥æ‰¾ NetworkQuestionManagerController å¤±è´¥");
             }
         }
 
         /// <summary>
-        /// Ìí¼ÓÍæ¼Ò£¨·ÀÖ¹ÖØ¸´Ìí¼Ó£©
+        /// æ·»åŠ ç©å®¶ï¼ˆé˜²æ­¢é‡å¤æ·»åŠ ï¼‰
         /// </summary>
         private void AddPlayer(ushort playerId, string playerName = null)
         {
             if (!isInitialized)
             {
-                LogDebug($"HostGameManager Î´³õÊ¼»¯£¬ÑÓ³ÙÌí¼ÓÍæ¼Ò {playerId}");
+                LogDebug($"HostGameManager æœªåˆå§‹åŒ–ï¼Œå»¶è¿Ÿæ·»åŠ ç©å®¶ {playerId}");
                 StartCoroutine(DelayedAddPlayer(playerId, playerName));
                 return;
             }
 
             if (playerStates.ContainsKey(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} ÒÑ´æÔÚ£¬Ìø¹ıÖØ¸´Ìí¼Ó");
+                LogDebug($"ç©å®¶ {playerId} å·²å­˜åœ¨ï¼Œè·³è¿‡é‡å¤æ·»åŠ ");
                 return;
             }
 
             playerStates[playerId] = new PlayerGameState
             {
                 playerId = playerId,
-                playerName = playerName ?? $"Íæ¼Ò{playerId}",
+                playerName = playerName ?? $"ç©å®¶{playerId}",
                 health = initialPlayerHealth,
                 isAlive = true,
                 isReady = false
             };
 
-            LogDebug($"Ìí¼ÓÍæ¼Ò: {playerId} ({playerName}), µ±Ç°Íæ¼ÒÊı: {playerStates.Count}");
+            LogDebug($"æ·»åŠ ç©å®¶: {playerId} ({playerName}), å½“å‰ç©å®¶æ•°: {playerStates.Count}");
         }
 
         /// <summary>
-        /// ÑÓ³ÙÌí¼ÓÍæ¼Ò£¨µÈ´ı³õÊ¼»¯Íê³É£©
+        /// å»¶è¿Ÿæ·»åŠ ç©å®¶ï¼ˆç­‰å¾…åˆå§‹åŒ–å®Œæˆï¼‰
         /// </summary>
         private IEnumerator DelayedAddPlayer(ushort playerId, string playerName)
         {
@@ -625,7 +637,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ÒÆ³ıÍæ¼Ò
+        /// ç§»é™¤ç©å®¶
         /// </summary>
         private void RemovePlayer(ushort playerId)
         {
@@ -635,70 +647,70 @@ namespace Core.Network
             string playerName = playerStates[playerId].playerName;
             playerStates.Remove(playerId);
 
-            LogDebug($"ÒÆ³ıÍæ¼Ò: {playerId} ({playerName}), Ê£ÓàÍæ¼ÒÊı: {playerStates.Count}");
+            LogDebug($"ç§»é™¤ç©å®¶: {playerId} ({playerName}), å‰©ä½™ç©å®¶æ•°: {playerStates.Count}");
 
-            // Èç¹ûµ±Ç°»ØºÏµÄÍæ¼ÒÀë¿ª£¬ÇĞ»»µ½ÏÂÒ»¸öÍæ¼Ò
+            // å¦‚æœå½“å‰å›åˆçš„ç©å®¶ç¦»å¼€ï¼Œåˆ‡æ¢åˆ°ä¸‹ä¸€ä¸ªç©å®¶
             if (currentTurnPlayerId == playerId && gameInProgress)
             {
                 NextPlayerTurn();
             }
 
-            // ¼ì²éÓÎÏ·ÊÇ·ñÓ¦¸Ã½áÊø
+            // æ£€æŸ¥æ¸¸æˆæ˜¯å¦åº”è¯¥ç»“æŸ
             CheckGameEndConditions();
         }
 
         /// <summary>
-        /// ´Ó·¿¼äÏµÍ³Æô¶¯ÓÎÏ·£¨Íâ²¿µ÷ÓÃ½Ó¿Ú£©
+        /// ä»æˆ¿é—´ç³»ç»Ÿå¯åŠ¨æ¸¸æˆï¼ˆå¤–éƒ¨è°ƒç”¨æ¥å£ï¼‰
         /// </summary>
         public void StartGameFromRoom()
         {
             if (!isInitialized)
             {
-                LogDebug("HostGameManager Î´³õÊ¼»¯£¬ÎŞ·¨¿ªÊ¼ÓÎÏ·");
+                LogDebug("HostGameManager æœªåˆå§‹åŒ–ï¼Œæ— æ³•å¼€å§‹æ¸¸æˆ");
                 return;
             }
 
             if (gameInProgress)
             {
-                LogDebug("ÓÎÏ·ÒÑ¾­ÔÚ½øĞĞÖĞ");
+                LogDebug("æ¸¸æˆå·²ç»åœ¨è¿›è¡Œä¸­");
                 return;
             }
 
-            LogDebug("´Ó·¿¼äÏµÍ³Æô¶¯ÓÎÏ· - ×¼±¸ÓÎÏ·Êı¾İ");
+            LogDebug("ä»æˆ¿é—´ç³»ç»Ÿå¯åŠ¨æ¸¸æˆ - å‡†å¤‡æ¸¸æˆæ•°æ®");
 
 
             PrepareGameData();
 
-            LogDebug("HostGameManagerÓÎÏ·Êı¾İ×¼±¸Íê³É£¬µÈ´ı³¡¾°ÇĞ»»");
+            LogDebug("HostGameManageræ¸¸æˆæ•°æ®å‡†å¤‡å®Œæˆï¼Œç­‰å¾…åœºæ™¯åˆ‡æ¢");
         }
         /// <summary>
-        /// ×¼±¸ÓÎÏ·Êı¾İ£¨ĞÂÔö·½·¨£©
+        /// å‡†å¤‡æ¸¸æˆæ•°æ®ï¼ˆæ–°å¢æ–¹æ³•ï¼‰
         /// </summary>
         private void PrepareGameData()
         {
-            LogDebug("×¼±¸ÓÎÏ·Êı¾İ...");
+            LogDebug("å‡†å¤‡æ¸¸æˆæ•°æ®...");
 
-            // Í¬²½·¿¼äÏµÍ³µÄÍæ¼ÒÊı¾İ
+            // åŒæ­¥æˆ¿é—´ç³»ç»Ÿçš„ç©å®¶æ•°æ®
             SyncPlayersFromRoomSystem();
 
-            // Ô¤¼ÓÔØÌâÄ¿Êı¾İ
+            // é¢„åŠ è½½é¢˜ç›®æ•°æ®
             if (questionDataService != null)
             {
-                LogDebug("1Ô¤¼ÓÔØÌâÄ¿Êı¾İÌá¹©Õß...");
+                LogDebug("1é¢„åŠ è½½é¢˜ç›®æ•°æ®æä¾›è€…...");
                 questionDataService.PreloadAllProviders();
             }
 
-            // ÑéÖ¤±ØÒª×é¼ş
+            // éªŒè¯å¿…è¦ç»„ä»¶
             if (!ValidateGameComponents())
             {
-                Debug.LogError("[HostGameManager] ÓÎÏ·×é¼şÑéÖ¤Ê§°Ü");
+                Debug.LogError("[HostGameManager] æ¸¸æˆç»„ä»¶éªŒè¯å¤±è´¥");
                 return;
             }
 
-            LogDebug("ÓÎÏ·Êı¾İ×¼±¸Íê³É");
+            LogDebug("æ¸¸æˆæ•°æ®å‡†å¤‡å®Œæˆ");
         }
         /// <summary>
-        /// ÑéÖ¤ÓÎÏ·×é¼ş£¨ĞÂÔö·½·¨£©
+        /// éªŒè¯æ¸¸æˆç»„ä»¶ï¼ˆæ–°å¢æ–¹æ³•ï¼‰
         /// </summary>
         private bool ValidateGameComponents()
         {
@@ -706,19 +718,19 @@ namespace Core.Network
 
             if (questionDataService == null)
             {
-                Debug.LogError("QuestionDataService Î´³õÊ¼»¯");
+                Debug.LogError("QuestionDataService æœªåˆå§‹åŒ–");
                 isValid = false;
             }
 
             if (NetworkManager.Instance == null)
             {
-                Debug.LogError("NetworkManager ÊµÀı²»´æÔÚ");
+                Debug.LogError("NetworkManager å®ä¾‹ä¸å­˜åœ¨");
                 isValid = false;
             }
 
             if (playerStates == null || playerStates.Count == 0)
             {
-                Debug.LogError("Íæ¼ÒÊı¾İÎª¿Õ");
+                Debug.LogError("ç©å®¶æ•°æ®ä¸ºç©º");
                 isValid = false;
             }
 
@@ -726,134 +738,124 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// Éú³É²¢·¢ËÍÌâÄ¿£¨ĞŞ¸´£ºÊ¹ÓÃÕıÈ·µÄNQMC½Ó¿Ú£©
+        /// ç”Ÿæˆå¹¶å‘é€é¢˜ç›®ï¼ˆä¿®å¤ï¼šä½¿ç”¨æ­£ç¡®çš„NQMCæ¥å£ï¼‰
         /// </summary>
         private void GenerateAndSendQuestion()
         {
             if (!gameInProgress || !isInitialized)
                 return;
 
-            LogDebug("¿ªÊ¼Éú³ÉĞÂÌâÄ¿");
+            LogDebug("å¼€å§‹ç”Ÿæˆæ–°é¢˜ç›®");
+            NetworkQuestionData question = null;
+            if (isIdiomChainActive && !string.IsNullOrEmpty(currentIdiomChainWord))
+            {
+                // ç”Ÿæˆæ¥é¾™é¢˜ç›®ï¼Œä¼ é€’çŠ¶æ€ä¿¡æ¯
+                question = GenerateIdiomChainContinuation(currentIdiomChainWord);
+                LogDebug($"ç”Ÿæˆæˆè¯­æ¥é¾™é¢˜ç›®ï¼ŒåŸºäº: {currentIdiomChainWord}");
+            }
+            else
+            {
+                // æ™®é€šé¢˜ç›®ç”Ÿæˆ
+                var questionType = SelectRandomQuestionType();
+                question = GetQuestionFromService(questionType);
 
-            // Ñ¡ÔñÌâÄ¿ÀàĞÍ
-            var questionType = SelectRandomQuestionType();
-            LogDebug($"Ñ¡ÔñµÄÌâÄ¿ÀàĞÍ: {questionType}");
-
-            // Ê¹ÓÃ QuestionDataService »ñÈ¡ÌâÄ¿Êı¾İ
-            NetworkQuestionData question = GetQuestionFromService(questionType);
+                // å¦‚æœæ˜¯æˆè¯­æ¥é¾™é¢˜ï¼Œæ¿€æ´»æ¥é¾™æ¨¡å¼
+                if (questionType == QuestionType.IdiomChain && enableIdiomChain)
+                {
+                    isIdiomChainActive = true;
+                    idiomChainCount = 0;
+                    currentIdiomChainWord = null;
+                    LogDebug("æ¿€æ´»æˆè¯­æ¥é¾™æ¨¡å¼");
+                }
+            }
 
             if (question != null)
             {
                 currentQuestion = question;
-
-                // ¹ã²¥ÌâÄ¿¸øËùÓĞ¿Í»§¶Ë£¨°üÀ¨Host×Ô¼º£©
                 BroadcastQuestion(question);
-                LogDebug($"ÌâÄ¿ÒÑ·¢ËÍ: {questionType} - {question.questionText}");
-
-                // Host¶ËÒ²»áÍ¨¹ıÍøÂçÊÂ¼ş½ÓÊÕµ½×Ô¼º·¢ËÍµÄÌâÄ¿
-                // ÕâÑù±£Ö¤HostºÍClientÊ¹ÓÃÏàÍ¬µÄ½ÓÊÕÂ·¾¶
+                LogDebug($"é¢˜ç›®å·²å‘é€: {question.questionType} - {question.questionText}");
             }
             else
             {
-                Debug.LogError($"Éú³É {questionType} ÌâÄ¿Ê§°Ü£¬³¢ÊÔÖØĞÂÉú³É");
-                // ÖØÊÔÉú³ÉÌâÄ¿
+                Debug.LogError($"é¢˜ç›®ç”Ÿæˆå¤±è´¥ï¼Œé‡æ–°å°è¯•");
                 Invoke(nameof(GenerateAndSendQuestion), 1f);
             }
         }
 
         /// <summary>
-        /// ´Ó·şÎñ»ñÈ¡ÌâÄ¿Êı¾İ
+        /// ä»æœåŠ¡è·å–é¢˜ç›®æ•°æ®
         /// </summary>
         private NetworkQuestionData GetQuestionFromService(QuestionType questionType)
         {
             if (questionDataService == null)
             {
-                Debug.LogError("[HostGameManager] QuestionDataService Î´³õÊ¼»¯");
+                Debug.LogError("[HostGameManager] QuestionDataService æœªåˆå§‹åŒ–");
                 return CreateFallbackQuestion(questionType);
             }
 
             try
             {
-                LogDebug($"Ê¹ÓÃ QuestionDataService »ñÈ¡ÌâÄ¿: {questionType}");
+                LogDebug($"ä½¿ç”¨ QuestionDataService è·å–é¢˜ç›®: {questionType}");
                 var questionData = questionDataService.GetQuestionData(questionType);
 
                 if (questionData != null)
                 {
-                    LogDebug($"³É¹¦´Ó·şÎñ»ñÈ¡ÌâÄ¿: {questionData.questionText}");
+                    LogDebug($"æˆåŠŸä»æœåŠ¡è·å–é¢˜ç›®: {questionData.questionText}");
                     return questionData;
                 }
                 else
                 {
-                    LogDebug($"·şÎñ·µ»Ø¿ÕÌâÄ¿£¬Ê¹ÓÃ±¸ÓÃÌâÄ¿");
+                    LogDebug($"æœåŠ¡è¿”å›ç©ºé¢˜ç›®ï¼Œä½¿ç”¨å¤‡ç”¨é¢˜ç›®");
                     return CreateFallbackQuestion(questionType);
                 }
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"´Ó·şÎñ»ñÈ¡ÌâÄ¿Ê§°Ü: {e.Message}");
+                Debug.LogError($"ä»æœåŠ¡è·å–é¢˜ç›®å¤±è´¥: {e.Message}");
                 return CreateFallbackQuestion(questionType);
             }
         }
 
         /// <summary>
-        /// ´´½¨±¸ÓÃÌâÄ¿£¨µ±·şÎñÊ§°ÜÊ±£©
+        /// åˆ›å»ºå¤‡ç”¨é¢˜ç›®ï¼ˆå½“æœåŠ¡å¤±è´¥æ—¶ï¼‰
         /// </summary>
         private NetworkQuestionData CreateFallbackQuestion(QuestionType questionType)
         {
             return NetworkQuestionDataExtensions.CreateFromLocalData(
                 questionType,
-                $"ÕâÊÇÒ»¸ö{questionType}ÀàĞÍµÄ±¸ÓÃÌâÄ¿",
-                "±¸ÓÃ´ğ°¸",
+                $"è¿™æ˜¯ä¸€ä¸ª{questionType}ç±»å‹çš„å¤‡ç”¨é¢˜ç›®",
+                "å¤‡ç”¨ç­”æ¡ˆ",
                 questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
-                    ? new string[] { "Ñ¡ÏîA", "±¸ÓÃ´ğ°¸", "Ñ¡ÏîC", "Ñ¡ÏîD" }
+                    ? new string[] { "é€‰é¡¹A", "å¤‡ç”¨ç­”æ¡ˆ", "é€‰é¡¹C", "é€‰é¡¹D" }
                     : null,
                 questionTimeLimit,
                 "{\"source\": \"host_fallback\", \"isDefault\": true}"
             );
         }
 
+
         /// <summary>
-        /// Ñ¡ÔñËæ»úÌâÄ¿ÀàĞÍ
+        /// é€‰æ‹©éšæœºé¢˜ç›®ç±»å‹
         /// </summary>
         private QuestionType SelectRandomQuestionType()
         {
-            // ¸´ÓÃNetworkQuestionManagerControllerµÄÈ¨ÖØÂß¼­
-            var weights = questionController?.TypeWeights ?? GetDefaultTypeWeights();
-
-            float total = weights.Values.Sum();
-            float random = Random.value * total;
-            float accumulator = 0f;
-
-            foreach (var pair in weights)
+            // ä½¿ç”¨ç»Ÿä¸€çš„æƒé‡ç®¡ç†å™¨
+            if (questionWeightConfig != null)
             {
-                accumulator += pair.Value;
-                if (random <= accumulator)
-                    return pair.Key;
+                return questionWeightConfig.SelectRandomType();
             }
 
-            return weights.Keys.First();
+            // å›é€€åˆ°æƒé‡ç®¡ç†å™¨çš„å…¨å±€é…ç½®
+            return QuestionWeightManager.SelectRandomQuestionType();
         }
 
-        /// <summary>
-        /// »ñÈ¡Ä¬ÈÏÌâÄ¿ÀàĞÍÈ¨ÖØ
-        /// </summary>
         private Dictionary<QuestionType, float> GetDefaultTypeWeights()
         {
-            return new Dictionary<QuestionType, float>
-            {
-                { QuestionType.IdiomChain, 1f },
-                { QuestionType.TextPinyin, 1f },
-                { QuestionType.HardFill, 1f },
-                { QuestionType.SoftFill, 1f },
-                { QuestionType.SentimentTorF, 1f },
-                { QuestionType.SimularWordChoice, 1f },
-                { QuestionType.UsageTorF, 1f },
-                { QuestionType.ExplanationChoice, 1f },
-            };
+            return QuestionWeightManager.GetWeights();
         }
 
         /// <summary>
-        /// ¼ì²éÓÎÏ·½áÊøÌõ¼ş£¨¼ò»¯°æ±¾£©
+        /// æ£€æŸ¥æ¸¸æˆç»“æŸæ¡ä»¶ï¼ˆç®€åŒ–ç‰ˆæœ¬ï¼‰
         /// </summary>
         private void CheckGameEndConditions()
         {
@@ -864,149 +866,159 @@ namespace Core.Network
 
             if (alivePlayers.Count == 0)
             {
-                LogDebug("ÓÎÏ·½áÊø£ºÃ»ÓĞ´æ»îµÄÍæ¼Ò");
-                EndGame("ÓÎÏ·½áÊø£ºËùÓĞÍæ¼Ò¶¼±»ÌÔÌ­");
+                LogDebug("æ¸¸æˆç»“æŸï¼šæ²¡æœ‰å­˜æ´»çš„ç©å®¶");
+                EndGame("æ¸¸æˆç»“æŸï¼šæ‰€æœ‰ç©å®¶éƒ½è¢«æ·˜æ±°");
             }
             else if (alivePlayers.Count == 1)
             {
                 var winner = alivePlayers.First();
-                LogDebug($"ÓÎÏ·½áÊø£ºÍæ¼Ò {winner.Key} »ñÊ¤");
-                EndGame($"ÓÎÏ·½áÊø£º{winner.Value.playerName} »ñÊ¤£¡");
+                LogDebug($"æ¸¸æˆç»“æŸï¼šç©å®¶ {winner.Key} è·èƒœ");
+                EndGame($"æ¸¸æˆç»“æŸï¼š{winner.Value.playerName} è·èƒœï¼");
             }
             else if (playerStates.Count == 0)
             {
-                LogDebug("ÓÎÏ·½áÊø£ºÃ»ÓĞÍæ¼Ò");
-                EndGame("ÓÎÏ·½áÊø£ºËùÓĞÍæ¼Ò¶¼Àë¿ªÁË");
+                LogDebug("æ¸¸æˆç»“æŸï¼šæ²¡æœ‰ç©å®¶");
+                EndGame("æ¸¸æˆç»“æŸï¼šæ‰€æœ‰ç©å®¶éƒ½ç¦»å¼€äº†");
             }
         }
 
         /// <summary>
-        /// ¿ªÊ¼Ö÷»úÓÎÏ·£¨ĞŞ¸´£ºÈ·±£NQMCÒ²Æô¶¯£©
+        /// å¼€å§‹ä¸»æœºæ¸¸æˆï¼ˆä¿®å¤ï¼šç¡®ä¿NQMCä¹Ÿå¯åŠ¨ï¼‰
         /// </summary>
         public void StartHostGame()
         {
             if (!isInitialized)
             {
-                LogDebug("HostGameManager Î´³õÊ¼»¯£¬ÎŞ·¨¿ªÊ¼ÓÎÏ·");
+                LogDebug("HostGameManager æœªåˆå§‹åŒ–ï¼Œæ— æ³•å¼€å§‹æ¸¸æˆ");
                 return;
             }
 
             if (gameInProgress)
             {
-                LogDebug("ÓÎÏ·ÒÑ¾­ÔÚ½øĞĞÖĞ");
+                LogDebug("æ¸¸æˆå·²ç»åœ¨è¿›è¡Œä¸­");
                 return;
             }
 
-            LogDebug($"Ö÷»ú¿ªÊ¼ÓÎÏ·£¬Íæ¼ÒÊı: {playerStates.Count}");
+            LogDebug($"ä¸»æœºå¼€å§‹æ¸¸æˆï¼Œç©å®¶æ•°: {playerStates.Count}");
 
-            // ¼ì²éÊÇ·ñÓĞÍæ¼Ò
+            // æ£€æŸ¥æ˜¯å¦æœ‰ç©å®¶
             if (playerStates.Count == 0)
             {
-                Debug.LogError("Ã»ÓĞÍæ¼Ò¿ÉÒÔ¿ªÊ¼ÓÎÏ· - Íæ¼ÒÁĞ±íÎª¿Õ");
+                Debug.LogError("æ²¡æœ‰ç©å®¶å¯ä»¥å¼€å§‹æ¸¸æˆ - ç©å®¶åˆ—è¡¨ä¸ºç©º");
                 return;
             }
 
             gameInProgress = true;
 
-            // **¹Ø¼üĞŞ¸Ä£ºÈ·±£NQMCÒ²Æô¶¯¶àÈËÓÎÏ·Ä£Ê½**
+            // **å…³é”®ä¿®æ”¹ï¼šç¡®ä¿NQMCä¹Ÿå¯åŠ¨å¤šäººæ¸¸æˆæ¨¡å¼**
             if (NetworkQuestionManagerController.Instance != null)
             {
-                LogDebug("Æô¶¯NQMC¶àÈËÓÎÏ·Ä£Ê½");
-                NetworkQuestionManagerController.Instance.StartGame(true); // ¶àÈËÄ£Ê½
+                LogDebug("å¯åŠ¨NQMCå¤šäººæ¸¸æˆæ¨¡å¼");
+                NetworkQuestionManagerController.Instance.StartGame(true); // å¤šäººæ¨¡å¼
             }
             else
             {
-                Debug.LogError("NetworkQuestionManagerController.InstanceÎª¿Õ£¬ÎŞ·¨Æô¶¯ÌâÄ¿¹ÜÀí");
+                Debug.LogError("NetworkQuestionManagerController.Instanceä¸ºç©ºï¼Œæ— æ³•å¯åŠ¨é¢˜ç›®ç®¡ç†");
             }
 
-            // Ñ¡ÔñµÚÒ»¸ö´æ»îµÄÍæ¼Ò¿ªÊ¼£¨ĞŞ¸´ID=0µÄÎÊÌâ£©
+            // é€‰æ‹©ç¬¬ä¸€ä¸ªå­˜æ´»çš„ç©å®¶å¼€å§‹ï¼ˆä¿®å¤ID=0çš„é—®é¢˜ï¼‰
             var alivePlayers = playerStates.Where(p => p.Value.isAlive).ToList();
             if (alivePlayers.Count > 0)
             {
                 currentTurnPlayerId = alivePlayers.First().Key;
-                LogDebug($"Ñ¡ÔñÍæ¼Ò {currentTurnPlayerId} ({playerStates[currentTurnPlayerId].playerName}) ¿ªÊ¼ÓÎÏ·");
+                LogDebug($"é€‰æ‹©ç©å®¶ {currentTurnPlayerId} ({playerStates[currentTurnPlayerId].playerName}) å¼€å§‹æ¸¸æˆ");
 
                 BroadcastPlayerTurnChanged(currentTurnPlayerId);
 
-                // Éú³ÉµÚÒ»Ìâ
+                // ç”Ÿæˆç¬¬ä¸€é¢˜
                 Invoke(nameof(GenerateAndSendQuestion), 1f);
             }
             else
             {
-                Debug.LogError("Ã»ÓĞ´æ»îµÄÍæ¼Ò¿ÉÒÔ¿ªÊ¼ÓÎÏ·");
+                Debug.LogError("æ²¡æœ‰å­˜æ´»çš„ç©å®¶å¯ä»¥å¼€å§‹æ¸¸æˆ");
                 gameInProgress = false;
             }
         }
         /// <summary>
-        /// Ìí¼ÓĞÂµÄ¹«¹²·½·¨£º³¡¾°ÇĞ»»Íê³ÉºóµÄ³õÊ¼»¯
+        /// æ·»åŠ æ–°çš„å…¬å…±æ–¹æ³•ï¼šåœºæ™¯åˆ‡æ¢å®Œæˆåçš„åˆå§‹åŒ–
         /// </summary>
         public void OnGameSceneLoaded()
         {
-            LogDebug("ÓÎÏ·³¡¾°¼ÓÔØÍê³É£¬Æô¶¯ÓÎÏ·Âß¼­");
+            LogDebug("æ¸¸æˆåœºæ™¯åŠ è½½å®Œæˆï¼Œå¯åŠ¨æ¸¸æˆé€»è¾‘");
 
             if (isInitialized && !gameInProgress)
             {
-                // ÑÓ³ÙÆô¶¯£¬È·±£ËùÓĞ×é¼ş¶¼ÒÑ¾ÍĞ÷
+                // å»¶è¿Ÿå¯åŠ¨ï¼Œç¡®ä¿æ‰€æœ‰ç»„ä»¶éƒ½å·²å°±ç»ª
                 Invoke(nameof(StartHostGame), 1f);
             }
         }
 
         /// <summary>
-        /// ½áÊøÓÎÏ·
+        /// ç»“æŸæ¸¸æˆ
         /// </summary>
-        public void EndGame(string reason = "ÓÎÏ·½áÊø")
+        public void EndGame(string reason = "æ¸¸æˆç»“æŸ")
         {
             if (!gameInProgress)
                 return;
 
-            LogDebug($"½áÊøÓÎÏ·: {reason}");
+            LogDebug($"ç»“æŸæ¸¸æˆ: {reason}");
             gameInProgress = false;
             currentQuestion = null;
+            ResetIdiomChainState();
+            playerAnswerCache.Clear();
 
-            // ÕâÀï¿ÉÒÔÌí¼Ó·¢ËÍÓÎÏ·½áÊøÏûÏ¢¸øËùÓĞ¿Í»§¶Ë
+            // è¿™é‡Œå¯ä»¥æ·»åŠ å‘é€æ¸¸æˆç»“æŸæ¶ˆæ¯ç»™æ‰€æœ‰å®¢æˆ·ç«¯
             // BroadcastGameEnd(reason);
         }
 
         /// <summary>
-        /// ´¦ÀíÍæ¼Ò´ğ°¸
+        /// å¤„ç†ç©å®¶ç­”æ¡ˆ
         /// </summary>
         public void HandlePlayerAnswer(ushort playerId, string answer)
         {
+            playerAnswerCache[playerId] = answer;
+
             if (!isInitialized || !gameInProgress || currentQuestion == null)
             {
-                LogDebug($"ÎŞĞ§µÄ´ğ°¸Ìá½»×´Ì¬: initialized={isInitialized}, gameInProgress={gameInProgress}, hasQuestion={currentQuestion != null}");
+                LogDebug($"æ— æ•ˆçš„ç­”æ¡ˆæäº¤çŠ¶æ€: initialized={isInitialized}, gameInProgress={gameInProgress}, hasQuestion={currentQuestion != null}");
                 return;
             }
 
-            // **Ê¹ÓÃÍ³Ò»½Ó¿ÚÑéÖ¤Íæ¼ÒÉí·İ**
+            if (!isInitialized || !gameInProgress || currentQuestion == null)
+            {
+                LogDebug($"æ— æ•ˆçš„ç­”æ¡ˆæäº¤çŠ¶æ€");
+                return;
+            }
+
+            // **ä½¿ç”¨ç»Ÿä¸€æ¥å£éªŒè¯ç©å®¶èº«ä»½**
             if (!playerStates.ContainsKey(playerId))
             {
-                LogDebug($"Î´ÖªÍæ¼ÒÌá½»´ğ°¸: {playerId}");
+                LogDebug($"æœªçŸ¥ç©å®¶æäº¤ç­”æ¡ˆ: {playerId}");
                 return;
             }
 
-            // ¼ì²éÊÇ·ñÂÖµ½µ±Ç°Íæ¼Ò
+            // æ£€æŸ¥æ˜¯å¦è½®åˆ°å½“å‰ç©å®¶
             if (playerId != currentTurnPlayerId)
             {
-                LogDebug($"²»ÊÇµ±Ç°Íæ¼ÒµÄ»ØºÏ: Ìá½»Õß={playerId}, µ±Ç°»ØºÏ={currentTurnPlayerId}");
+                LogDebug($"ä¸æ˜¯å½“å‰ç©å®¶çš„å›åˆ: æäº¤è€…={playerId}, å½“å‰å›åˆ={currentTurnPlayerId}");
                 return;
             }
 
-            LogDebug($"´¦ÀíÍæ¼Ò {playerId} µÄ´ğ°¸: {answer}");
+            LogDebug($"å¤„ç†ç©å®¶ {playerId} çš„ç­”æ¡ˆ: {answer}");
 
-            // ÑéÖ¤´ğ°¸
+            // éªŒè¯ç­”æ¡ˆ
             bool isCorrect = ValidateAnswer(answer, currentQuestion);
 
-            // ¸üĞÂÍæ¼Ò×´Ì¬
+            // æ›´æ–°ç©å®¶çŠ¶æ€
             UpdatePlayerState(playerId, isCorrect);
 
-            // ¹ã²¥´ğÌâ½á¹û
+            // å¹¿æ’­ç­”é¢˜ç»“æœ
             BroadcastAnswerResult(isCorrect, currentQuestion.correctAnswer);
 
-            // ¼ì²éÓÎÏ·ÊÇ·ñ½áÊø
+            // æ£€æŸ¥æ¸¸æˆæ˜¯å¦ç»“æŸ
             CheckGameEndConditions();
 
-            // Èç¹ûÓÎÏ·ÈÔÔÚ½øĞĞ£¬ÇĞ»»µ½ÏÂÒ»¸öÍæ¼Ò
+            // å¦‚æœæ¸¸æˆä»åœ¨è¿›è¡Œï¼Œåˆ‡æ¢åˆ°ä¸‹ä¸€ä¸ªç©å®¶
             if (gameInProgress)
             {
                 Invoke(nameof(NextPlayerTurn), 2f);
@@ -1014,7 +1026,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ¸üĞÂÍæ¼Ò×´Ì¬£¨¼ò»¯°æ±¾£©
+        /// æ›´æ–°ç©å®¶çŠ¶æ€ï¼ˆç®€åŒ–ç‰ˆæœ¬ï¼‰
         /// </summary>
         private void UpdatePlayerState(ushort playerId, bool isCorrect)
         {
@@ -1025,7 +1037,24 @@ namespace Core.Network
 
             if (isCorrect)
             {
-                LogDebug($"Íæ¼Ò {playerId} ´ğ¶ÔÁË");
+                LogDebug($"ç©å®¶ {playerId} ç­”å¯¹äº†");
+                if (isIdiomChainActive && currentQuestion?.questionType == QuestionType.IdiomChain)
+                {
+                    string playerAnswer = GetLastPlayerAnswer(playerId); // éœ€è¦ç¼“å­˜ç©å®¶ç­”æ¡ˆ
+                    if (!string.IsNullOrEmpty(playerAnswer))
+                    {
+                        currentIdiomChainWord = playerAnswer.Trim();
+                        idiomChainCount++;
+                        LogDebug($"æˆè¯­æ¥é¾™æ›´æ–°: {currentIdiomChainWord} (ç¬¬{idiomChainCount}ä¸ª)");
+
+                        // æ£€æŸ¥æ˜¯å¦è¾¾åˆ°æœ€å¤§æ¥é¾™æ•°
+                        if (idiomChainCount >= MAX_IDIOM_CHAIN)
+                        {
+                            LogDebug("æˆè¯­æ¥é¾™è¾¾åˆ°æœ€å¤§é•¿åº¦ï¼Œç»“æŸæ¥é¾™æ¨¡å¼");
+                            ResetIdiomChainState();
+                        }
+                    }
+                }
             }
             else
             {
@@ -1034,32 +1063,158 @@ namespace Core.Network
                 {
                     playerState.health = 0;
                     playerState.isAlive = false;
-                    LogDebug($"Íæ¼Ò {playerId} ±»ÌÔÌ­");
+                    LogDebug($"ç©å®¶ {playerId} è¢«æ·˜æ±°");
                 }
                 else
                 {
-                    LogDebug($"Íæ¼Ò {playerId} ´ğ´í£¬ÑªÁ¿: {playerState.health}");
+                    LogDebug($"ç©å®¶ {playerId} ç­”é”™ï¼Œç”Ÿå‘½å€¼: {playerState.health}");
                 }
 
-                // ¹ã²¥ÑªÁ¿¸üĞÂ
+                // æˆè¯­æ¥é¾™ç­”é”™æ—¶é‡ç½®ï¼ˆå¯é€‰ï¼‰
+                if (isIdiomChainActive && currentQuestion?.questionType == QuestionType.IdiomChain)
+                {
+                    LogDebug("æˆè¯­æ¥é¾™ç­”é”™ï¼Œé‡ç½®æ¥é¾™çŠ¶æ€");
+                    ResetIdiomChainState();
+                }
+
                 BroadcastHealthUpdate(playerId, playerState.health);
             }
         }
+        private NetworkQuestionData GenerateIdiomChainContinuation(string baseIdiom)
+        {
+            LogDebug($"ç”ŸæˆåŸºäº '{baseIdiom}' çš„æ¥é¾™é¢˜ç›®");
+    
+            // è·å–æˆè¯­æ¥é¾™ç®¡ç†å™¨
+            var idiomManager = GetIdiomChainManager();
+    
+            if (idiomManager != null)
+            {
+                var question = idiomManager.CreateContinuationQuestion(baseIdiom, idiomChainCount, currentIdiomChainWord);
+        
+                if (question != null)
+                {
+                    LogDebug("ç”Ÿæˆæ¥é¾™é¢˜æˆåŠŸ");
+                    return question;
+                }
+            }
+    
+            LogDebug("æ— æ³•ç”Ÿæˆæ¥é¾™é¢˜ç›®ï¼Œé‡ç½®æ¥é¾™çŠ¶æ€");
+            ResetIdiomChainState();
+            return null;
+        }
+
+        private void ResetIdiomChainState()
+        {
+            isIdiomChainActive = false;
+            currentIdiomChainWord = null;
+            idiomChainCount = 0;
+            LogDebug("æˆè¯­æ¥é¾™çŠ¶æ€å·²é‡ç½®");
+        }
+
+        private Dictionary<ushort, string> playerAnswerCache = new Dictionary<ushort, string>();
+
+        private string GetLastPlayerAnswer(ushort playerId)
+        {
+            return playerAnswerCache.ContainsKey(playerId) ? playerAnswerCache[playerId] : null;
+        }
 
         /// <summary>
-        /// ÑéÖ¤´ğ°¸
+        /// éªŒè¯ç­”æ¡ˆ
         /// </summary>
         private bool ValidateAnswer(string answer, NetworkQuestionData question)
         {
-            if (question == null || string.IsNullOrEmpty(answer))
-                return false;
+            if (question.questionType == QuestionType.IdiomChain)
+            {
+                // æˆè¯­æ¥é¾™ç‰¹æ®ŠéªŒè¯
+                return ValidateIdiomChainAnswer(answer, question);
+            }
 
-            // ¼òµ¥µÄ×Ö·û´®±È½Ï£¬Êµ¼Ê¿ÉÄÜĞèÒª¸ü¸´ÔÓµÄÂß¼­
+            // å…¶ä»–é¢˜å‹çš„æ™®é€šéªŒè¯
             return answer.Trim().Equals(question.correctAnswer.Trim(), System.StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
-        /// ÇĞ»»µ½ÏÂÒ»¸öÍæ¼Ò
+        /// éªŒè¯æˆè¯­æ¥é¾™ç­”æ¡ˆ
+        /// </summary>
+        private bool ValidateIdiomChainAnswer(string answer, NetworkQuestionData question)
+        {
+            // ä»é¢˜ç›®æ•°æ®ä¸­è·å–é¢˜å¹²æˆè¯­
+            string baseIdiom = GetBaseIdiomFromQuestion(question);
+
+            if (string.IsNullOrEmpty(baseIdiom))
+            {
+                LogDebug("æ— æ³•è·å–é¢˜å¹²æˆè¯­ï¼ŒéªŒè¯å¤±è´¥");
+                return false;
+            }
+
+            var idiomManager = GetIdiomChainManager();
+
+            if (idiomManager != null)
+            {
+                // è°ƒç”¨éªŒè¯æ–¹æ³•
+                bool result = idiomManager.ValidateIdiomChain(answer, baseIdiom);
+                LogDebug($"æˆè¯­æ¥é¾™éªŒè¯ç»“æœ: {answer} (åŸºäº: {baseIdiom}) -> {result}");
+                return result;
+            }
+            else return false;
+        }
+
+        /// <summary>
+        /// è·å–IdiomChainQuestionManagerå®ä¾‹
+        /// </summary>
+        private IdiomChainQuestionManager GetIdiomChainManager()
+        {
+            try
+            {
+                if (questionDataService != null)
+                {
+                    var getProviderMethod = questionDataService.GetType()
+                        .GetMethod("GetOrCreateProvider", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (getProviderMethod != null)
+                    {
+                        var provider = getProviderMethod.Invoke(questionDataService, new object[] { QuestionType.IdiomChain });
+
+                        if (provider is IdiomChainQuestionManager manager)
+                        {
+                            return manager;
+                        }
+                    }
+                }
+
+                // æ–¹æ³•2ï¼šç›´æ¥æŸ¥æ‰¾åœºæ™¯ä¸­çš„å®ä¾‹
+                return FindObjectOfType<IdiomChainQuestionManager>();
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"è·å–IdiomChainQuestionManagerå¤±è´¥: {e.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// ä»é¢˜ç›®æ•°æ®ä¸­è·å–é¢˜å¹²æˆè¯­
+        /// </summary>
+        private string GetBaseIdiomFromQuestion(NetworkQuestionData question)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(question.additionalData))
+                {
+                    var additionalInfo = JsonUtility.FromJson<GameLogic.FillBlank.IdiomChainAdditionalData>(question.additionalData);
+                    return additionalInfo.currentIdiom;
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"è·å–é¢˜å¹²æˆè¯­å¤±è´¥: {e.Message}");
+            }
+
+            return "";
+        }
+
+        /// <summary>
+        /// åˆ‡æ¢åˆ°ä¸‹ä¸€ä¸ªç©å®¶
         /// </summary>
         private void NextPlayerTurn()
         {
@@ -1067,111 +1222,112 @@ namespace Core.Network
 
             if (alivePlayers.Count == 0)
             {
-                LogDebug("Ã»ÓĞ´æ»îµÄÍæ¼Ò£¬ÓÎÏ·½áÊø");
-                EndGame("Ã»ÓĞ´æ»îµÄÍæ¼Ò");
+                LogDebug("æ²¡æœ‰å­˜æ´»çš„ç©å®¶ï¼Œæ¸¸æˆç»“æŸ");
+                EndGame("æ²¡æœ‰å­˜æ´»çš„ç©å®¶");
                 return;
             }
 
             if (alivePlayers.Count == 1)
             {
                 var winner = playerStates[alivePlayers[0]];
-                LogDebug($"ÓÎÏ·½áÊø£º{winner.playerName} »ñÊ¤");
-                EndGame($"{winner.playerName} »ñÊ¤£¡");
+                LogDebug($"æ¸¸æˆç»“æŸï¼š{winner.playerName} è·èƒœ");
+                EndGame($"{winner.playerName} è·èƒœï¼");
                 return;
             }
 
-            // ÕÒµ½ÏÂÒ»¸ö´æ»îµÄÍæ¼Ò
+            // æ‰¾åˆ°ä¸‹ä¸€ä¸ªå­˜æ´»çš„ç©å®¶
             int currentIndex = alivePlayers.IndexOf(currentTurnPlayerId);
             if (currentIndex == -1)
             {
-                // µ±Ç°Íæ¼Ò²»ÔÚ´æ»îÁĞ±íÖĞ£¬Ñ¡ÔñµÚÒ»¸ö´æ»îµÄÍæ¼Ò
+                // å½“å‰ç©å®¶ä¸åœ¨å­˜æ´»åˆ—è¡¨ä¸­ï¼Œé€‰æ‹©ç¬¬ä¸€ä¸ªå­˜æ´»çš„ç©å®¶
                 currentTurnPlayerId = alivePlayers[0];
             }
             else
             {
-                // Ñ¡ÔñÏÂÒ»¸ö´æ»îµÄÍæ¼Ò
+                // é€‰æ‹©ä¸‹ä¸€ä¸ªå­˜æ´»çš„ç©å®¶
                 int nextIndex = (currentIndex + 1) % alivePlayers.Count;
                 currentTurnPlayerId = alivePlayers[nextIndex];
             }
 
-            // ¹ã²¥»ØºÏ±ä¸ü²¢Éú³ÉĞÂÌâÄ¿
+            // å¹¿æ’­å›åˆå˜æ›´å¹¶ç”Ÿæˆæ–°é¢˜ç›®
             BroadcastPlayerTurnChanged(currentTurnPlayerId);
 
-            // ¶ÌÔİÑÓ³ÙºóÉú³ÉĞÂÌâÄ¿
+            // çŸ­æš‚å»¶è¿Ÿåç”Ÿæˆæ–°é¢˜ç›®
             Invoke(nameof(GenerateAndSendQuestion), 1f);
         }
 
-        #region ÍøÂçÏûÏ¢¹ã²¥
+
+        #region ç½‘ç»œæ¶ˆæ¯å¹¿æ’­
 
         /// <summary>
-        /// ¹ã²¥ÌâÄ¿£¨Ë«²ã¼Ü¹¹ÊÊÅä£©
+        /// å¹¿æ’­é¢˜ç›®ï¼ˆåŒå±‚æ¶æ„é€‚é…ï¼‰
         /// </summary>
         private void BroadcastQuestion(NetworkQuestionData question)
         {
             if (!isInitialized || NetworkManager.Instance == null)
             {
-                Debug.LogError("[HostGameManager] ÎŞ·¨¹ã²¥ÌâÄ¿£ºÎ´³õÊ¼»¯»òNetworkManagerÎª¿Õ");
+                Debug.LogError("[HostGameManager] æ— æ³•å¹¿æ’­é¢˜ç›®ï¼šæœªåˆå§‹åŒ–æˆ–NetworkManagerä¸ºç©º");
                 return;
             }
 
-            LogDebug($"×¼±¸¹ã²¥ÌâÄ¿: {question.questionType} - {question.questionText}");
+            LogDebug($"å‡†å¤‡å¹¿æ’­é¢˜ç›®: {question.questionType} - {question.questionText}");
 
             if (isDualLayerArchitecture && isServerLayerOnly)
             {
-                // Ë«²ã¼Ü¹¹£º·şÎñÆ÷²ã¹ã²¥ÌâÄ¿
+                // åŒå±‚æ¶æ„ï¼šæœåŠ¡å™¨å±‚å¹¿æ’­é¢˜ç›®
                 BroadcastQuestionDualLayer(question);
             }
             else
             {
-                // ´«Í³¼Ü¹¹£ºÖ±½Ó¹ã²¥
+                // ä¼ ç»Ÿæ¶æ„ï¼šç›´æ¥å¹¿æ’­
                 BroadcastQuestionTraditional(question);
             }
         }
 
         /// <summary>
-        /// Ë«²ã¼Ü¹¹µÄÌâÄ¿¹ã²¥
+        /// åŒå±‚æ¶æ„çš„é¢˜ç›®å¹¿æ’­
         /// </summary>
         private void BroadcastQuestionDualLayer(NetworkQuestionData question)
         {
-            LogDebug("Ë«²ã¼Ü¹¹£º·şÎñÆ÷²ã¹ã²¥ÌâÄ¿");
+            LogDebug("åŒå±‚æ¶æ„ï¼šæœåŠ¡å™¨å±‚å¹¿æ’­é¢˜ç›®");
 
-            // 1. Í¨¹ıÍøÂç¹ã²¥¸øËùÓĞÍâ²¿¿Í»§¶Ë
+            // 1. é€šè¿‡ç½‘ç»œå¹¿æ’­ç»™æ‰€æœ‰å¤–éƒ¨å®¢æˆ·ç«¯
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.SendQuestion);
             message.AddBytes(question.Serialize());
 
-            // Ê¹ÓÃ·şÎñÆ÷²ãµÄNetworkManager¹ã²¥
+            // ä½¿ç”¨æœåŠ¡å™¨å±‚çš„NetworkManagerå¹¿æ’­
             if (serverNetworkManager != null)
             {
                 serverNetworkManager.BroadcastMessage(message);
-                LogDebug("ÌâÄ¿ÒÑÍ¨¹ı·şÎñÆ÷²ã¹ã²¥¸øÍâ²¿¿Í»§¶Ë");
+                LogDebug("é¢˜ç›®å·²é€šè¿‡æœåŠ¡å™¨å±‚å¹¿æ’­ç»™å¤–éƒ¨å®¢æˆ·ç«¯");
             }
 
-            // 2. Í¨¹ıË«²ã¼Ü¹¹¹ÜÀíÆ÷·¢ËÍ¸ø±¾µØÍæ¼ÒHost²ã
+            // 2. é€šè¿‡åŒå±‚æ¶æ„ç®¡ç†å™¨å‘é€ç»™æœ¬åœ°ç©å®¶Hostå±‚
             if (DualLayerArchitectureManager.Instance != null)
             {
                 DualLayerArchitectureManager.Instance.ServerToPlayerHostQuestion(question);
-                LogDebug("ÌâÄ¿ÒÑ·¢ËÍ¸ø±¾µØÍæ¼ÒHost²ã");
+                LogDebug("é¢˜ç›®å·²å‘é€ç»™æœ¬åœ°ç©å®¶Hostå±‚");
             }
             else
             {
-                Debug.LogError("Ë«²ã¼Ü¹¹¹ÜÀíÆ÷²»´æÔÚ£¬ÎŞ·¨·¢ËÍÌâÄ¿¸øÍæ¼ÒHost²ã");
+                Debug.LogError("åŒå±‚æ¶æ„ç®¡ç†å™¨ä¸å­˜åœ¨ï¼Œæ— æ³•å‘é€é¢˜ç›®ç»™ç©å®¶Hostå±‚");
             }
         }
 
         /// <summary>
-        /// ´«Í³¼Ü¹¹µÄÌâÄ¿¹ã²¥
+        /// ä¼ ç»Ÿæ¶æ„çš„é¢˜ç›®å¹¿æ’­
         /// </summary>
         private void BroadcastQuestionTraditional(NetworkQuestionData question)
         {
-            LogDebug("´«Í³¼Ü¹¹£ºÖ±½Ó¹ã²¥ÌâÄ¿");
+            LogDebug("ä¼ ç»Ÿæ¶æ„ï¼šç›´æ¥å¹¿æ’­é¢˜ç›®");
 
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.SendQuestion);
             message.AddBytes(question.Serialize());
             NetworkManager.Instance.BroadcastMessage(message);
 
-            LogDebug("ÌâÄ¿ÒÑÍ¨¹ıÍøÂç¹ã²¥");
+            LogDebug("é¢˜ç›®å·²é€šè¿‡ç½‘ç»œå¹¿æ’­");
 
-            // È·±£HostÒ²½ÓÊÕµ½ÌâÄ¿
+            // ç¡®ä¿Hostä¹Ÿæ¥æ”¶åˆ°é¢˜ç›®
             if (NetworkManager.Instance.IsHost)
             {
                 TriggerHostQuestionReceive(NetworkQuestionManagerController.Instance, question);
@@ -1179,54 +1335,54 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ´¥·¢HostµÄÌâÄ¿½ÓÊÕ£¨Í¨¹ı·´Éä»ò¹«¹²½Ó¿Ú£©
+        /// è§¦å‘Hostçš„é¢˜ç›®æ¥æ”¶ï¼ˆé€šè¿‡åå°„æˆ–å…¬å…±æ¥å£ï¼‰
         /// </summary>
         private void TriggerHostQuestionReceive(NetworkQuestionManagerController nqmc, NetworkQuestionData question)
         {
             try
             {
-                LogDebug("³¢ÊÔ´¥·¢HostµÄÌâÄ¿½ÓÊÕ");
+                LogDebug("å°è¯•è§¦å‘Hostçš„é¢˜ç›®æ¥æ”¶");
 
-                // ·½°¸1£º¼ì²éÊÇ·ñÓĞ¹«¹²·½·¨¿ÉÒÔÖ±½Óµ÷ÓÃ
+                // æ–¹æ¡ˆ1ï¼šæ£€æŸ¥æ˜¯å¦æœ‰å…¬å…±æ–¹æ³•å¯ä»¥ç›´æ¥è°ƒç”¨
                 var publicMethod = typeof(NetworkQuestionManagerController).GetMethod("ReceiveNetworkQuestion");
                 if (publicMethod != null)
                 {
-                    LogDebug("Í¨¹ı¹«¹²·½·¨ ReceiveNetworkQuestion ´¥·¢");
+                    LogDebug("é€šè¿‡å…¬å…±æ–¹æ³• ReceiveNetworkQuestion è§¦å‘");
                     publicMethod.Invoke(nqmc, new object[] { question });
                     return;
                 }
 
-                // ·½°¸2£ºÍ¨¹ı·´Éäµ÷ÓÃË½ÓĞ·½·¨
+                // æ–¹æ¡ˆ2ï¼šé€šè¿‡åå°„è°ƒç”¨ç§æœ‰æ–¹æ³•
                 var privateMethod = typeof(NetworkQuestionManagerController).GetMethod("OnNetworkQuestionReceived",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
                 if (privateMethod != null)
                 {
-                    LogDebug("Í¨¹ı·´Éäµ÷ÓÃ OnNetworkQuestionReceived");
+                    LogDebug("é€šè¿‡åå°„è°ƒç”¨ OnNetworkQuestionReceived");
                     privateMethod.Invoke(nqmc, new object[] { question });
                 }
                 else
                 {
-                    Debug.LogError("ÎŞ·¨ÕÒµ½ºÏÊÊµÄ·½·¨À´´¥·¢HostÌâÄ¿½ÓÊÕ");
+                    Debug.LogError("æ— æ³•æ‰¾åˆ°åˆé€‚çš„æ–¹æ³•æ¥è§¦å‘Hosté¢˜ç›®æ¥æ”¶");
 
-                    // ·½°¸3£º¼ì²éNQMCÊÇ·ñÒÑ¾­Æô¶¯ÓÎÏ·£¬Èç¹ûÃ»ÓĞÔòÆô¶¯
+                    // æ–¹æ¡ˆ3ï¼šæ£€æŸ¥NQMCæ˜¯å¦å·²ç»å¯åŠ¨æ¸¸æˆï¼Œå¦‚æœæ²¡æœ‰åˆ™å¯åŠ¨
                     if (!nqmc.IsGameStarted)
                     {
-                        LogDebug("NQMCÎ´Æô¶¯£¬³¢ÊÔÆô¶¯¶àÈËÓÎÏ·");
+                        LogDebug("NQMCæœªå¯åŠ¨ï¼Œå°è¯•å¯åŠ¨å¤šäººæ¸¸æˆ");
                         nqmc.StartGame(true);
                     }
 
-                    LogDebug("½¨Òé¼ì²éNetworkManagerµÄBroadcastMessageÊµÏÖÊÇ·ñ°üº¬Host×Ô¼º");
+                    LogDebug("å»ºè®®æ£€æŸ¥NetworkManagerçš„BroadcastMessageå®ç°æ˜¯å¦åŒ…å«Hostè‡ªå·±");
                 }
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"´¥·¢HostÌâÄ¿½ÓÊÕÊ§°Ü: {e.Message}");
+                Debug.LogError($"è§¦å‘Hosté¢˜ç›®æ¥æ”¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥Íæ¼Ò»ØºÏ±ä¸ü
+        /// å¹¿æ’­ç©å®¶å›åˆå˜æ›´
         /// </summary>
         private void BroadcastPlayerTurnChanged(ushort playerId)
         {
@@ -1237,11 +1393,11 @@ namespace Core.Network
             message.AddUShort(playerId);
             NetworkManager.Instance.BroadcastMessage(message);
 
-            LogDebug($"¹ã²¥»ØºÏ±ä¸ü: ÂÖµ½Íæ¼Ò {playerId}");
+            LogDebug($"å¹¿æ’­å›åˆå˜æ›´: è½®åˆ°ç©å®¶ {playerId}");
         }
 
         /// <summary>
-        /// ¹ã²¥ÑªÁ¿¸üĞÂ
+        /// å¹¿æ’­è¡€é‡æ›´æ–°
         /// </summary>
         private void BroadcastHealthUpdate(ushort playerId, int newHealth)
         {
@@ -1255,7 +1411,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ¹ã²¥´ğÌâ½á¹û
+        /// å¹¿æ’­ç­”é¢˜ç»“æœ
         /// </summary>
         private void BroadcastAnswerResult(bool isCorrect, string correctAnswer)
         {
@@ -1270,84 +1426,84 @@ namespace Core.Network
 
         #endregion
 
-        #region ÍøÂçÊÂ¼ş´¦Àí
+        #region ç½‘ç»œäº‹ä»¶å¤„ç†
 
         private void OnPlayerJoined(ushort playerId)
         {
-            LogDebug($"ÍøÂçÊÂ¼ş: Íæ¼Ò {playerId} ¼ÓÈë");
+            LogDebug($"ç½‘ç»œäº‹ä»¶: ç©å®¶ {playerId} åŠ å…¥");
             AddPlayer(playerId);
         }
 
         private void OnPlayerLeft(ushort playerId)
         {
-            LogDebug($"ÍøÂçÊÂ¼ş: Íæ¼Ò {playerId} Àë¿ª");
+            LogDebug($"ç½‘ç»œäº‹ä»¶: ç©å®¶ {playerId} ç¦»å¼€");
             RemovePlayer(playerId);
         }
 
         #endregion
 
-        #region ¹«¹²½Ó¿ÚºÍµ÷ÊÔ·½·¨
+        #region å…¬å…±æ¥å£å’Œè°ƒè¯•æ–¹æ³•
 
         /// <summary>
-        /// Ç¿ÖÆÖØĞÂ³õÊ¼»¯£¨ÓÃÓÚµ÷ÊÔ£©
+        /// å¼ºåˆ¶é‡æ–°åˆå§‹åŒ–ï¼ˆç”¨äºè°ƒè¯•ï¼‰
         /// </summary>
-        [ContextMenu("Ç¿ÖÆÖØĞÂ³õÊ¼»¯")]
+        [ContextMenu("å¼ºåˆ¶é‡æ–°åˆå§‹åŒ–")]
         public void ForceReinitialize()
         {
             if (Application.isPlaying)
             {
-                LogDebug("Ç¿ÖÆÖØĞÂ³õÊ¼»¯");
+                LogDebug("å¼ºåˆ¶é‡æ–°åˆå§‹åŒ–");
                 isInitialized = false;
                 StartCoroutine(InitializeHostManagerCoroutine());
             }
         }
         public string GetGameStats()
         {
-            var stats = "=== ÓÎÏ·Í³¼Æ ===\n";
-            stats += $"ÓÎÏ·×´Ì¬: {(gameInProgress ? "½øĞĞÖĞ" : "Î´¿ªÊ¼")}\n";
-            stats += $"³õÊ¼»¯Íê³É: {isInitialized}\n";
-            stats += $"µ±Ç°»ØºÏÍæ¼Ò: {currentTurnPlayerId}\n";
-            stats += $"Íæ¼ÒÊıÁ¿: {playerStates?.Count ?? 0}\n";
+            var stats = "=== æ¸¸æˆç»Ÿè®¡ ===\n";
+            stats += $"æ¸¸æˆçŠ¶æ€: {(gameInProgress ? "è¿›è¡Œä¸­" : "æœªå¼€å§‹")}\n";
+            stats += $"åˆå§‹åŒ–å®Œæˆ: {isInitialized}\n";
+            stats += $"å½“å‰å›åˆç©å®¶: {currentTurnPlayerId}\n";
+            stats += $"ç©å®¶æ•°é‡: {playerStates?.Count ?? 0}\n";
 
             if (NetworkManager.Instance != null)
             {
-                stats += $"HostÍæ¼ÒID: {NetworkManager.Instance.GetHostPlayerId()}\n";
-                stats += $"Host¿Í»§¶Ë¾ÍĞ÷: {NetworkManager.Instance.IsHostClientReady}\n";
+                stats += $"Hostç©å®¶ID: {NetworkManager.Instance.GetHostPlayerId()}\n";
+                stats += $"Hostå®¢æˆ·ç«¯å°±ç»ª: {NetworkManager.Instance.IsHostClientReady}\n";
             }
 
             if (playerStates != null)
             {
-                stats += "Íæ¼Ò×´Ì¬:\n";
+                stats += "ç©å®¶çŠ¶æ€:\n";
                 foreach (var player in playerStates.Values)
                 {
-                    stats += $"  - {player.playerName} (ID: {player.playerId}, ÑªÁ¿: {player.health}, ´æ»î: {player.isAlive})\n";
+                    stats += $"  - {player.playerName} (ID: {player.playerId}, è¡€é‡: {player.health}, å­˜æ´»: {player.isAlive})\n";
                 }
             }
 
             if (RoomManager.Instance?.CurrentRoom != null)
             {
                 var room = RoomManager.Instance.CurrentRoom;
-                stats += $"·¿¼äÍæ¼ÒÊı: {room.players.Count}\n";
-                stats += $"·¿¼äHost ID: {room.hostId}\n";
+                stats += $"æˆ¿é—´ç©å®¶æ•°: {room.players.Count}\n";
+                stats += $"æˆ¿é—´Host ID: {room.hostId}\n";
             }
 
             return stats;
         }
         /// <summary>
-        /// ÊÖ¶¯Í¬²½·¿¼äÊı¾İ£¨µ÷ÊÔÓÃ£©
+        /// æ‰‹åŠ¨åŒæ­¥æˆ¿é—´æ•°æ®ï¼ˆè°ƒè¯•ç”¨ï¼‰
         /// </summary>
-        [ContextMenu("ÊÖ¶¯Í¬²½·¿¼äÊı¾İ")]
+        [ContextMenu("æ‰‹åŠ¨åŒæ­¥æˆ¿é—´æ•°æ®")]
         public void ManualSyncFromRoom()
         {
             if (Application.isPlaying)
             {
-                LogDebug("ÊÖ¶¯Í¬²½·¿¼äÊı¾İ");
+                LogDebug("æ‰‹åŠ¨åŒæ­¥æˆ¿é—´æ•°æ®");
                 SyncPlayersFromRoomSystem();
             }
         }
 
         /// <summary>
-        /// »ñÈ¡µ±Ç°×´Ì¬ĞÅÏ¢£¨ÓÃÓÚµ÷ÊÔ£©
+        /// è·å–å½“å‰çŠ¶æ€ä¿¡æ¯ï¼ˆç”¨äºè°ƒè¯•ï¼‰
         /// </summary>
         public string GetStatusInfo()
         {
@@ -1365,45 +1521,45 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ÏÔÊ¾µ±Ç°Íæ¼ÒÁĞ±í£¨µ÷ÊÔÓÃ£©
+        /// æ˜¾ç¤ºå½“å‰ç©å®¶åˆ—è¡¨ï¼ˆè°ƒè¯•ç”¨ï¼‰
         /// </summary>
-        [ContextMenu("ÏÔÊ¾Íæ¼ÒÁĞ±í")]
+        [ContextMenu("æ˜¾ç¤ºç©å®¶åˆ—è¡¨")]
         public void ShowPlayerList()
         {
             if (Application.isPlaying)
             {
-                LogDebug("=== µ±Ç°Íæ¼ÒÁĞ±í ===");
+                LogDebug("=== å½“å‰ç©å®¶åˆ—è¡¨ ===");
                 if (playerStates == null || playerStates.Count == 0)
                 {
-                    LogDebug("Ã»ÓĞÍæ¼Ò");
+                    LogDebug("æ²¡æœ‰ç©å®¶");
                     return;
                 }
 
                 foreach (var player in playerStates.Values)
                 {
-                    LogDebug($"Íæ¼Ò: {player.playerName} (ID: {player.playerId}, ÑªÁ¿: {player.health}, ´æ»î: {player.isAlive})");
+                    LogDebug($"ç©å®¶: {player.playerName} (ID: {player.playerId}, è¡€é‡: {player.health}, å­˜æ´»: {player.isAlive})");
                 }
             }
         }
 
         /// <summary>
-        /// ÇåÀí·şÎñ»º´æ
+        /// æ¸…ç†æœåŠ¡ç¼“å­˜
         /// </summary>
         public void ClearServiceCache()
         {
             if (questionDataService != null)
             {
                 questionDataService.ClearCache();
-                LogDebug("ÒÑÇåÀíÌâÄ¿Êı¾İ·şÎñ»º´æ");
+                LogDebug("å·²æ¸…ç†é¢˜ç›®æ•°æ®æœåŠ¡ç¼“å­˜");
             }
         }
 
         #endregion
 
-        #region ¸¨Öú·½·¨
+        #region è¾…åŠ©æ–¹æ³•
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -1415,14 +1571,14 @@ namespace Core.Network
 
         #endregion
 
-        #region Unity ÉúÃüÖÜÆÚ
+        #region Unity ç”Ÿå‘½å‘¨æœŸ
 
         private void OnDestroy()
         {
-            LogDebug("HostGameManager ±»Ïú»Ù");
+            LogDebug("HostGameManager è¢«é”€æ¯");
             UnsubscribeFromNetworkEvents();
 
-            // ÇåÀí·şÎñ»º´æ
+            // æ¸…ç†æœåŠ¡ç¼“å­˜
             ClearServiceCache();
 
             if (Instance == this)
@@ -1435,11 +1591,11 @@ namespace Core.Network
         {
             if (pauseStatus && isInitialized)
             {
-                LogDebug("Ó¦ÓÃÔİÍ££¬ÔİÍ£ÓÎÏ·Âß¼­");
+                LogDebug("åº”ç”¨æš‚åœï¼Œæš‚åœæ¸¸æˆé€»è¾‘");
             }
             else if (!pauseStatus && isInitialized)
             {
-                LogDebug("Ó¦ÓÃ»Ö¸´£¬»Ö¸´ÓÎÏ·Âß¼­");
+                LogDebug("åº”ç”¨æ¢å¤ï¼Œæ¢å¤æ¸¸æˆé€»è¾‘");
             }
         }
 
@@ -1447,7 +1603,7 @@ namespace Core.Network
     }
 
     /// <summary>
-    /// Íæ¼ÒÓÎÏ·×´Ì¬£¨¼ò»¯°æ±¾£¬ÒÆ³ı·ÖÊı£©
+    /// ç©å®¶æ¸¸æˆçŠ¶æ€ï¼ˆç®€åŒ–ç‰ˆæœ¬ï¼Œç§»é™¤åˆ†æ•°ï¼‰
     /// </summary>
     [System.Serializable]
     public class PlayerGameState
