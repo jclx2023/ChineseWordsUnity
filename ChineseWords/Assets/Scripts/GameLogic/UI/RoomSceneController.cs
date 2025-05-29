@@ -2,29 +2,19 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
-using System.Collections.Generic;
 using Core.Network;
-using Core; // 添加这个引用
+using Core;
 
 namespace UI
 {
     /// <summary>
-    /// 房间场景控制器
-    /// 管理房间UI显示和用户交互
-    /// 现在作为场景切换的唯一执行者
+    /// 房间场景控制器 - 精简版
+    /// 专注于场景控制和业务逻辑，UI刷新委托给RoomUIController
     /// </summary>
     public class RoomSceneController : MonoBehaviour
     {
-        [Header("房间信息UI")]
-        [SerializeField] private TMP_Text roomNameText;
-        [SerializeField] private TMP_Text roomCodeText;
-        [SerializeField] private TMP_Text playerCountText;
-        [SerializeField] private TMP_Text roomStatusText;
-
-        [Header("玩家列表")]
-        [SerializeField] private Transform playerListParent;
-        [SerializeField] private GameObject playerItemPrefab;
-        [SerializeField] private ScrollRect playerListScrollRect;
+        [Header("UI控制器引用")]
+        [SerializeField] private RoomUIController roomUIController;
 
         [Header("控制按钮")]
         [SerializeField] private Button readyButton;
@@ -40,15 +30,11 @@ namespace UI
 
         [Header("设置")]
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private float uiUpdateInterval = 0.5f;
-
-        // 玩家列表UI项
-        private Dictionary<ushort, GameObject> playerListItems = new Dictionary<ushort, GameObject>();
+        [SerializeField] private bool autoFindUIController = true;
 
         // 状态管理
         private bool isInitialized = false;
-        private float lastUIUpdateTime = 0f;
-        private bool hasHandledGameStart = false; // 防止重复处理游戏开始
+        private bool hasHandledGameStart = false;
 
         private void Start()
         {
@@ -64,6 +50,20 @@ namespace UI
 
             // 显示加载界面
             ShowLoadingPanel("正在加载房间信息...");
+
+            // 查找UI控制器
+            if (autoFindUIController && roomUIController == null)
+            {
+                roomUIController = FindObjectOfType<RoomUIController>();
+                if (roomUIController != null)
+                {
+                    LogDebug("自动找到RoomUIController");
+                }
+                else
+                {
+                    LogDebug("警告: 未找到RoomUIController，部分UI功能可能不可用");
+                }
+            }
 
             // 绑定UI事件
             BindUIEvents();
@@ -85,8 +85,12 @@ namespace UI
                 return;
             }
 
-            // 初始化UI状态
-            InitializeUIState();
+            // 通知UI控制器进行初始化
+            if (roomUIController != null)
+            {
+                // UI控制器会自动处理UI刷新，我们不需要手动调用
+                LogDebug("RoomUIController将处理UI刷新");
+            }
 
             // 标记为已初始化
             isInitialized = true;
@@ -118,12 +122,8 @@ namespace UI
         /// </summary>
         private void SubscribeToRoomEvents()
         {
-            RoomManager.OnRoomCreated += OnRoomCreated;
-            RoomManager.OnRoomJoined += OnRoomJoined;
-            RoomManager.OnPlayerJoinedRoom += OnPlayerJoinedRoom;
-            RoomManager.OnPlayerLeftRoom += OnPlayerLeftRoom;
-            RoomManager.OnPlayerReadyChanged += OnPlayerReadyChanged;
-            RoomManager.OnGameStarting += OnGameStarting; // 唯一的游戏开始处理点
+            // 只订阅场景控制相关的事件，UI更新事件交给RoomUIController处理
+            RoomManager.OnGameStarting += OnGameStarting;
             RoomManager.OnRoomLeft += OnRoomLeft;
 
             // 订阅网络事件
@@ -131,6 +131,8 @@ namespace UI
 
             // 订阅场景切换事件
             SceneTransitionManager.OnSceneTransitionStarted += OnSceneTransitionStarted;
+
+            LogDebug("已订阅场景控制相关事件");
         }
 
         /// <summary>
@@ -138,26 +140,10 @@ namespace UI
         /// </summary>
         private void UnsubscribeFromRoomEvents()
         {
-            RoomManager.OnRoomCreated -= OnRoomCreated;
-            RoomManager.OnRoomJoined -= OnRoomJoined;
-            RoomManager.OnPlayerJoinedRoom -= OnPlayerJoinedRoom;
-            RoomManager.OnPlayerLeftRoom -= OnPlayerLeftRoom;
-            RoomManager.OnPlayerReadyChanged -= OnPlayerReadyChanged;
             RoomManager.OnGameStarting -= OnGameStarting;
             RoomManager.OnRoomLeft -= OnRoomLeft;
-
             NetworkManager.OnDisconnected -= OnNetworkDisconnected;
             SceneTransitionManager.OnSceneTransitionStarted -= OnSceneTransitionStarted;
-        }
-
-        private void Update()
-        {
-            // 定期更新UI状态
-            if (isInitialized && Time.time - lastUIUpdateTime > uiUpdateInterval)
-            {
-                UpdateUIState();
-                lastUIUpdateTime = Time.time;
-            }
         }
 
         #region 验证方法
@@ -200,228 +186,6 @@ namespace UI
             }
 
             return true;
-        }
-
-        #endregion
-
-        #region UI状态管理
-
-        /// <summary>
-        /// 初始化UI状态
-        /// </summary>
-        private void InitializeUIState()
-        {
-            if (RoomManager.Instance?.CurrentRoom != null)
-            {
-                UpdateRoomInfo(RoomManager.Instance.CurrentRoom);
-                UpdatePlayerList();
-            }
-
-            UpdateButtonStates();
-        }
-
-        /// <summary>
-        /// 更新UI状态
-        /// </summary>
-        private void UpdateUIState()
-        {
-            if (!isInitialized || RoomManager.Instance?.CurrentRoom == null)
-                return;
-
-            UpdateRoomInfo(RoomManager.Instance.CurrentRoom);
-            UpdateButtonStates();
-        }
-
-        /// <summary>
-        /// 更新房间信息显示
-        /// </summary>
-        private void UpdateRoomInfo(RoomData roomData)
-        {
-            if (roomNameText != null)
-                roomNameText.text = $"房间: {roomData.roomName}";
-
-            if (roomCodeText != null)
-                roomCodeText.text = $"房间代码: {roomData.roomCode}";
-
-            if (playerCountText != null)
-                playerCountText.text = $"玩家: {roomData.players.Count}/{roomData.maxPlayers}";
-
-            if (roomStatusText != null)
-            {
-                string statusText = GetRoomStatusText(roomData);
-                roomStatusText.text = statusText;
-            }
-        }
-
-        /// <summary>
-        /// 获取房间状态文本
-        /// </summary>
-        private string GetRoomStatusText(RoomData roomData)
-        {
-            switch (roomData.state)
-            {
-                case RoomState.Waiting:
-                    // 显示准备状态，但排除房主
-                    int readyCount = roomData.GetReadyPlayerCount();
-                    int nonHostCount = roomData.GetNonHostPlayerCount();
-                    if (nonHostCount == 0)
-                        return "等待玩家加入";
-                    else
-                        return $"准备状态: {readyCount}/{nonHostCount}";
-                case RoomState.Ready:
-                    return "准备开始";
-                case RoomState.Starting:
-                    return "游戏启动中...";
-                case RoomState.InGame:
-                    return "游戏进行中";
-                case RoomState.Ended:
-                    return "游戏已结束";
-                default:
-                    return "未知状态";
-            }
-        }
-
-        /// <summary>
-        /// 更新按钮状态
-        /// </summary>
-        private void UpdateButtonStates()
-        {
-            bool isHost = RoomManager.Instance?.IsHost ?? false;
-            bool canStartGame = RoomManager.Instance?.CanStartGame() ?? false;
-            bool isReady = RoomManager.Instance?.GetMyReadyState() ?? false;
-
-            // 准备按钮（只有客户端显示）
-            if (readyButton != null)
-            {
-                readyButton.gameObject.SetActive(!isHost);
-                if (!isHost)
-                {
-                    var buttonText = readyButton.GetComponentInChildren<TMP_Text>();
-                    if (buttonText != null)
-                        buttonText.text = isReady ? "取消准备" : "准备";
-                }
-            }
-
-            // 开始游戏按钮（只有房主显示）
-            if (startGameButton != null)
-            {
-                startGameButton.gameObject.SetActive(isHost);
-                if (isHost)
-                {
-                    startGameButton.interactable = canStartGame;
-                    var buttonText = startGameButton.GetComponentInChildren<TMP_Text>();
-                    if (buttonText != null)
-                    {
-                        var room = RoomManager.Instance?.CurrentRoom;
-                        if (room == null)
-                        {
-                            buttonText.text = "等待房间数据";
-                        }
-                        else if (room.GetNonHostPlayerCount() == 0)
-                        {
-                            buttonText.text = "等待玩家加入";
-                        }
-                        else if (!room.AreAllPlayersReady())
-                        {
-                            int readyCount = room.GetReadyPlayerCount();
-                            int totalNonHost = room.GetNonHostPlayerCount();
-                            buttonText.text = $"等待准备 ({readyCount}/{totalNonHost})";
-                        }
-                        else
-                        {
-                            buttonText.text = "开始游戏";
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 更新玩家列表
-        /// </summary>
-        private void UpdatePlayerList()
-        {
-            if (RoomManager.Instance?.CurrentRoom == null)
-                return;
-
-            // 清空现有列表
-            ClearPlayerList();
-
-            // 重新添加玩家
-            foreach (var player in RoomManager.Instance.CurrentRoom.players.Values)
-            {
-                AddPlayerToList(player);
-            }
-        }
-
-        /// <summary>
-        /// 添加玩家到列表
-        /// </summary>
-        private void AddPlayerToList(RoomPlayer player)
-        {
-            if (playerItemPrefab == null || playerListParent == null)
-                return;
-
-            if (playerListItems.ContainsKey(player.playerId))
-                return;
-
-            GameObject playerItem = Instantiate(playerItemPrefab, playerListParent);
-            playerListItems[player.playerId] = playerItem;
-
-            UpdatePlayerItemInfo(playerItem, player);
-        }
-
-        /// <summary>
-        /// 移除玩家从列表
-        /// </summary>
-        private void RemovePlayerFromList(ushort playerId)
-        {
-            if (playerListItems.ContainsKey(playerId))
-            {
-                Destroy(playerListItems[playerId]);
-                playerListItems.Remove(playerId);
-            }
-        }
-
-        /// <summary>
-        /// 清空玩家列表
-        /// </summary>
-        private void ClearPlayerList()
-        {
-            foreach (var item in playerListItems.Values)
-            {
-                if (item != null)
-                    Destroy(item);
-            }
-            playerListItems.Clear();
-        }
-
-        /// <summary>
-        /// 更新玩家项信息
-        /// </summary>
-        private void UpdatePlayerItemInfo(GameObject playerItem, RoomPlayer player)
-        {
-            var nameText = playerItem.GetComponentInChildren<TMP_Text>();
-            if (nameText != null)
-            {
-                string statusText = "";
-                if (player.isHost)
-                    statusText = " (房主)";
-                else if (player.state == PlayerRoomState.Ready)
-                    statusText = " (已准备)";
-                else
-                    statusText = " (未准备)";
-
-                nameText.text = player.playerName + statusText;
-
-                // 设置颜色
-                if (player.isHost)
-                    nameText.color = Color.yellow;
-                else if (player.state == PlayerRoomState.Ready)
-                    nameText.color = Color.green;
-                else
-                    nameText.color = Color.white;
-            }
         }
 
         #endregion
@@ -479,44 +243,6 @@ namespace UI
         #endregion
 
         #region 房间事件处理
-
-        private void OnRoomCreated(RoomData roomData)
-        {
-            LogDebug("房间创建事件");
-            UpdateRoomInfo(roomData);
-            UpdatePlayerList();
-        }
-
-        private void OnRoomJoined(RoomData roomData)
-        {
-            LogDebug("房间加入事件");
-            UpdateRoomInfo(roomData);
-            UpdatePlayerList();
-        }
-
-        private void OnPlayerJoinedRoom(RoomPlayer player)
-        {
-            LogDebug($"玩家加入: {player.playerName}");
-            AddPlayerToList(player);
-        }
-
-        private void OnPlayerLeftRoom(ushort playerId)
-        {
-            LogDebug($"玩家离开: {playerId}");
-            RemovePlayerFromList(playerId);
-        }
-
-        private void OnPlayerReadyChanged(ushort playerId, bool isReady)
-        {
-            LogDebug($"玩家 {playerId} 准备状态: {isReady}");
-
-            if (playerListItems.ContainsKey(playerId) &&
-                RoomManager.Instance?.CurrentRoom?.players.ContainsKey(playerId) == true)
-            {
-                var player = RoomManager.Instance.CurrentRoom.players[playerId];
-                UpdatePlayerItemInfo(playerListItems[playerId], player);
-            }
-        }
 
         /// <summary>
         /// 游戏开始事件处理 - 唯一的场景切换执行点
@@ -641,13 +367,17 @@ namespace UI
         /// </summary>
         private void OnRefreshButtonClicked()
         {
-            LogDebug("刷新房间状态");
+            LogDebug("手动刷新请求");
 
-            if (RoomManager.Instance?.CurrentRoom != null)
+            // 委托给RoomUIController处理UI刷新
+            if (roomUIController != null)
             {
-                UpdateRoomInfo(RoomManager.Instance.CurrentRoom);
-                UpdatePlayerList();
-                UpdateButtonStates();
+                roomUIController.ForceRefreshUI();
+                LogDebug("已请求RoomUIController强制刷新");
+            }
+            else
+            {
+                LogDebug("RoomUIController不存在，无法执行刷新");
             }
         }
 
@@ -661,6 +391,42 @@ namespace UI
         private void ReturnToMainMenuDelayed()
         {
             SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
+        }
+
+        #endregion
+
+        #region 公共接口
+
+        /// <summary>
+        /// 获取UI控制器引用
+        /// </summary>
+        public RoomUIController GetUIController()
+        {
+            return roomUIController;
+        }
+
+        /// <summary>
+        /// 设置UI控制器引用
+        /// </summary>
+        public void SetUIController(RoomUIController controller)
+        {
+            roomUIController = controller;
+            LogDebug("UI控制器引用已设置");
+        }
+
+        /// <summary>
+        /// 强制刷新UI（通过UI控制器）
+        /// </summary>
+        public void ForceRefreshUI()
+        {
+            if (roomUIController != null)
+            {
+                roomUIController.ForceRefreshUI();
+            }
+            else
+            {
+                LogDebug("无法刷新UI：RoomUIController未设置");
+            }
         }
 
         #endregion
@@ -691,6 +457,22 @@ namespace UI
             }
         }
 
+        /// <summary>
+        /// 显示UI控制器状态
+        /// </summary>
+        [ContextMenu("显示UI控制器状态")]
+        public void ShowUIControllerStatus()
+        {
+            if (roomUIController != null)
+            {
+                Debug.Log($"=== UI控制器状态 ===\n{roomUIController.GetUIStatusInfo()}");
+            }
+            else
+            {
+                Debug.Log("UI控制器: 未设置");
+            }
+        }
+
         #endregion
 
         #region Unity生命周期
@@ -711,7 +493,6 @@ namespace UI
             if (pauseStatus && isInitialized)
             {
                 LogDebug("应用暂停");
-                // 这里可以添加暂停时的处理逻辑
             }
         }
 
@@ -720,7 +501,6 @@ namespace UI
             if (!hasFocus && isInitialized)
             {
                 LogDebug("应用失去焦点");
-                // 这里可以添加失去焦点时的处理逻辑
             }
         }
 

@@ -288,7 +288,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0.000042601252}
+  m_AnchoredPosition: {x: 0, y: 0.00018341819}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &31117885
@@ -374,7 +374,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 756589972}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.9992497
+  m_Size: 0.99998534
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -1086,6 +1086,64 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &469692674
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 469692676}
+  - component: {fileID: 469692675}
+  m_Layer: 0
+  m_Name: RoomUIController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &469692675
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 469692674}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4841ba9696b49764bb466f4d58289aa6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  roomNameText: {fileID: 1276939079}
+  roomCodeText: {fileID: 1334902725}
+  roomStatusText: {fileID: 153424589}
+  playerCountText: {fileID: 2007609705}
+  playerListParent: {fileID: 1821847272}
+  playerItemPrefab: {fileID: 761709010525109199, guid: f6ca162ad4dc62f4193b447bbb7b1522, type: 3}
+  startGameButton: {fileID: 1469649518}
+  readyButton: {fileID: 143589881}
+  readyButtonText: {fileID: 1014060086}
+  enableAutoRefresh: 1
+  autoRefreshInterval: 1
+  enableDebugLogs: 1
+  enableManualRefresh: 1
+  manualRefreshButton: {fileID: 1908977751}
+--- !u!4 &469692676
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 469692674}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 895.7979, y: 550.75055, z: -5.4204288}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &584905680
 GameObject:
   m_ObjectHideFlags: 0
@@ -2140,7 +2198,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 500}
-  m_SizeDelta: {x: 300, y: 60}
+  m_SizeDelta: {x: 600, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1276939079
 MonoBehaviour:
@@ -2351,7 +2409,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 440}
-  m_SizeDelta: {x: 300, y: 60}
+  m_SizeDelta: {x: 600, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1334902725
 MonoBehaviour:
@@ -2661,7 +2719,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1555618099}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 664.244, y: 694.8115, z: -9.265209}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -2680,13 +2738,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 577d13e6d2f3d7e4da4a47da363e8277, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  roomNameText: {fileID: 1276939079}
-  roomCodeText: {fileID: 1334902725}
-  playerCountText: {fileID: 2007609705}
-  roomStatusText: {fileID: 153424589}
-  playerListParent: {fileID: 1821847272}
-  playerItemPrefab: {fileID: 761709010525109199, guid: f6ca162ad4dc62f4193b447bbb7b1522, type: 3}
-  playerListScrollRect: {fileID: 155778230}
+  roomUIController: {fileID: 469692675}
   readyButton: {fileID: 143589881}
   startGameButton: {fileID: 1469649518}
   leaveRoomButton: {fileID: 915655110}
@@ -2696,7 +2748,7 @@ MonoBehaviour:
   errorPanel: {fileID: 1188430539}
   errorText: {fileID: 0}
   enableDebugLogs: 1
-  uiUpdateInterval: 0.5
+  autoFindUIController: 1
 --- !u!1 &1821847271
 GameObject:
   m_ObjectHideFlags: 0
@@ -3016,8 +3068,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 380}
-  m_SizeDelta: {x: 300, y: 60}
+  m_AnchoredPosition: {x: 0, y: 360}
+  m_SizeDelta: {x: 600, y: 80}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2007609705
 MonoBehaviour:
@@ -3363,6 +3415,7 @@ SceneRoots:
   - {fileID: 763370494}
   - {fileID: 2123720006}
   - {fileID: 81652434}
-  - {fileID: 1443983244}
   - {fileID: 1555618100}
+  - {fileID: 469692676}
+  - {fileID: 1443983244}
   - {fileID: 235643690}
