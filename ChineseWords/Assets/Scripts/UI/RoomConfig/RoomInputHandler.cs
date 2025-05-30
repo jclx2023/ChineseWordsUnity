@@ -119,9 +119,9 @@ namespace Core.Network
             if (Time.time - lastInputTime < INPUT_COOLDOWN)
                 return false;
 
-            // 检查UI状态（如果有其他UI打开，可能需要禁用输入）
-            if (configManager != null && configManager.IsUIOpen)
-                return false;
+            // 注意：移除UI打开时的输入阻止，允许F1关闭UI
+            // if (configManager != null && configManager.IsUIOpen)
+            //     return false;
 
             return true;
         }

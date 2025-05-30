@@ -24,4 +24,4 @@ MonoBehaviour:
     weightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
   configName: "\u9ED8\u8BA4\u914D\u7F6E"
   configDescription: "\u6807\u51C6\u6E38\u620F\u914D\u7F6E"
-  configVersion: 1
+  configVersion: 0

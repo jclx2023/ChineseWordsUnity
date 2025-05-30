@@ -288,7 +288,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0.0002583686}
+  m_AnchoredPosition: {x: 0, y: 106.56765}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &31117885
@@ -374,7 +374,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 756589972}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.99998903
+  m_Size: 0.3448177
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -539,13 +539,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   defaultConfig: {fileID: 11400000, guid: c75a6fb5350357f4c9b04570f73244e7, type: 2}
-  configResourcePath: RoomGameConfig
   configUIPrefab: {fileID: 2374131951781154891, guid: 434fae588f24a4a48a08f91bd543391e, type: 3}
   configUIHotkey: 282
-  requireHostPermission: 1
-  onlyInRoomScene: 1
   enableDebugLogs: 1
-  showConfigInConsole: 0
 --- !u!4 &119549038
 Transform:
   m_ObjectHideFlags: 0
