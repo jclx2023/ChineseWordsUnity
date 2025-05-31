@@ -11,13 +11,13 @@ using Core.Network;
 namespace GameLogic.FillBlank
 {
     /// <summary>
-    /// 硬性单词补全题管理器
-    /// - 支持单机和网络模式
-    /// - 实现IQuestionDataProvider接口，支持Host抽题
-    /// - 单机模式：按词长加权随机抽词，随机展示部分字符
-    /// - 网络模式：使用服务器提供的题目数据
-    /// - 玩家输入完整词，校验长度、保留字、词库存在性
-    /// - "投降"视为提交空答案，视作错误
+    /// 修复后的硬性单词补全题管理器
+    /// 
+    /// 修复内容：
+    /// 1. 题干生成：随机生成填空格式（如"投_"、"_容"、"奔_跑"等）
+    /// 2. 答案验证：检查玩家答案是否符合题干格式且在数据库中存在
+    /// 3. 不再限制玩家必须填写服务端预设的特定词语
+    /// 4. Host端只负责生成题干格式，不预设"正确答案"
     /// </summary>
     public class HardFillQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
@@ -31,14 +31,10 @@ namespace GameLogic.FillBlank
         [SerializeField] private int freqMin = 0;
         [SerializeField] private int freqMax = 9;
 
-        [Header("按词长加权抽词比例（总和=1）")]
-        [SerializeField, Range(0f, 1f)] private float weight2 = 0.32f;
-        [SerializeField, Range(0f, 1f)] private float weight3 = 0.32f;
-        [SerializeField, Range(0f, 1f)] private float weight4 = 0.32f;
-        [SerializeField, Range(0f, 1f)] private float weightOther = 0.04f;
-
-        [Header("已知字数量（小于词长）")]
-        [SerializeField] private int revealCount = 2;
+        [Header("题干配置")]
+        [SerializeField] private int minWordLength = 2;
+        [SerializeField] private int maxWordLength = 4;
+        [SerializeField, Range(1, 3)] private int maxBlankCount = 2; // 最大空格数量
 
         [Header("UI组件引用")]
         private TMP_Text questionText;
@@ -47,8 +43,11 @@ namespace GameLogic.FillBlank
         private Button surrenderButton;
         private TMP_Text feedbackText;
 
-        private string currentWord;
-        private int[] revealIndices;
+        // 当前题目信息
+        private string currentPattern;        // 题干格式，如"投_"、"_容"
+        private int[] blankPositions;         // 空格位置
+        private char[] knownCharacters;       // 已知字符
+        private int wordLength;               // 词语长度
         private bool hasAnswered = false;
 
         // IQuestionDataProvider接口实现
@@ -56,13 +55,12 @@ namespace GameLogic.FillBlank
 
         protected override void Awake()
         {
-            base.Awake(); // 调用网络基类初始化
+            base.Awake();
             dbPath = Application.streamingAssetsPath + "/dictionary.db";
         }
 
         private void Start()
         {
-            // 检查是否需要UI（Host抽题模式可能不需要UI）
             if (NeedsUI())
             {
                 InitializeUI();
@@ -73,13 +71,8 @@ namespace GameLogic.FillBlank
             }
         }
 
-        /// <summary>
-        /// 检查是否需要UI
-        /// </summary>
         private bool NeedsUI()
         {
-            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
-            // 或者如果是QuestionDataService的子对象，也不需要UI
             return transform.parent == null ||
                    (transform.parent.GetComponent<HostGameManager>() == null &&
                     transform.parent.GetComponent<QuestionDataService>() == null);
@@ -87,97 +80,140 @@ namespace GameLogic.FillBlank
 
         /// <summary>
         /// 获取题目数据（IQuestionDataProvider接口实现）
-        /// 专门为Host抽题使用，不显示UI
+        /// 修复：只生成题干格式，不预设固定答案
         /// </summary>
         public NetworkQuestionData GetQuestionData()
         {
-            Debug.Log("[HardFill] Host请求抽题数据");
+            Debug.Log("[HardFill] Host请求生成题干");
 
-            // 1. 根据权重确定目标词长
-            int targetLength = GetWeightedWordLength();
+            // 1. 随机选择词语长度
+            wordLength = Random.Range(minWordLength, maxWordLength + 1);
 
-            // 2. 随机抽词
-            string word = GetRandomWord(targetLength);
+            // 2. 随机选择空格数量（不能全是空格）
+            int blankCount = Random.Range(1, Mathf.Min(maxBlankCount + 1, wordLength));
 
-            if (string.IsNullOrEmpty(word))
+            // 3. 从数据库随机选择一个词作为参考（用于生成题干格式）
+            string referenceWord = GetRandomWordForPattern(wordLength);
+
+            if (string.IsNullOrEmpty(referenceWord))
             {
-                Debug.LogWarning("[HardFill] Host抽题：暂无符合条件的词条");
+                Debug.LogWarning($"[HardFill] 无法找到长度为{wordLength}的参考词语");
                 return null;
             }
 
-            // 3. 生成显示模式
-            int[] revealPattern = GenerateRevealPattern(word);
+            // 4. 基于参考词生成题干格式
+            GenerateQuestionPattern(referenceWord, blankCount);
 
-            // 4. 构造显示文本
-            string displayText = CreateDisplayText(word, revealPattern);
-
-            // 5. 创建附加数据
+            // 5. 创建附加数据（包含验证所需信息）
             var additionalData = new HardFillAdditionalData
             {
-                revealIndices = revealPattern,
-                revealCount = revealPattern.Length,
-                displayPattern = displayText
+                pattern = currentPattern,
+                blankPositions = blankPositions,
+                knownCharacters = knownCharacters,
+                wordLength = wordLength,
+                minFreq = freqMin,
+                maxFreq = freqMax
             };
 
-            // 6. 创建网络题目数据
+            // 6. 创建网络题目数据（不包含固定答案）
             var questionData = new NetworkQuestionData
             {
                 questionType = QuestionType.HardFill,
-                questionText = $"题目：{displayText}",
-                correctAnswer = word,
-                options = new string[0], // 填空题不需要选项
+                questionText = $"请填写符合格式的词语：{currentPattern}",
+                correctAnswer = "", // 不设置固定答案
+                options = new string[0],
                 timeLimit = 30f,
                 additionalData = JsonUtility.ToJson(additionalData)
             };
 
-            Debug.Log($"[HardFill] Host抽题成功: {displayText} (答案: {word})");
+            Debug.Log($"[HardFill] 题干生成完成: {currentPattern} (长度: {wordLength})");
             return questionData;
         }
 
         /// <summary>
-        /// 为指定单词生成显示模式
+        /// 从数据库获取随机词语作为生成题干的参考
         /// </summary>
-        private int[] GenerateRevealPattern(string word)
+        private string GetRandomWordForPattern(int targetLength)
         {
-            if (string.IsNullOrEmpty(word))
-                return new int[0];
+            string word = null;
 
-            int wordLength = word.Length;
-            int revealNum = Mathf.Clamp(revealCount, 1, wordLength - 1);
-
-            // 随机选择要显示的位置
-            var allIndices = Enumerable.Range(0, wordLength).ToArray();
-
-            // Fisher-Yates 洗牌算法
-            for (int i = allIndices.Length - 1; i > 0; i--)
+            try
             {
-                int j = Random.Range(0, i + 1);
-                int temp = allIndices[i];
-                allIndices[i] = allIndices[j];
-                allIndices[j] = temp;
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT word FROM (
+                                SELECT word, Freq, length FROM word
+                                UNION ALL
+                                SELECT word, Freq, length FROM idiom
+                            ) WHERE length = @len AND Freq BETWEEN @min AND @max 
+                            ORDER BY RANDOM() LIMIT 1";
+
+                        cmd.Parameters.AddWithValue("@len", targetLength);
+                        cmd.Parameters.AddWithValue("@min", freqMin);
+                        cmd.Parameters.AddWithValue("@max", freqMax);
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                                word = reader.GetString(0);
+                        }
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"数据库查询失败: {e.Message}");
             }
 
-            return allIndices.Take(revealNum).OrderBy(x => x).ToArray();
+            return word;
         }
 
         /// <summary>
-        /// 创建显示文本
+        /// 基于参考词生成题干格式
         /// </summary>
-        private string CreateDisplayText(string word, int[] revealPattern)
+        private void GenerateQuestionPattern(string referenceWord, int blankCount)
         {
-            if (string.IsNullOrEmpty(word) || revealPattern == null)
-                return "";
+            wordLength = referenceWord.Length;
+            knownCharacters = new char[wordLength];
 
-            var displayText = new System.Text.StringBuilder();
-            for (int i = 0; i < word.Length; i++)
+            // 随机选择要隐藏的位置
+            var allPositions = Enumerable.Range(0, wordLength).ToList();
+            blankPositions = new int[blankCount];
+
+            for (int i = 0; i < blankCount; i++)
             {
-                if (revealPattern.Contains(i))
-                    displayText.Append(word[i]);
-                else
-                    displayText.Append('_');
+                int randomIndex = Random.Range(0, allPositions.Count);
+                blankPositions[i] = allPositions[randomIndex];
+                allPositions.RemoveAt(randomIndex);
             }
 
-            return displayText.ToString();
+            System.Array.Sort(blankPositions);
+
+            // 构建题干模式和已知字符数组
+            var patternBuilder = new System.Text.StringBuilder();
+
+            for (int i = 0; i < wordLength; i++)
+            {
+                if (blankPositions.Contains(i))
+                {
+                    patternBuilder.Append('_');
+                    knownCharacters[i] = '\0'; // 标记为未知
+                }
+                else
+                {
+                    char ch = referenceWord[i];
+                    patternBuilder.Append(ch);
+                    knownCharacters[i] = ch;
+                }
+            }
+
+            currentPattern = patternBuilder.ToString();
+
+            Debug.Log($"[HardFill] 生成题干: {currentPattern} (基于参考词: {referenceWord})");
         }
 
         /// <summary>
@@ -219,7 +255,6 @@ namespace GameLogic.FillBlank
             surrenderButton.onClick.RemoveAllListeners();
             surrenderButton.onClick.AddListener(OnSurrender);
 
-            // 绑定输入框回车事件
             answerInput.onSubmit.RemoveAllListeners();
             answerInput.onSubmit.AddListener(OnInputSubmit);
 
@@ -235,37 +270,14 @@ namespace GameLogic.FillBlank
         {
             Debug.Log("[HardFill] 加载本地题目");
 
-            // 使用GetQuestionData()方法复用抽题逻辑
             var questionData = GetQuestionData();
             if (questionData == null)
             {
-                DisplayErrorMessage("没有符合条件的词条。");
+                DisplayErrorMessage("无法生成题目");
                 return;
             }
 
-            // 解析题目数据
-            currentWord = questionData.correctAnswer;
-
-            // 从附加数据中解析显示模式
-            if (!string.IsNullOrEmpty(questionData.additionalData))
-            {
-                try
-                {
-                    var additionalInfo = JsonUtility.FromJson<HardFillAdditionalData>(questionData.additionalData);
-                    revealIndices = additionalInfo.revealIndices;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成显示模式");
-                    revealIndices = GenerateRevealPattern(currentWord);
-                }
-            }
-            else
-            {
-                revealIndices = GenerateRevealPattern(currentWord);
-            }
-
-            // 显示题目
+            ParseQuestionData(questionData);
             DisplayQuestion();
         }
 
@@ -285,118 +297,42 @@ namespace GameLogic.FillBlank
 
             if (networkData.questionType != QuestionType.HardFill)
             {
-                Debug.LogError($"[HardFill] 题目类型不匹配: 期望{QuestionType.HardFill}, 实际{networkData.questionType}");
+                Debug.LogError($"[HardFill] 题目类型不匹配");
                 DisplayErrorMessage("题目类型错误");
                 return;
             }
 
-            // 从网络数据中解析题目信息
-            ParseNetworkQuestionData(networkData);
-
-            // 显示题目
+            ParseQuestionData(networkData);
             DisplayQuestion();
         }
 
         /// <summary>
-        /// 解析网络题目数据
+        /// 解析题目数据
         /// </summary>
-        private void ParseNetworkQuestionData(NetworkQuestionData networkData)
+        private void ParseQuestionData(NetworkQuestionData questionData)
         {
-            currentWord = networkData.correctAnswer;
-
-            // 从additionalData中解析显示模式（JSON格式）
-            if (!string.IsNullOrEmpty(networkData.additionalData))
+            if (!string.IsNullOrEmpty(questionData.additionalData))
             {
                 try
                 {
-                    var additionalInfo = JsonUtility.FromJson<HardFillAdditionalData>(networkData.additionalData);
-                    revealIndices = additionalInfo.revealIndices;
+                    var additionalInfo = JsonUtility.FromJson<HardFillAdditionalData>(questionData.additionalData);
+                    currentPattern = additionalInfo.pattern;
+                    blankPositions = additionalInfo.blankPositions;
+                    knownCharacters = additionalInfo.knownCharacters;
+                    wordLength = additionalInfo.wordLength;
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogWarning($"解析网络附加数据失败: {e.Message}，使用默认显示模式");
-                    revealIndices = GenerateRevealPattern(currentWord);
+                    Debug.LogError($"解析附加数据失败: {e.Message}");
+                    DisplayErrorMessage("题目数据解析错误");
+                    return;
                 }
             }
             else
             {
-                // 如果没有附加数据，使用默认模式
-                revealIndices = GenerateRevealPattern(currentWord);
+                Debug.LogError("缺少题目附加数据");
+                DisplayErrorMessage("题目数据不完整");
             }
-        }
-
-        /// <summary>
-        /// 根据权重确定词长
-        /// </summary>
-        private int GetWeightedWordLength()
-        {
-            float r = Random.value;
-            if (r < weight2) return 2;
-            else if (r < weight2 + weight3) return 3;
-            else if (r < weight2 + weight3 + weight4) return 4;
-            else return -1; // 其他长度
-        }
-
-        /// <summary>
-        /// 从数据库随机获取单词
-        /// </summary>
-        private string GetRandomWord(int targetLength)
-        {
-            string word = null;
-
-            try
-            {
-                using (var conn = new SqliteConnection("URI=file:" + dbPath))
-                {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        if (targetLength > 0)
-                        {
-                            cmd.CommandText = @"
-                                SELECT word FROM (
-                                    SELECT word, Freq, length FROM word
-                                    UNION ALL
-                                    SELECT word, Freq, length FROM idiom
-                                ) WHERE length = @len AND Freq BETWEEN @min AND @max 
-                                ORDER BY RANDOM() LIMIT 1";
-                            cmd.Parameters.AddWithValue("@len", targetLength);
-                        }
-                        else
-                        {
-                            cmd.CommandText = @"
-                                SELECT word FROM (
-                                    SELECT word, Freq, length FROM word
-                                    UNION ALL
-                                    SELECT word, Freq, length FROM idiom
-                                ) WHERE length NOT IN (2,3,4) AND Freq BETWEEN @min AND @max 
-                                ORDER BY RANDOM() LIMIT 1";
-                        }
-                        cmd.Parameters.AddWithValue("@min", freqMin);
-                        cmd.Parameters.AddWithValue("@max", freqMax);
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                                word = reader.GetString(0);
-                        }
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"数据库查询失败: {e.Message}");
-            }
-
-            return word;
-        }
-
-        /// <summary>
-        /// 生成字符显示模式（保持原有逻辑用于单机模式）
-        /// </summary>
-        private void GenerateRevealPattern()
-        {
-            revealIndices = GenerateRevealPattern(currentWord);
         }
 
         /// <summary>
@@ -406,16 +342,13 @@ namespace GameLogic.FillBlank
         {
             hasAnswered = false;
 
-            if (string.IsNullOrEmpty(currentWord) || revealIndices == null)
+            if (string.IsNullOrEmpty(currentPattern))
             {
                 DisplayErrorMessage("题目数据错误");
                 return;
             }
 
-            // 构造显示文本
-            string displayText = CreateDisplayText(currentWord, revealIndices);
-
-            questionText.text = $"题目：{displayText}";
+            questionText.text = $"请填写符合格式的词语：{currentPattern}";
 
             // 重置输入和反馈
             answerInput.text = string.Empty;
@@ -424,10 +357,11 @@ namespace GameLogic.FillBlank
             submitButton.interactable = true;
             surrenderButton.interactable = true;
 
-            // 激活输入框
+            // 设置输入框字符限制
+            answerInput.characterLimit = wordLength;
             answerInput.ActivateInputField();
 
-            Debug.Log($"[HardFill] 题目显示完成: {displayText} (答案: {currentWord})");
+            Debug.Log($"[HardFill] 题目显示完成: {currentPattern}");
         }
 
         /// <summary>
@@ -464,30 +398,139 @@ namespace GameLogic.FillBlank
             Debug.Log($"[HardFill] 检查本地答案: {answer}");
 
             bool isCorrect = ValidateAnswer(answer.Trim());
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            StartCoroutine(ShowFeedbackAndNotify(isCorrect, answer.Trim()));
         }
 
         /// <summary>
-        /// 验证答案
+        /// 修复后的答案验证逻辑
         /// </summary>
         private bool ValidateAnswer(string answer)
         {
-            if (string.IsNullOrEmpty(answer) || string.IsNullOrEmpty(currentWord))
-                return false;
-
-            // 1. 检查长度
-            if (answer.Length != currentWord.Length)
-                return false;
-
-            // 2. 检查已显示的字符是否正确
-            foreach (int idx in revealIndices)
+            if (string.IsNullOrEmpty(answer))
             {
-                if (answer[idx] != currentWord[idx])
-                    return false;
+                Debug.Log("[HardFill] 答案为空");
+                return false;
             }
 
-            // 3. 检查词是否存在于词库中
-            return IsWordInDatabase(answer);
+            // 1. 检查长度是否匹配
+            if (answer.Length != wordLength)
+            {
+                Debug.Log($"[HardFill] 长度不匹配: 期望{wordLength}, 实际{answer.Length}");
+                return false;
+            }
+
+            // 2. 检查已知位置的字符是否匹配
+            for (int i = 0; i < wordLength; i++)
+            {
+                if (knownCharacters[i] != '\0' && answer[i] != knownCharacters[i])
+                {
+                    Debug.Log($"[HardFill] 位置{i}字符不匹配: 期望'{knownCharacters[i]}', 实际'{answer[i]}'");
+                    return false;
+                }
+            }
+
+            // 3. 检查词语是否存在于数据库中
+            bool existsInDB = IsWordInDatabase(answer);
+            Debug.Log($"[HardFill] 词语'{answer}'在数据库中: {existsInDB}");
+
+            return existsInDB;
+        }
+
+        /// <summary>
+        /// 静态验证方法 - 供Host调用
+        /// 基于题目数据验证答案，不依赖实例状态
+        /// </summary>
+        public static bool ValidateAnswerStatic(string answer, NetworkQuestionData questionData)
+        {
+            if (string.IsNullOrEmpty(answer))
+            {
+                Debug.Log("[HardFill] 静态验证：答案为空");
+                return false;
+            }
+
+            if (questionData.questionType != QuestionType.HardFill)
+            {
+                Debug.LogError("[HardFill] 静态验证：题目类型不匹配");
+                return false;
+            }
+
+            // 解析题目附加数据
+            if (string.IsNullOrEmpty(questionData.additionalData))
+            {
+                Debug.LogError("[HardFill] 静态验证：缺少题目附加数据");
+                return false;
+            }
+
+            try
+            {
+                var additionalData = JsonUtility.FromJson<HardFillAdditionalData>(questionData.additionalData);
+
+                // 1. 检查长度
+                if (answer.Length != additionalData.wordLength)
+                {
+                    Debug.Log($"[HardFill] 静态验证：长度不匹配 期望{additionalData.wordLength}, 实际{answer.Length}");
+                    return false;
+                }
+
+                // 2. 检查已知位置的字符是否匹配
+                for (int i = 0; i < additionalData.wordLength; i++)
+                {
+                    if (additionalData.knownCharacters[i] != '\0' &&
+                        answer[i] != additionalData.knownCharacters[i])
+                    {
+                        Debug.Log($"[HardFill] 静态验证：位置{i}字符不匹配 期望'{additionalData.knownCharacters[i]}', 实际'{answer[i]}'");
+                        return false;
+                    }
+                }
+
+                // 3. 检查词语是否在数据库中
+                bool existsInDB = IsWordInDatabaseStatic(answer, additionalData.minFreq, additionalData.maxFreq);
+                Debug.Log($"[HardFill] 静态验证：词语'{answer}'数据库验证结果: {existsInDB}");
+
+                return existsInDB;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[HardFill] 静态验证失败: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 静态数据库查询方法 - 供Host调用
+        /// </summary>
+        public static bool IsWordInDatabaseStatic(string word, int minFreq, int maxFreq)
+        {
+            try
+            {
+                string dbPath = Application.streamingAssetsPath + "/dictionary.db";
+
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT COUNT(*) FROM (
+                                SELECT word FROM word WHERE Freq BETWEEN @min AND @max
+                                UNION ALL
+                                SELECT word FROM idiom WHERE Freq BETWEEN @min AND @max
+                            ) WHERE word = @word";
+
+                        cmd.Parameters.AddWithValue("@word", word);
+                        cmd.Parameters.AddWithValue("@min", minFreq);
+                        cmd.Parameters.AddWithValue("@max", maxFreq);
+
+                        long count = (long)cmd.ExecuteScalar();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[HardFill] 静态数据库查询失败: {e.Message}");
+                return false;
+            }
         }
 
         /// <summary>
@@ -504,11 +547,14 @@ namespace GameLogic.FillBlank
                     {
                         cmd.CommandText = @"
                             SELECT COUNT(*) FROM (
-                                SELECT word FROM word
+                                SELECT word FROM word WHERE Freq BETWEEN @min AND @max
                                 UNION ALL
-                                SELECT word FROM idiom
+                                SELECT word FROM idiom WHERE Freq BETWEEN @min AND @max
                             ) WHERE word = @word";
+
                         cmd.Parameters.AddWithValue("@word", word);
+                        cmd.Parameters.AddWithValue("@min", freqMin);
+                        cmd.Parameters.AddWithValue("@max", freqMax);
 
                         long count = (long)cmd.ExecuteScalar();
                         return count > 0;
@@ -595,18 +641,16 @@ namespace GameLogic.FillBlank
         {
             Debug.Log($"[HardFill] 网络模式提交答案: {answer}");
 
-            // 显示提交状态
-            feedbackText.text = "已提交答案，等待服务器结果...";
+            feedbackText.text = "已提交答案，等待服务器验证...";
             feedbackText.color = Color.yellow;
 
-            // 提交答案到服务器
             if (NetworkManager.Instance != null)
             {
                 NetworkManager.Instance.SubmitAnswer(answer);
             }
             else
             {
-                Debug.LogError("[HardFill] NetworkManager实例不存在，无法提交答案");
+                Debug.LogError("[HardFill] NetworkManager实例不存在");
             }
         }
 
@@ -621,28 +665,59 @@ namespace GameLogic.FillBlank
         /// <summary>
         /// 显示反馈信息并通知结果
         /// </summary>
-        private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
+        private IEnumerator ShowFeedbackAndNotify(bool isCorrect, string userAnswer)
         {
-            // 显示反馈
             if (feedbackText != null)
             {
                 if (isCorrect)
                 {
-                    feedbackText.text = "回答正确！";
+                    feedbackText.text = $"回答正确！'{userAnswer}' 符合要求";
                     feedbackText.color = Color.green;
                 }
                 else
                 {
-                    feedbackText.text = $"回答错误，正确示例：{currentWord}";
+                    if (string.IsNullOrEmpty(userAnswer))
+                    {
+                        feedbackText.text = "未提交答案";
+                    }
+                    else
+                    {
+                        // 提供更详细的错误信息
+                        string errorReason = GetValidationErrorReason(userAnswer);
+                        feedbackText.text = $"回答错误：{errorReason}";
+                    }
                     feedbackText.color = Color.red;
                 }
             }
 
-            // 等待一段时间
-            yield return new WaitForSeconds(1.5f);
+            yield return new WaitForSeconds(2f);
 
-            // 通知答题结果
             OnAnswerResult?.Invoke(isCorrect);
+        }
+
+        /// <summary>
+        /// 获取验证失败的详细原因
+        /// </summary>
+        private string GetValidationErrorReason(string answer)
+        {
+            if (string.IsNullOrEmpty(answer))
+                return "答案为空";
+
+            if (answer.Length != wordLength)
+                return $"长度不正确（应为{wordLength}字）";
+
+            // 检查已知字符是否匹配
+            for (int i = 0; i < wordLength; i++)
+            {
+                if (knownCharacters[i] != '\0' && answer[i] != knownCharacters[i])
+                    return $"第{i + 1}位字符应为'{knownCharacters[i]}'";
+            }
+
+            // 如果格式正确但不在数据库中
+            if (!IsWordInDatabase(answer))
+                return "该词语不在词库中";
+
+            return "未知错误";
         }
 
         /// <summary>
@@ -652,8 +727,8 @@ namespace GameLogic.FillBlank
         {
             Debug.Log($"[HardFill] 收到网络结果: {(isCorrect ? "正确" : "错误")}");
 
-            currentWord = correctAnswer;
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            string userAnswer = answerInput.text.Trim();
+            StartCoroutine(ShowFeedbackAndNotify(isCorrect, userAnswer));
         }
 
         /// <summary>
@@ -661,7 +736,6 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void OnDestroy()
         {
-            // 清理事件监听
             if (submitButton != null)
                 submitButton.onClick.RemoveAllListeners();
             if (surrenderButton != null)
@@ -672,13 +746,16 @@ namespace GameLogic.FillBlank
     }
 
     /// <summary>
-    /// 硬填空题附加数据结构（用于网络传输）
+    /// 硬填空题附加数据结构（修复后）
     /// </summary>
     [System.Serializable]
     public class HardFillAdditionalData
     {
-        public int[] revealIndices;
-        public int revealCount;
-        public string displayPattern;
+        public string pattern;           // 题干格式，如"投_"
+        public int[] blankPositions;     // 空格位置数组
+        public char[] knownCharacters;   // 已知字符数组（'\0'表示空格位置）
+        public int wordLength;           // 词语长度
+        public int minFreq;              // 频率范围
+        public int maxFreq;
     }
 }

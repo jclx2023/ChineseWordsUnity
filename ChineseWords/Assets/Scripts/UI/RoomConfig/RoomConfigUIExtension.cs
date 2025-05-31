@@ -1,7 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
-using System.Collections.Generic;
 using Core;
 using Core.Network;
 using TMPro;
@@ -9,8 +8,8 @@ using TMPro;
 namespace UI.RoomConfig
 {
     /// <summary>
-    /// 简化版RoomConfigUI扩展组件 - 只负责Footer按钮逻辑
-    /// 移除重复的面板创建代码，避免与RoomConfigUI冲突
+    /// 房间配置UI扩展组件 - 负责Footer按钮逻辑
+    /// 修复按钮功能：Cancel取消权重改动，Close关闭整个UI
     /// </summary>
     public class RoomConfigUIExtension : MonoBehaviour
     {
@@ -20,12 +19,12 @@ namespace UI.RoomConfig
         [Header("Footer按钮")]
         [SerializeField] private Button applyButton;
         [SerializeField] private Button resetButton;
-        [SerializeField] private Button cancelButton;
+        [SerializeField] private Button closeButton;
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // 权重配置面板引用（不再自己创建）
+        // 权重配置面板引用
         private QuestionWeightConfigPanel questionWeightPanel;
         private RoomConfigUI mainConfigUI;
 
@@ -43,8 +42,6 @@ namespace UI.RoomConfig
         {
             SetupDefaultConfig();
             SetupButtons();
-
-            // 延迟查找权重配置面板（等待RoomConfigUI创建完成）
             StartCoroutine(DelayedFindWeightPanel());
         }
 
@@ -55,7 +52,7 @@ namespace UI.RoomConfig
         {
             if (defaultWeightConfig != null)
             {
-                // 保存原始配置的副本（使用深拷贝）
+                // 保存原始配置的副本
                 originalConfig = ScriptableObject.CreateInstance<QuestionWeightConfig>();
                 CopyWeightConfig(defaultWeightConfig, originalConfig);
 
@@ -69,7 +66,7 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 手动复制权重配置（现在可以使用扩展方法）
+        /// 复制权重配置
         /// </summary>
         private void CopyWeightConfig(QuestionWeightConfig source, QuestionWeightConfig target)
         {
@@ -78,7 +75,6 @@ namespace UI.RoomConfig
             try
             {
                 target.CopyFrom(source);
-                LogDebug("权重配置复制完成");
             }
             catch (System.Exception e)
             {
@@ -91,7 +87,6 @@ namespace UI.RoomConfig
         /// </summary>
         private IEnumerator DelayedFindWeightPanel()
         {
-            // 等待一帧，确保其他组件已初始化
             yield return null;
 
             float timeout = 5f;
@@ -114,7 +109,7 @@ namespace UI.RoomConfig
 
             if (questionWeightPanel == null)
             {
-                LogDebug("警告：未找到权重配置面板，Footer按钮功能可能受限");
+                LogDebug("警告：未找到权重配置面板");
             }
         }
 
@@ -125,7 +120,6 @@ namespace UI.RoomConfig
         {
             if (questionWeightPanel != null)
             {
-                // 移除现有监听器，避免重复绑定
                 questionWeightPanel.OnConfigChanged -= OnWeightConfigChanged;
                 questionWeightPanel.OnConfigChanged += OnWeightConfigChanged;
                 LogDebug("权重配置面板事件已绑定");
@@ -137,25 +131,33 @@ namespace UI.RoomConfig
         /// </summary>
         private void SetupButtons()
         {
+            // 自动查找按钮
+            if (applyButton == null)
+                applyButton = transform.Find("Footer/ApplyButton")?.GetComponent<Button>();
+            if (resetButton == null)
+                resetButton = transform.Find("Footer/ResetButton")?.GetComponent<Button>();
+            if (closeButton == null)
+                closeButton = transform.Find("Footer/CloseButton")?.GetComponent<Button>();
+
+            LogDebug($"按钮查找结果 - Apply: {applyButton != null}, Reset: {resetButton != null}, Close: {closeButton != null}");
+
+            // 绑定按钮事件
             if (applyButton != null)
             {
                 applyButton.onClick.RemoveAllListeners();
                 applyButton.onClick.AddListener(OnApplyClicked);
-                LogDebug("Apply按钮已设置");
             }
 
             if (resetButton != null)
             {
                 resetButton.onClick.RemoveAllListeners();
                 resetButton.onClick.AddListener(OnResetClicked);
-                LogDebug("Reset按钮已设置");
             }
 
-            if (cancelButton != null)
+            if (closeButton != null)
             {
-                cancelButton.onClick.RemoveAllListeners();
-                cancelButton.onClick.AddListener(OnCancelClicked);
-                LogDebug("Cancel按钮已设置");
+                closeButton.onClick.RemoveAllListeners();
+                closeButton.onClick.AddListener(OnCloseClicked);
             }
 
             UpdateButtonStates();
@@ -168,11 +170,10 @@ namespace UI.RoomConfig
         {
             hasUnsavedChanges = true;
             UpdateButtonStates();
-            LogDebug("检测到权重配置变更，Footer按钮状态已更新");
         }
 
         /// <summary>
-        /// 应用按钮点击
+        /// 应用按钮点击 - 应用权重配置变更
         /// </summary>
         private void OnApplyClicked()
         {
@@ -180,17 +181,13 @@ namespace UI.RoomConfig
 
             try
             {
-                // 应用权重配置变更到游戏系统
                 ApplyWeightConfigChanges();
 
-                // 更新原始配置（应用成功后）
+                // 更新原始配置
                 if (originalConfig != null && QuestionWeightManager.Config != null)
                 {
                     CopyWeightConfig(QuestionWeightManager.Config, originalConfig);
                 }
-
-                // 通知主配置UI
-                NotifyMainConfigUI();
 
                 hasUnsavedChanges = false;
                 UpdateButtonStates();
@@ -204,7 +201,7 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 重置按钮点击
+        /// 重置按钮点击 - 重置到默认配置
         /// </summary>
         private void OnResetClicked()
         {
@@ -217,13 +214,10 @@ namespace UI.RoomConfig
                 {
                     config.ResetToDefault();
 
-                    // 刷新权重面板显示
                     if (questionWeightPanel != null)
                     {
                         questionWeightPanel.RefreshDisplay();
                     }
-
-                    LogDebug("配置已重置");
                 }
 
                 hasUnsavedChanges = false;
@@ -236,34 +230,41 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 取消按钮点击
+        /// 关闭按钮点击 - 关闭整个配置UI
         /// </summary>
-        private void OnCancelClicked()
+        private void OnCloseClicked()
         {
-            LogDebug("取消配置变更，恢复到原始状态");
+            LogDebug("关闭配置UI");
 
             try
             {
-                // 恢复到原始配置
-                if (originalConfig != null)
+                // 如果有未保存的变更，提醒用户
+                if (hasUnsavedChanges)
                 {
-                    QuestionWeightManager.SetConfig(originalConfig);
-
-                    // 刷新权重面板显示
-                    if (questionWeightPanel != null)
-                    {
-                        questionWeightPanel.Initialize(originalConfig);
-                    }
-
-                    LogDebug("配置已恢复到原始状态");
+                    LogDebug("有未保存的变更，关闭UI将丢弃变更");
                 }
 
+                // 关闭整个配置UI
+                if (mainConfigUI != null)
+                {
+                    mainConfigUI.Hide();
+                }
+
+                // 也可以通过RoomConfigManager关闭
+                if (RoomConfigManager.Instance != null)
+                {
+                    RoomConfigManager.Instance.CloseConfigUI();
+                }
+
+                // 重置变更状态
                 hasUnsavedChanges = false;
                 UpdateButtonStates();
+
+                LogDebug("配置UI已关闭");
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[RoomConfigUIExtension] 取消变更失败: {e.Message}");
+                Debug.LogError($"[RoomConfigUIExtension] 关闭UI失败: {e.Message}");
             }
         }
 
@@ -282,7 +283,7 @@ namespace UI.RoomConfig
             // 更新NQMC的权重配置
             UpdateNQMCWeights(config);
 
-            // 通知RoomConfigManager（如果存在）
+            // 通知RoomConfigManager
             if (RoomConfigManager.Instance != null)
             {
                 try
@@ -295,8 +296,6 @@ namespace UI.RoomConfig
                     LogDebug($"通知RoomConfigManager失败: {e.Message}");
                 }
             }
-
-            LogDebug("权重配置已应用到游戏系统");
         }
 
         /// <summary>
@@ -319,16 +318,12 @@ namespace UI.RoomConfig
 
                 if (typeWeightsField != null)
                 {
-                    var typeWeights = typeWeightsField.GetValue(nqmc) as Dictionary<QuestionType, float>;
+                    var typeWeights = typeWeightsField.GetValue(nqmc) as System.Collections.Generic.Dictionary<QuestionType, float>;
                     if (typeWeights != null)
                     {
-                        // 获取当前权重配置
                         var currentWeights = config.GetWeights();
-
-                        // 清空现有权重
                         typeWeights.Clear();
 
-                        // 设置新权重
                         foreach (var weight in currentWeights)
                         {
                             typeWeights[weight.Key] = weight.Value;
@@ -336,47 +331,11 @@ namespace UI.RoomConfig
 
                         LogDebug($"NQMC权重配置已更新，包含 {typeWeights.Count} 种题型");
                     }
-                    else
-                    {
-                        LogDebug("NQMC的TypeWeights字段为空");
-                    }
-                }
-                else
-                {
-                    LogDebug("无法找到NQMC的TypeWeights字段");
                 }
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"更新NQMC权重配置失败: {e.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 通知主配置UI
-        /// </summary>
-        private void NotifyMainConfigUI()
-        {
-            if (mainConfigUI != null)
-            {
-                try
-                {
-                    // 尝试调用主UI的ApplyChanges方法
-                    var applyMethod = mainConfigUI.GetType().GetMethod("ApplyChanges");
-                    if (applyMethod != null)
-                    {
-                        applyMethod.Invoke(mainConfigUI, null);
-                        LogDebug("已通知主配置UI应用变更");
-                    }
-                    else
-                    {
-                        LogDebug("主配置UI没有ApplyChanges方法");
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    LogDebug($"通知主配置UI失败: {e.Message}");
-                }
             }
         }
 
@@ -398,7 +357,6 @@ namespace UI.RoomConfig
                         new Color(0.5f, 0.5f, 0.5f, 1f);  // 无变更：灰色
                 }
 
-                // 更新按钮文本颜色（修复类型转换错误）
                 var tmpText = applyButton.GetComponentInChildren<TMP_Text>();
                 var legacyText = applyButton.GetComponentInChildren<Text>();
 
@@ -418,13 +376,11 @@ namespace UI.RoomConfig
                 resetButton.interactable = true;
             }
 
-            // Cancel按钮：有变更时可用
-            if (cancelButton != null)
+            // Close按钮：始终可用
+            if (closeButton != null)
             {
-                cancelButton.interactable = hasUnsavedChanges;
+                closeButton.interactable = true;
             }
-
-            LogDebug($"按钮状态已更新 - Apply: {(hasUnsavedChanges ? "可用(绿)" : "禁用(灰)")}, Cancel: {(hasUnsavedChanges ? "可用" : "禁用")}");
         }
 
         #region 公共接口
@@ -509,8 +465,8 @@ namespace UI.RoomConfig
                 applyButton.onClick.RemoveAllListeners();
             if (resetButton != null)
                 resetButton.onClick.RemoveAllListeners();
-            if (cancelButton != null)
-                cancelButton.onClick.RemoveAllListeners();
+            if (closeButton != null)
+                closeButton.onClick.RemoveAllListeners();
 
             // 清理临时创建的配置对象
             if (originalConfig != null)
@@ -526,8 +482,9 @@ namespace UI.RoomConfig
 
         #endregion
 
-        #region 调试方法
-
+        /// <summary>
+        /// 调试日志
+        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -544,10 +501,9 @@ namespace UI.RoomConfig
             status += $"权重配置面板: {(questionWeightPanel != null ? "✓" : "✗")}\n";
             status += $"Apply按钮: {(applyButton != null ? "✓" : "✗")}\n";
             status += $"Reset按钮: {(resetButton != null ? "✓" : "✗")}\n";
-            status += $"Cancel按钮: {(cancelButton != null ? "✓" : "✗")}\n";
+            status += $"Close按钮: {(closeButton != null ? "✓" : "✗")}\n";
             status += $"有未保存变更: {(hasUnsavedChanges ? "是" : "否")}\n";
             status += $"默认配置: {(defaultWeightConfig != null ? "✓" : "✗")}\n";
-            status += $"原始配置: {(originalConfig != null ? "✓" : "✗")}\n";
             status += $"权重配置摘要: {GetWeightConfigSummary()}\n";
 
             LogDebug(status);
@@ -571,25 +527,14 @@ namespace UI.RoomConfig
             }
         }
 
-        [ContextMenu("手动查找权重面板")]
-        private void EditorFindWeightPanel()
+        [ContextMenu("测试Close按钮")]
+        private void EditorTestCloseButton()
         {
             if (Application.isPlaying)
             {
-                StartCoroutine(DelayedFindWeightPanel());
-            }
-        }
-
-        [ContextMenu("触发配置变更")]
-        private void EditorTriggerConfigChanged()
-        {
-            if (Application.isPlaying)
-            {
-                TriggerConfigChanged();
+                OnCloseClicked();
             }
         }
 #endif
-
-        #endregion
     }
 }

@@ -159,87 +159,140 @@ namespace UI.RoomConfig
             LogDebug($"标签页容器设置完成，共 {tabContents.Length} 个");
             yield return null;
         }
+        private bool isInstantiating = false;
 
         /// <summary>
         /// 实例化权重配置预制体
         /// </summary>
         private IEnumerator InstantiateQuestionWeightPrefab()
         {
-            LogDebug("实例化权重配置预制体");
+            LogDebug($"InstantiateQuestionWeightPrefab 被调用 - 调用堆栈: {System.Environment.StackTrace}");
 
-            if (questionWeightPrefab == null)
+            // 防止重复调用
+            if (isInstantiating)
             {
-                Debug.LogError("[RoomConfigUI] 权重配置预制体为空，无法实例化");
+                LogDebug("正在实例化中，跳过重复调用");
                 yield break;
             }
 
-            if (tabContents == null || tabContents.Length == 0 || tabContents[0] == null)
+            if (questionWeightPanelInstance != null)
             {
-                Debug.LogError("[RoomConfigUI] 权重配置容器不存在");
+                LogDebug("实例已存在，跳过重复实例化");
                 yield break;
             }
 
-            // 清空标签页0的内容
-            Transform weightContainer = tabContents[0];
-            ClearContainer(weightContainer);
+            isInstantiating = true;
 
-            // 实例化预制体
             try
             {
-                questionWeightPanelInstance = Instantiate(questionWeightPrefab, weightContainer);
-                questionWeightPanelInstance.name = "QuestionWeightPanel_Instance";
+                LogDebug("=== 开始实例化权重配置预制体 ===");
 
-                // 设置RectTransform以填满容器
-                RectTransform panelRect = questionWeightPanelInstance.GetComponent<RectTransform>();
-                if (panelRect != null)
+                if (questionWeightPrefab == null)
                 {
-                    panelRect.anchorMin = Vector2.zero;
-                    panelRect.anchorMax = Vector2.one;
-                    panelRect.offsetMin = Vector2.zero;
-                    panelRect.offsetMax = Vector2.zero;
+                    Debug.LogError("[RoomConfigUI] 权重配置预制体为空，无法实例化");
+                    yield break;
                 }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[RoomConfigUI] 实例化预制体失败: {e.Message}");
-                yield break;
-            }
 
-            // 等待一帧确保实例化完成
-            yield return null;
-
-            // 获取预制体上的QuestionWeightConfigPanel组件
-            try
-            {
-                questionWeightPanel = questionWeightPanelInstance.GetComponent<QuestionWeightConfigPanel>();
-
-                if (questionWeightPanel != null)
+                if (tabContents == null || tabContents.Length == 0 || tabContents[0] == null)
                 {
-                    LogDebug("成功获取预制体上的QuestionWeightConfigPanel组件");
+                    Debug.LogError("[RoomConfigUI] 权重配置容器不存在");
+                    yield break;
+                }
 
-                    // 初始化权重配置面板
-                    var config = QuestionWeightManager.Config;
-                    if (config != null)
+                // 清空标签页0的内容
+                Transform weightContainer = tabContents[0];
+                LogDebug($"目标容器: {weightContainer.name}, 实例化前子对象数: {weightContainer.childCount}");
+
+                ClearContainer(weightContainer);
+
+                LogDebug($"清理后子对象数: {weightContainer.childCount}");
+
+                // 检查是否已存在实例
+                if (questionWeightPanelInstance != null)
+                {
+                    LogDebug("发现现有实例，先销毁");
+                    Destroy(questionWeightPanelInstance);
+                    questionWeightPanelInstance = null;
+                    questionWeightPanel = null;
+                    yield return null; // 等待销毁完成
+                }
+
+                // 实例化预制体
+                try
+                {
+                    LogDebug("开始实例化预制体");
+                    questionWeightPanelInstance = Instantiate(questionWeightPrefab, weightContainer);
+                    questionWeightPanelInstance.name = "QuestionWeightPanel_Instance";
+                    LogDebug($"实例化完成: {questionWeightPanelInstance.name}");
+
+                    // 设置RectTransform以填满容器
+                    RectTransform panelRect = questionWeightPanelInstance.GetComponent<RectTransform>();
+                    if (panelRect != null)
                     {
-                        questionWeightPanel.Initialize(config);
-                        LogDebug("权重配置面板初始化完成");
+                        panelRect.anchorMin = Vector2.zero;
+                        panelRect.anchorMax = Vector2.one;
+                        panelRect.offsetMin = Vector2.zero;
+                        panelRect.offsetMax = Vector2.zero;
+                        LogDebug("RectTransform设置完成");
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[RoomConfigUI] 实例化预制体失败: {e.Message}");
+                    yield break;
+                }
+
+                // 等待一帧确保实例化完成
+                yield return null;
+
+                // 获取预制体上的QuestionWeightConfigPanel组件
+                try
+                {
+                    questionWeightPanel = questionWeightPanelInstance.GetComponent<QuestionWeightConfigPanel>();
+
+                    if (questionWeightPanel != null)
+                    {
+                        LogDebug("成功获取预制体上的QuestionWeightConfigPanel组件");
+
+                        // **恢复手动初始化调用**
+                        var config = QuestionWeightManager.Config;
+                        if (config != null)
+                        {
+                            LogDebug("使用QuestionWeightManager.Config手动初始化QuestionWeightConfigPanel");
+                            questionWeightPanel.Initialize(config);
+                        }
+                        else
+                        {
+                            LogDebug("警告：QuestionWeightManager.Config为空，使用默认配置");
+                            if (defaultWeightConfig != null)
+                            {
+                                LogDebug("使用defaultWeightConfig初始化");
+                                questionWeightPanel.Initialize(defaultWeightConfig);
+                            }
+                            else
+                            {
+                                Debug.LogError("[RoomConfigUI] 没有可用的权重配置！无法初始化权重面板");
+                            }
+                        }
+
+                        // 通知Extension组件
+                        NotifyExtensionAboutWeightPanel();
                     }
                     else
                     {
-                        LogDebug("警告：无法获取权重配置");
+                        Debug.LogError("[RoomConfigUI] 预制体上没有QuestionWeightConfigPanel组件");
                     }
-
-                    // 通知Extension组件
-                    NotifyExtensionAboutWeightPanel();
                 }
-                else
+                catch (System.Exception e)
                 {
-                    Debug.LogError("[RoomConfigUI] 预制体上没有QuestionWeightConfigPanel组件");
+                    Debug.LogError($"[RoomConfigUI] 获取组件失败: {e.Message}");
                 }
+
+                LogDebug("=== 权重配置预制体实例化流程结束 ===");
             }
-            catch (System.Exception e)
+            finally
             {
-                Debug.LogError($"[RoomConfigUI] 获取或初始化组件失败: {e.Message}");
+                isInstantiating = false;
             }
         }
 
@@ -416,16 +469,26 @@ namespace UI.RoomConfig
         /// </summary>
         private void ClearContainer(Transform container)
         {
-            if (container == null) return;
+            if (container == null)
+            {
+                LogDebug("ClearContainer: 容器为空");
+                return;
+            }
+
+            LogDebug($"ClearContainer: 开始清理容器 {container.name}, 当前子对象数: {container.childCount}");
 
             for (int i = container.childCount - 1; i >= 0; i--)
             {
                 Transform child = container.GetChild(i);
+                LogDebug($"ClearContainer: 销毁子对象 {child.name}");
+
                 if (Application.isPlaying)
                     Destroy(child.gameObject);
                 else
                     DestroyImmediate(child.gameObject);
             }
+
+            LogDebug($"ClearContainer: 清理完成，剩余子对象数: {container.childCount}");
         }
 
         /// <summary>
@@ -856,7 +919,7 @@ namespace UI.RoomConfig
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[RoomConfigUIExtension] {message}");
+                Debug.Log($"[RoomConfigUI] {message}");
             }
         }
     }

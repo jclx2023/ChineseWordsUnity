@@ -1128,11 +1128,36 @@ namespace Core.Network
                 // 成语接龙特殊验证
                 return ValidateIdiomChainAnswer(answer, question);
             }
+            else if (question.questionType == QuestionType.HardFill)
+            {
+                // 硬性填空题验证
+                return ValidateHardFillAnswer(answer, question);
+            }
 
             // 其他题型的普通验证
             return answer.Trim().Equals(question.correctAnswer.Trim(), System.StringComparison.OrdinalIgnoreCase);
         }
+        /// <summary>
+        /// 验证硬性填空题答案 - 委托给HardFill管理器
+        /// </summary>
+        private bool ValidateHardFillAnswer(string answer, NetworkQuestionData question)
+        {
+            LogDebug($"委托验证硬填空答案: {answer}");
 
+            try
+            {
+                // 调用HardFill管理器的静态验证方法
+                bool isValid = HardFillQuestionManager.ValidateAnswerStatic(answer, question);
+
+                LogDebug($"硬填空验证结果: {isValid}");
+                return isValid;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[HostGameManager] 委托验证硬填空答案时发生错误: {e.Message}");
+                return false;
+            }
+        }
         /// <summary>
         /// 验证成语接龙答案
         /// </summary>

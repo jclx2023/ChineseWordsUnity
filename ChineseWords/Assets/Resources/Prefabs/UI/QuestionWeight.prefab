@@ -15,7 +15,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &3461857496972900115
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1021,8 +1021,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 25}
-  m_SizeDelta: {x: 650, y: 250}
+  m_AnchoredPosition: {x: 0, y: -100}
+  m_SizeDelta: {x: 800, y: 400}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8171516176565904118
 CanvasRenderer:
@@ -1126,7 +1126,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 50}
   m_SizeDelta: {x: 300, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &952190397745246725
@@ -1605,7 +1605,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &5058807838284932310
 GameObject:
@@ -1641,8 +1641,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 200, y: 50}
+  m_AnchoredPosition: {x: 0, y: 20}
+  m_SizeDelta: {x: 500, y: 60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &163095146285130593
 CanvasRenderer:
@@ -2056,19 +2056,14 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7932196985109240223}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c68e59693f5e714458c3aaa2a984925a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  weightSliderItemPrefab: {fileID: 2721081499858732138, guid: 6de18232ea90e8240aa3a647ac533689, type: 3}
-  weightSliderItemPrefabPath: Prefabs/UI/WeightSliderItem
-  weightItemsContainer: {fileID: 6994785101985174822}
-  presetButtons:
-  - {fileID: 578803301719261530}
-  - {fileID: 8312689211607340539}
-  - {fileID: 8771371455364480459}
-  - {fileID: 7089013300085076386}
+  weightSliderItemPrefab: {fileID: 4689862326258036303, guid: 3f6713e082bfc9a42bab7b1b34e9a62a, type: 3}
+  weightSliderItemPrefabPath: Prefabs/UI
+  weightItemsContainer: {fileID: 0}
   statusText: {fileID: 1171284417614161307}
   autoCreateUI: 1
   enableDebugLogs: 1
