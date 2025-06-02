@@ -46,6 +46,10 @@ namespace Core.Network
             [Header("题目设置")]
             [Tooltip("题目权重配置引用")]
             public QuestionWeightConfig weightConfig;
+
+            [Header("Timer配置")]
+            [Tooltip("Timer配置引用")]
+            public TimerConfig timerConfig;
         }
 
         [Header("配置分组")]
@@ -149,6 +153,18 @@ namespace Core.Network
                 // 这不算致命错误，可以使用默认权重
             }
 
+            // 验证Timer配置
+            if (questionSettings.timerConfig == null)
+            {
+                Debug.LogWarning("[RoomGameConfig] Timer配置未设置");
+                // 这不算致命错误，可以使用默认Timer配置
+            }
+            else if (!questionSettings.timerConfig.ValidateConfig())
+            {
+                Debug.LogError("[RoomGameConfig] Timer配置验证失败");
+                isValid = false;
+            }
+
             return isValid;
         }
 
@@ -207,8 +223,50 @@ namespace Core.Network
             summary += $"初始血量: {hpSettings.initialPlayerHealth}\n";
             summary += $"答错扣血: {hpSettings.damagePerWrongAnswer}\n";
             summary += $"权重配置: {(questionSettings.weightConfig != null ? "已设置" : "未设置")}\n";
+            summary += $"Timer配置: {(questionSettings.timerConfig != null ? "已设置" : "未设置")}\n";
+
+            // 如果有Timer配置，显示详细信息
+            if (questionSettings.timerConfig != null)
+            {
+                summary += "\nTimer配置详情:\n";
+                summary += questionSettings.timerConfig.GetConfigSummary();
+            }
 
             return summary;
+        }
+
+        /// <summary>
+        /// 获取当前有效的Timer配置
+        /// </summary>
+        public TimerConfig GetEffectiveTimerConfig()
+        {
+            // 如果设置了Timer配置，返回设置的配置
+            if (questionSettings.timerConfig != null)
+            {
+                return questionSettings.timerConfig;
+            }
+
+            // 如果没有设置，返回TimerConfigManager的当前配置
+            if (TimerConfigManager.IsConfigured())
+            {
+                return TimerConfigManager.Config;
+            }
+
+            // 都没有的话，创建一个默认配置
+            Debug.LogWarning("[RoomGameConfig] 没有可用的Timer配置，创建临时默认配置");
+            var tempConfig = ScriptableObject.CreateInstance<TimerConfig>();
+            tempConfig.ResetToDefault();
+            return tempConfig;
+        }
+
+        /// <summary>
+        /// 设置Timer配置
+        /// </summary>
+        public void SetTimerConfig(TimerConfig timerConfig)
+        {
+            questionSettings.timerConfig = timerConfig;
+            MarkDirty();
+            Debug.Log($"[RoomGameConfig] Timer配置已设置: {timerConfig?.ConfigName ?? "null"}");
         }
 
         /// <summary>
@@ -257,6 +315,20 @@ namespace Core.Network
             var deserialized = FromJson(json);
             bool isEqual = Equals(deserialized);
             Debug.Log($"[RoomGameConfig] 反序列化测试: {(isEqual ? "成功" : "失败")}");
+        }
+
+        [ContextMenu("测试Timer配置")]
+        public void TestTimerConfig()
+        {
+            var timerConfig = GetEffectiveTimerConfig();
+            if (timerConfig != null)
+            {
+                Debug.Log($"[RoomGameConfig] 当前有效Timer配置:\n{timerConfig.GetConfigSummary()}");
+            }
+            else
+            {
+                Debug.Log("[RoomGameConfig] 没有可用的Timer配置");
+            }
         }
 #endif
     }

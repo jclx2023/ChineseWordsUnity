@@ -9,8 +9,8 @@ using UI.RoomConfig;
 namespace Core.Network
 {
     /// <summary>
-    /// 精简版房间配置管理器
-    /// 专注于基础的配置UI管理功能
+    /// 简化版房间配置管理器
+    /// 专注于RoomGameConfig的管理，Timer配置通过TimerConfigManager处理
     /// </summary>
     public class RoomConfigManager : MonoBehaviour
     {
@@ -39,6 +39,8 @@ namespace Core.Network
         // 属性
         public RoomGameConfig CurrentConfig => currentConfig;
         public bool IsUIOpen => isUIOpen;
+
+
 
         private void Awake()
         {
@@ -95,7 +97,69 @@ namespace Core.Network
             }
 
             runtimeConfig = currentConfig.CreateCopy();
+
+            // 初始化Timer配置管理器
+            InitializeTimerConfig();
         }
+
+        /// <summary>
+        /// 初始化Timer配置
+        /// </summary>
+        private void InitializeTimerConfig()
+        {
+            // 如果RoomGameConfig中设置了Timer配置，使用它
+            var timerConfig = currentConfig.GetEffectiveTimerConfig();
+            if (timerConfig != null)
+            {
+                TimerConfigManager.SetConfig(timerConfig);
+                LogDebug($"Timer配置已从RoomGameConfig初始化: {timerConfig.ConfigName}");
+            }
+            else
+            {
+                LogDebug("使用TimerConfigManager的默认配置");
+            }
+        }
+
+        #region RoomGameConfig管理
+
+        /// <summary>
+        /// 获取当前Timer配置
+        /// </summary>
+        public TimerConfig GetCurrentTimerConfig()
+        {
+            return runtimeConfig?.GetEffectiveTimerConfig();
+        }
+
+        /// <summary>
+        /// 设置Timer配置
+        /// </summary>
+        public void SetTimerConfig(TimerConfig timerConfig)
+        {
+            if (runtimeConfig == null)
+            {
+                LogDebug("运行时配置为空，无法设置Timer配置");
+                return;
+            }
+
+            runtimeConfig.SetTimerConfig(timerConfig);
+
+            // 同时更新TimerConfigManager
+            TimerConfigManager.SetConfig(timerConfig);
+
+            LogDebug($"Timer配置已更新: {timerConfig?.ConfigName ?? "null"}");
+        }
+
+        /// <summary>
+        /// 获取配置摘要信息
+        /// </summary>
+        public string GetConfigSummary()
+        {
+            return runtimeConfig?.GetConfigSummary() ?? "配置未加载";
+        }
+
+        #endregion
+
+        #region 现有方法（保持不变）
 
         /// <summary>
         /// 检查当前玩家是否为房主
@@ -334,6 +398,14 @@ namespace Core.Network
             {
                 currentConfig = runtimeConfig.CreateCopy();
                 currentConfig.ClearDirty();
+
+                // 更新Timer配置管理器
+                var timerConfig = currentConfig.GetEffectiveTimerConfig();
+                if (timerConfig != null)
+                {
+                    TimerConfigManager.SetConfig(timerConfig);
+                }
+
                 LogDebug("配置已应用");
             }
         }
@@ -345,6 +417,9 @@ namespace Core.Network
         {
             LogDebug("重置为默认配置");
             runtimeConfig.ResetToDefault();
+
+            // 重置Timer配置
+            InitializeTimerConfig();
         }
 
         /// <summary>
@@ -354,6 +429,10 @@ namespace Core.Network
         {
             return currentConfig?.CreateCopy();
         }
+
+        #endregion
+
+        #region 调试方法
 
         /// <summary>
         /// 调试日志
@@ -366,8 +445,6 @@ namespace Core.Network
             }
         }
 
-        #region 调试方法
-
         [ContextMenu("强制打开配置UI")]
         public void ForceOpenConfigUI()
         {
@@ -378,173 +455,36 @@ namespace Core.Network
         [ContextMenu("显示当前配置")]
         public void ShowCurrentConfig()
         {
-            Debug.Log(currentConfig?.GetConfigSummary() ?? "配置未加载");
+            Debug.Log(GetConfigSummary());
         }
 
-        [ContextMenu("创建完整测试UI")]
-        public void CreateCompleteTestUI()
+        [ContextMenu("显示Timer配置")]
+        public void ShowTimerConfig()
         {
-            // 销毁现有UI
-            if (configUIInstance != null)
+            var timerConfig = GetCurrentTimerConfig();
+            if (timerConfig != null)
             {
-                DestroyImmediate(configUIInstance);
-                configUIInstance = null;
+                Debug.Log($"Timer配置: {timerConfig.GetConfigSummary()}");
             }
-
-            LogDebug("创建完整测试UI");
-
-            // 创建Canvas
-            var canvas = new GameObject("TestConfigUI");
-            var canvasComponent = canvas.AddComponent<Canvas>();
-            canvasComponent.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasComponent.sortingOrder = 1000;
-            canvas.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-
-            // 创建主面板
-            var mainPanel = new GameObject("MainPanel");
-            mainPanel.transform.SetParent(canvas.transform, false);
-
-            var panelRect = mainPanel.AddComponent<RectTransform>();
-            panelRect.anchorMin = new Vector2(0.2f, 0.2f);
-            panelRect.anchorMax = new Vector2(0.8f, 0.8f);
-            panelRect.sizeDelta = Vector2.zero;
-            panelRect.anchoredPosition = Vector2.zero;
-
-            var panelImage = mainPanel.AddComponent<UnityEngine.UI.Image>();
-            panelImage.color = new Color(0.1f, 0.1f, 0.1f, 0.9f); // 深色半透明背景
-
-            // 创建标题
-            var title = new GameObject("Title");
-            title.transform.SetParent(mainPanel.transform, false);
-
-            var titleRect = title.AddComponent<RectTransform>();
-            titleRect.anchorMin = new Vector2(0, 0.85f);
-            titleRect.anchorMax = new Vector2(1, 1f);
-            titleRect.sizeDelta = Vector2.zero;
-            titleRect.anchoredPosition = Vector2.zero;
-
-            var titleText = title.AddComponent<TMP_Text>();
-            titleText.text = "游戏配置 - 测试版本";
-            titleText.color = Color.white;
-            titleText.fontSize = 20;
-            titleText.alignment = TextAlignmentOptions.Center;
-
-            // 创建标签按钮容器
-            var tabButtonContainer = new GameObject("TabButtonContainer");
-            tabButtonContainer.transform.SetParent(mainPanel.transform, false);
-
-            var tabButtonRect = tabButtonContainer.AddComponent<RectTransform>();
-            tabButtonRect.anchorMin = new Vector2(0, 0.7f);
-            tabButtonRect.anchorMax = new Vector2(1, 0.85f);
-            tabButtonRect.sizeDelta = Vector2.zero;
-            tabButtonRect.anchoredPosition = Vector2.zero;
-
-            // 添加水平布局组件
-            var layoutGroup = tabButtonContainer.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-            layoutGroup.spacing = 10f;
-            layoutGroup.padding = new RectOffset(20, 20, 5, 5);
-            layoutGroup.childAlignment = TextAnchor.MiddleLeft;
-            layoutGroup.childControlWidth = false;
-            layoutGroup.childControlHeight = true;
-
-            // 创建三个测试按钮
-            string[] tabNames = { "题型权重", "时间设置", "血量设置" };
-            Color[] buttonColors = {
-                new Color(0.2f, 0.6f, 0.2f, 1f), // 绿色
-                new Color(0.2f, 0.2f, 0.6f, 1f), // 蓝色
-                new Color(0.6f, 0.2f, 0.2f, 1f)  // 红色
-            };
-
-            for (int i = 0; i < tabNames.Length; i++)
+            else
             {
-                var button = CreateTestButton(tabNames[i], buttonColors[i], tabButtonContainer.transform);
+                Debug.Log("没有Timer配置");
             }
-
-            // 创建内容区域
-            var contentArea = new GameObject("ContentArea");
-            contentArea.transform.SetParent(mainPanel.transform, false);
-
-            var contentRect = contentArea.AddComponent<RectTransform>();
-            contentRect.anchorMin = new Vector2(0, 0.1f);
-            contentRect.anchorMax = new Vector2(1, 0.7f);
-            contentRect.sizeDelta = Vector2.zero;
-            contentRect.anchoredPosition = Vector2.zero;
-
-            var contentImage = contentArea.AddComponent<UnityEngine.UI.Image>();
-            contentImage.color = new Color(0.05f, 0.05f, 0.05f, 0.8f); // 更深的背景
-
-            // 在内容区域添加说明文本
-            var contentText = new GameObject("ContentText");
-            contentText.transform.SetParent(contentArea.transform, false);
-
-            var contentTextRect = contentText.AddComponent<RectTransform>();
-            contentTextRect.anchorMin = Vector2.zero;
-            contentTextRect.anchorMax = Vector2.one;
-            contentTextRect.sizeDelta = Vector2.zero;
-            contentTextRect.anchoredPosition = Vector2.zero;
-
-            var text = contentText.AddComponent<TMP_Text>();
-            text.text = "配置UI布局测试\n\n✓ 标签按钮应该水平排列\n✓ 按钮之间有适当间距\n✓ 内容区域显示正常\n\n如果看到此界面说明布局正确！";
-            text.color = Color.white;
-            text.fontSize = 16;
-            text.alignment = TextAlignmentOptions.Center;
-
-            // 创建关闭按钮
-            var closeButton = CreateTestButton("关闭", Color.gray, mainPanel.transform);
-            var closeRect = closeButton.GetComponent<RectTransform>();
-            closeRect.anchorMin = new Vector2(0.8f, 0.02f);
-            closeRect.anchorMax = new Vector2(0.95f, 0.08f);
-            closeRect.sizeDelta = Vector2.zero;
-            closeRect.anchoredPosition = Vector2.zero;
-
-            // 绑定关闭事件
-            var closeButtonComponent = closeButton.GetComponent<Button>();
-            closeButtonComponent.onClick.AddListener(() => {
-                DestroyImmediate(canvas);
-                configUIInstance = null;
-                isUIOpen = false;
-                LogDebug("测试UI已关闭");
-            });
-
-            configUIInstance = canvas;
-            isUIOpen = true;
-
-            LogDebug($"完整测试UI创建完成 - 场景: {canvas.scene.name}");
-            LogDebug("应该能看到带有三个标签按钮的配置界面");
         }
 
-        /// <summary>
-        /// 创建测试按钮
-        /// </summary>
-        private GameObject CreateTestButton(string text, Color color, Transform parent)
+        [ContextMenu("测试Timer配置设置")]
+        public void TestTimerConfigSetting()
         {
-            var buttonObj = new GameObject($"Button_{text}");
-            buttonObj.transform.SetParent(parent, false);
-
-            var rectTransform = buttonObj.AddComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(100, 30);
-
-            var button = buttonObj.AddComponent<Button>();
-            var image = buttonObj.AddComponent<UnityEngine.UI.Image>();
-            image.color = color;
-
-            // 创建按钮文本
-            var textObj = new GameObject("Text");
-            textObj.transform.SetParent(buttonObj.transform, false);
-
-            var textRect = textObj.AddComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.sizeDelta = Vector2.zero;
-            textRect.anchoredPosition = Vector2.zero;
-
-            var textComponent = textObj.AddComponent<TMP_Text>();
-            textComponent.text = text;
-            textComponent.color = Color.white;
-            textComponent.fontSize = 14;
-            textComponent.alignment = TextAlignmentOptions.Center;
-
-            return buttonObj;
+            var timerConfig = TimerConfigManager.Config;
+            if (timerConfig != null)
+            {
+                SetTimerConfig(timerConfig);
+                LogDebug("测试Timer配置设置完成");
+            }
+            else
+            {
+                LogDebug("没有可用的Timer配置进行测试");
+            }
         }
 
         #endregion
