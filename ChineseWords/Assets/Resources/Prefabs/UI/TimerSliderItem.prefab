@@ -342,15 +342,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e782efc0c4138e34593c144bd28f592f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeLimitSlider: {fileID: 2111168471911410192}
-  nameLabel_TMP: {fileID: 8638621032305752550}
-  timeLabel_TMP: {fileID: 7991038104180460301}
-  rangeLabel_TMP: {fileID: 5036309094237854145}
-  nameLabel_Legacy: {fileID: 0}
-  timeLabel_Legacy: {fileID: 0}
-  rangeLabel_Legacy: {fileID: 0}
-  minTimeLimit: 5
-  maxTimeLimit: 120
+  timeSlider: {fileID: 2111168471911410192}
+  nameLabel: {fileID: 8638621032305752550}
+  timeLabel: {fileID: 7991038104180460301}
+  minTime: 10
+  maxTime: 120
+  useIntegerValues: 1
   autoFindComponents: 1
   enableDebugLogs: 1
 --- !u!1 &6950314915633299074
@@ -370,7 +367,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2371386603931306093
 RectTransform:
   m_ObjectHideFlags: 0

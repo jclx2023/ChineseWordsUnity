@@ -5,31 +5,24 @@ using TMPro;
 namespace UI.RoomConfig
 {
     /// <summary>
-    /// Timer滑条项 - 用于配置单个题型组的时间限制
-    /// 类似于WeightSliderItem的设计
+    /// Timer滑条项 - 简化版，移除Range显示功能
+    /// 用于单题型时间配置
     /// </summary>
     public class TimerSliderItem : MonoBehaviour
     {
-        [Header("UI组件 - 手动拖拽绑定")]
-        [SerializeField] private Slider timeLimitSlider;
-        [SerializeField] private TextMeshProUGUI nameLabel_TMP;
-        [SerializeField] private TextMeshProUGUI timeLabel_TMP;
-        [SerializeField] private TextMeshProUGUI rangeLabel_TMP;
+        [Header("UI组件 - 拖拽绑定")]
+        [SerializeField] private Slider timeSlider;
+        [SerializeField] private TextMeshProUGUI nameLabel;
+        [SerializeField] private TextMeshProUGUI timeLabel;
 
-        [Header("文本组件 - Legacy Text回退（可选）")]
-        [SerializeField] private Text nameLabel_Legacy;
-        [SerializeField] private Text timeLabel_Legacy;
-        [SerializeField] private Text rangeLabel_Legacy;
+        [Header("时间设置")]
+        [SerializeField] private float minTime = 10f;
+        [SerializeField] private float maxTime = 120f;
+        [SerializeField] private bool useIntegerValues = true;
 
-        [Header("滑条配置")]
-        [Range(5f, 120f)]
-        [SerializeField] private float minTimeLimit = 5f;
-        [Range(5f, 120f)]
-        [SerializeField] private float maxTimeLimit = 120f;
-
-        [Header("设置")]
-        [SerializeField] private bool autoFindComponents = false; // 改为false，使用手动绑定
-        [SerializeField] private bool enableDebugLogs = true;
+        [Header("自动查找设置")]
+        [SerializeField] private bool autoFindComponents = true;
+        [SerializeField] private bool enableDebugLogs = false;
 
         // 事件
         public System.Action<float> OnValueChanged;
@@ -39,66 +32,58 @@ namespace UI.RoomConfig
 
         private void Awake()
         {
-            LogDebug("TimerSliderItem Awake");
+            if (autoFindComponents)
+            {
+                AutoFindComponents();
+            }
 
-            // 验证手动绑定的组件
-            ValidateManualBindings();
-
-            SetupSlider();
             BindEvents();
             isInitialized = true;
         }
 
         /// <summary>
-        /// 验证手动绑定的组件
+        /// 自动查找组件
         /// </summary>
-        private void ValidateManualBindings()
+        private void AutoFindComponents()
         {
-            bool isValid = true;
-
-            if (timeLimitSlider == null)
+            // 查找Slider
+            if (timeSlider == null)
             {
-                Debug.LogError("[TimerSliderItem] timeLimitSlider未绑定！请在Inspector中拖拽Slider组件到此字段");
-                isValid = false;
+                timeSlider = GetComponentInChildren<Slider>();
+                LogDebug($"自动查找Slider: {(timeSlider != null ? "✓" : "✗")}");
             }
 
-            if (nameLabel_TMP == null && nameLabel_Legacy == null)
+            // 查找TMPro文本组件
+            if (nameLabel == null || timeLabel == null)
             {
-                Debug.LogError("[TimerSliderItem] 名称标签未绑定！请至少绑定nameLabel_TMP或nameLabel_Legacy");
-                isValid = false;
+                var tmpTexts = GetComponentsInChildren<TextMeshProUGUI>();
+                LogDebug($"找到 {tmpTexts.Length} 个TMPro文本组件");
+
+                if (tmpTexts.Length >= 2)
+                {
+                    if (nameLabel == null) nameLabel = tmpTexts[0];
+                    if (timeLabel == null) timeLabel = tmpTexts[1];
+                    LogDebug("自动分配TMPro文本组件");
+                }
+                else if (tmpTexts.Length == 1)
+                {
+                    if (nameLabel == null) nameLabel = tmpTexts[0];
+                    LogDebug("自动分配单个TMPro文本组件为名称标签");
+                }
             }
 
-            if (timeLabel_TMP == null && timeLabel_Legacy == null)
+            // 如果没有TMPro，查找Legacy Text作为回退
+            if (nameLabel == null)
             {
-                LogDebug("时间标签未绑定，时间显示功能将不可用");
+                var legacyTexts = GetComponentsInChildren<Text>();
+                LogDebug($"TMPro未找到，查找Legacy Text: {legacyTexts.Length} 个");
+
+                if (legacyTexts.Length >= 2)
+                {
+                    // 这里需要创建适配逻辑，因为TMPro和Text不兼容
+                    LogDebug("发现Legacy Text，但当前脚本使用TMPro类型，需要手动绑定");
+                }
             }
-
-            LogDebug($"手动绑定验证完成 - {(isValid ? "✓ 通过" : "✗ 失败")}");
-        }
-
-        /// <summary>
-        /// 设置滑条配置
-        /// </summary>
-        private void SetupSlider()
-        {
-            if (timeLimitSlider == null)
-            {
-                LogDebug("警告：时间限制滑条未找到");
-                return;
-            }
-
-            // 设置滑条范围
-            timeLimitSlider.minValue = minTimeLimit;
-            timeLimitSlider.maxValue = maxTimeLimit;
-            timeLimitSlider.wholeNumbers = true; // 只允许整数值
-
-            // 设置默认值
-            if (timeLimitSlider.value < minTimeLimit || timeLimitSlider.value > maxTimeLimit)
-            {
-                timeLimitSlider.value = 30f; // 默认30秒
-            }
-
-            LogDebug($"滑条配置完成: 范围 {minTimeLimit}-{maxTimeLimit}秒，当前值 {timeLimitSlider.value}秒");
         }
 
         /// <summary>
@@ -106,11 +91,29 @@ namespace UI.RoomConfig
         /// </summary>
         private void BindEvents()
         {
-            if (timeLimitSlider != null)
+            if (timeSlider != null)
             {
-                timeLimitSlider.onValueChanged.RemoveAllListeners();
-                timeLimitSlider.onValueChanged.AddListener(OnSliderChanged);
+                // 设置滑条范围
+                timeSlider.minValue = minTime;
+                timeSlider.maxValue = maxTime;
+                timeSlider.wholeNumbers = useIntegerValues;
+
+                // 绑定事件
+                timeSlider.onValueChanged.RemoveAllListeners();
+                timeSlider.onValueChanged.AddListener(OnSliderChanged);
                 LogDebug("Slider事件已绑定");
+            }
+        }
+
+        /// <summary>
+        /// 设置题型名称
+        /// </summary>
+        public void SetName(string name)
+        {
+            if (nameLabel != null)
+            {
+                nameLabel.text = name;
+                LogDebug($"设置名称: {name}");
             }
         }
 
@@ -119,50 +122,12 @@ namespace UI.RoomConfig
         /// </summary>
         public void SetTimeLimit(float timeLimit)
         {
-            LogDebug($"设置时间限制: {timeLimit}秒");
-
-            if (timeLimitSlider != null)
+            if (timeSlider != null)
             {
-                timeLimitSlider.value = Mathf.Clamp(timeLimit, minTimeLimit, maxTimeLimit);
+                timeSlider.value = Mathf.Clamp(timeLimit, minTime, maxTime);
             }
 
-            UpdateTimeDisplay();
-        }
-
-        /// <summary>
-        /// 设置名称标签
-        /// </summary>
-        public void SetName(string name)
-        {
-            // 优先使用TMPro
-            if (nameLabel_TMP != null)
-            {
-                nameLabel_TMP.text = name;
-            }
-            else if (nameLabel_Legacy != null)
-            {
-                nameLabel_Legacy.text = name;
-            }
-
-            LogDebug($"设置名称: {name}");
-        }
-
-        /// <summary>
-        /// 设置时间范围显示
-        /// </summary>
-        public void SetTimeRange(string rangeText)
-        {
-            // 优先使用TMPro
-            if (rangeLabel_TMP != null)
-            {
-                rangeLabel_TMP.text = rangeText;
-            }
-            else if (rangeLabel_Legacy != null)
-            {
-                rangeLabel_Legacy.text = rangeText;
-            }
-
-            LogDebug($"设置时间范围: {rangeText}");
+            UpdateTimeDisplay(timeLimit);
         }
 
         /// <summary>
@@ -170,127 +135,60 @@ namespace UI.RoomConfig
         /// </summary>
         public float GetTimeLimit()
         {
-            return timeLimitSlider != null ? timeLimitSlider.value : 30f;
-        }
-
-        /// <summary>
-        /// 设置滑条范围
-        /// </summary>
-        public void SetTimeRange(float min, float max)
-        {
-            minTimeLimit = Mathf.Clamp(min, 5f, 120f);
-            maxTimeLimit = Mathf.Clamp(max, minTimeLimit, 120f);
-
-            if (timeLimitSlider != null)
+            if (timeSlider != null)
             {
-                timeLimitSlider.minValue = minTimeLimit;
-                timeLimitSlider.maxValue = maxTimeLimit;
-
-                // 确保当前值在新范围内
-                if (timeLimitSlider.value < minTimeLimit)
-                    timeLimitSlider.value = minTimeLimit;
-                else if (timeLimitSlider.value > maxTimeLimit)
-                    timeLimitSlider.value = maxTimeLimit;
+                return useIntegerValues ? Mathf.Round(timeSlider.value) : timeSlider.value;
             }
-
-            LogDebug($"设置时间范围: {minTimeLimit}-{maxTimeLimit}秒");
+            return 30f; // 默认值
         }
 
         /// <summary>
-        /// Slider变化处理
+        /// 滑条变化处理
         /// </summary>
         private void OnSliderChanged(float value)
         {
-            LogDebug($"Slider变化: {value}秒");
+            if (!isInitialized) return; // 防止初始化时触发
 
-            UpdateTimeDisplay();
-            TriggerValueChanged();
+            float finalValue = useIntegerValues ? Mathf.Round(value) : value;
+            UpdateTimeDisplay(finalValue);
+
+            LogDebug($"Slider变化: {finalValue}秒");
+            OnValueChanged?.Invoke(finalValue);
         }
 
         /// <summary>
         /// 更新时间显示
         /// </summary>
-        private void UpdateTimeDisplay()
+        private void UpdateTimeDisplay(float timeLimit)
         {
-            if (timeLimitSlider == null) return;
-
-            float currentTime = timeLimitSlider.value;
-            string timeText = FormatTime(currentTime);
-
-            // 更新时间显示
-            if (timeLabel_TMP != null)
+            if (timeLabel != null)
             {
-                timeLabel_TMP.text = timeText;
-            }
-            else if (timeLabel_Legacy != null)
-            {
-                timeLabel_Legacy.text = timeText;
-            }
+                string timeText = useIntegerValues ?
+                    $"{timeLimit:F0}秒" :
+                    $"{timeLimit:F1}秒";
 
-            // 根据时间长短设置颜色
-            UpdateTimeColor(currentTime);
-        }
-
-        /// <summary>
-        /// 格式化时间显示
-        /// </summary>
-        private string FormatTime(float timeInSeconds)
-        {
-            int seconds = Mathf.RoundToInt(timeInSeconds);
-
-            if (seconds >= 60)
-            {
-                int minutes = seconds / 60;
-                int remainingSeconds = seconds % 60;
-                return $"{minutes}:{remainingSeconds:00}";
-            }
-            else
-            {
-                return $"{seconds}秒";
+                timeLabel.text = timeText;
             }
         }
 
         /// <summary>
-        /// 根据时间长短更新颜色
+        /// 设置时间范围限制
         /// </summary>
-        private void UpdateTimeColor(float timeInSeconds)
+        public void SetTimeRange(float min, float max)
         {
-            Color timeColor;
+            minTime = min;
+            maxTime = max;
 
-            if (timeInSeconds <= 10f)
+            if (timeSlider != null)
             {
-                timeColor = Color.red; // 短时间：红色
-            }
-            else if (timeInSeconds <= 20f)
-            {
-                timeColor = Color.yellow; // 中等时间：黄色
-            }
-            else
-            {
-                timeColor = Color.green; // 长时间：绿色
+                timeSlider.minValue = minTime;
+                timeSlider.maxValue = maxTime;
+
+                // 确保当前值在新范围内
+                timeSlider.value = Mathf.Clamp(timeSlider.value, minTime, maxTime);
             }
 
-            // 应用颜色
-            if (timeLabel_TMP != null)
-            {
-                timeLabel_TMP.color = timeColor;
-            }
-            else if (timeLabel_Legacy != null)
-            {
-                timeLabel_Legacy.color = timeColor;
-            }
-        }
-
-        /// <summary>
-        /// 触发值变化事件
-        /// </summary>
-        private void TriggerValueChanged()
-        {
-            if (!isInitialized) return; // 防止初始化时触发
-
-            float timeLimit = GetTimeLimit();
-            LogDebug($"触发值变化事件: {timeLimit}秒");
-            OnValueChanged?.Invoke(timeLimit);
+            LogDebug($"设置时间范围: {min}-{max}秒");
         }
 
         /// <summary>
@@ -299,66 +197,14 @@ namespace UI.RoomConfig
         public string GetComponentStatus()
         {
             var status = "=== TimerSliderItem组件状态 ===\n";
-            status += $"Slider: {(timeLimitSlider != null ? "✓" : "✗")}\n";
-            status += $"名称标签(TMPro): {(nameLabel_TMP != null ? "✓" : "✗")}\n";
-            status += $"时间标签(TMPro): {(timeLabel_TMP != null ? "✓" : "✗")}\n";
-            status += $"范围标签(TMPro): {(rangeLabel_TMP != null ? "✓" : "✗")}\n";
-            status += $"名称标签(Legacy): {(nameLabel_Legacy != null ? "✓" : "✗")}\n";
-            status += $"时间标签(Legacy): {(timeLabel_Legacy != null ? "✓" : "✗")}\n";
-            status += $"范围标签(Legacy): {(rangeLabel_Legacy != null ? "✓" : "✗")}\n";
+            status += $"Slider: {(timeSlider != null ? "✓" : "✗")}\n";
+            status += $"名称标签: {(nameLabel != null ? "✓" : "✗")}\n";
+            status += $"时间标签: {(timeLabel != null ? "✓" : "✗")}\n";
             status += $"初始化完成: {isInitialized}\n";
+            status += $"时间范围: {minTime}-{maxTime}秒\n";
             status += $"当前时间: {GetTimeLimit()}秒\n";
-            status += $"时间范围: {minTimeLimit}-{maxTimeLimit}秒\n";
+            status += $"整数值: {useIntegerValues}\n";
             return status;
-        }
-
-        /// <summary>
-        /// 设置启用状态
-        /// </summary>
-        public void SetEnabled(bool enabled)
-        {
-            if (timeLimitSlider != null)
-            {
-                timeLimitSlider.interactable = enabled;
-            }
-
-            // 设置文本透明度
-            float alpha = enabled ? 1f : 0.5f;
-            SetTextAlpha(alpha);
-
-            LogDebug($"设置启用状态: {enabled}");
-        }
-
-        /// <summary>
-        /// 设置文本透明度
-        /// </summary>
-        private void SetTextAlpha(float alpha)
-        {
-            if (nameLabel_TMP != null)
-            {
-                var color = nameLabel_TMP.color;
-                color.a = alpha;
-                nameLabel_TMP.color = color;
-            }
-            else if (nameLabel_Legacy != null)
-            {
-                var color = nameLabel_Legacy.color;
-                color.a = alpha;
-                nameLabel_Legacy.color = color;
-            }
-
-            if (timeLabel_TMP != null)
-            {
-                var color = timeLabel_TMP.color;
-                color.a = alpha;
-                timeLabel_TMP.color = color;
-            }
-            else if (timeLabel_Legacy != null)
-            {
-                var color = timeLabel_Legacy.color;
-                color.a = alpha;
-                timeLabel_Legacy.color = color;
-            }
         }
 
         /// <summary>
@@ -377,20 +223,13 @@ namespace UI.RoomConfig
         /// </summary>
         private void OnDestroy()
         {
-            // 清理事件监听
-            if (timeLimitSlider != null)
-                timeLimitSlider.onValueChanged.RemoveAllListeners();
+            if (timeSlider != null)
+                timeSlider.onValueChanged.RemoveAllListeners();
 
             LogDebug("TimerSliderItem已销毁");
         }
 
 #if UNITY_EDITOR
-        [ContextMenu("验证手动绑定")]
-        private void EditorValidateManualBindings()
-        {
-            ValidateManualBindings();
-        }
-
         [ContextMenu("显示组件状态")]
         private void EditorShowComponentStatus()
         {
@@ -404,19 +243,16 @@ namespace UI.RoomConfig
             {
                 SetName("测试题型");
                 SetTimeLimit(45f);
-                SetTimeRange("30-60秒");
             }
         }
 
-        [ContextMenu("测试时间格式化")]
-        private void EditorTestTimeFormatting()
+        [ContextMenu("重新查找组件")]
+        private void EditorRefindComponents()
         {
-            LogDebug("测试时间格式化:");
-            LogDebug($"10秒 -> {FormatTime(10f)}");
-            LogDebug($"30秒 -> {FormatTime(30f)}");
-            LogDebug($"60秒 -> {FormatTime(60f)}");
-            LogDebug($"90秒 -> {FormatTime(90f)}");
-            LogDebug($"125秒 -> {FormatTime(125f)}");
+            if (Application.isPlaying)
+            {
+                AutoFindComponents();
+            }
         }
 #endif
     }

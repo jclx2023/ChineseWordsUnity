@@ -4,13 +4,14 @@ using Core;
 namespace Core
 {
     /// <summary>
-    /// Timer配置管理器
-    /// 提供全局的Timer配置访问接口
+    /// Timer配置管理器 - 修复配置引用问题
+    /// 确保UI修改能正确反映到配置中
     /// </summary>
     public static class TimerConfigManager
     {
         private static TimerConfig config;
         private static bool initialized = false;
+        private static bool enableDebugLogs = true;
 
         /// <summary>
         /// 当前Timer配置
@@ -28,7 +29,7 @@ namespace Core
             private set
             {
                 config = value;
-                LogDebug($"Timer配置已更新: {config?.ConfigName ?? "null"}");
+                LogDebug($"Timer配置引用已更新: {config?.ConfigName ?? "null"} (InstanceID: {config?.GetInstanceID()})");
             }
         }
 
@@ -49,30 +50,69 @@ namespace Core
             LoadDefaultConfig();
 
             initialized = true;
-            LogDebug($"TimerConfigManager 初始化完成，当前配置: {config?.ConfigName ?? "未设置"}");
+            LogDebug($"TimerConfigManager 初始化完成，当前配置: {config?.ConfigName ?? "未设置"} (InstanceID: {config?.GetInstanceID()})");
         }
 
         /// <summary>
-        /// 设置Timer配置
+        /// 设置Timer配置 - 修复版本，确保引用正确传递
         /// </summary>
         /// <param name="newConfig">新的Timer配置</param>
         public static void SetConfig(TimerConfig newConfig)
         {
+            LogDebug($"尝试设置Timer配置: {newConfig?.ConfigName ?? "null"} (InstanceID: {newConfig?.GetInstanceID()})");
+
             if (newConfig == null)
             {
-                LogDebug("警告：尝试设置空的Timer配置");
+                LogDebug("警告：尝试设置空的Timer配置，保持当前配置不变");
                 return;
             }
 
-            if (!newConfig.ValidateConfig())
-            {
-                LogDebug("警告：Timer配置验证失败，使用默认配置");
-                LoadDefaultConfig();
-                return;
-            }
-
+            // 直接设置配置，不进行验证
+            // 验证应该在UI层或调用方进行，而不是在这里替换配置
             Config = newConfig;
-            LogDebug($"Timer配置已设置: {newConfig.ConfigName}");
+            LogDebug($"Timer配置已成功设置: {newConfig.ConfigName} (InstanceID: {newConfig.GetInstanceID()})");
+
+            // 可选：输出配置摘要用于调试
+            if (enableDebugLogs)
+            {
+                LogDebug($"配置摘要: {newConfig.GetConfigSummary()}");
+            }
+        }
+
+        /// <summary>
+        /// 强制设置配置（跳过所有检查）
+        /// </summary>
+        /// <param name="newConfig">新的Timer配置</param>
+        public static void ForceSetConfig(TimerConfig newConfig)
+        {
+            LogDebug($"强制设置Timer配置: {newConfig?.ConfigName ?? "null"}");
+            config = newConfig;
+            LogDebug($"强制设置完成，当前配置引用: {config?.GetInstanceID()}");
+        }
+
+        /// <summary>
+        /// 验证当前配置的有效性
+        /// </summary>
+        /// <returns>配置是否有效</returns>
+        public static bool ValidateCurrentConfig()
+        {
+            if (Config == null)
+            {
+                LogDebug("配置验证失败：配置为空");
+                return false;
+            }
+
+            try
+            {
+                bool isValid = Config.ValidateConfig();
+                LogDebug($"配置验证结果: {(isValid ? "有效" : "无效")}");
+                return isValid;
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"配置验证异常: {e.Message}");
+                return false;
+            }
         }
 
         /// <summary>
@@ -91,7 +131,7 @@ namespace Core
             try
             {
                 float timeLimit = Config.GetTimeLimitForQuestionType(questionType);
-                LogDebug($"获取题型 {questionType} 的时间限制: {timeLimit}秒");
+                LogDebug($"获取题型 {questionType} 的时间限制: {timeLimit}秒 (配置ID: {Config.GetInstanceID()})");
                 return timeLimit;
             }
             catch (System.Exception e)
@@ -116,7 +156,9 @@ namespace Core
 
             try
             {
-                return Config.GetTimerForQuestionType(questionType);
+                var settings = Config.GetTimerForQuestionType(questionType);
+                LogDebug($"获取题型 {questionType} 的Timer设置: {settings.baseTimeLimit}秒 (配置ID: {Config.GetInstanceID()})");
+                return settings;
             }
             catch (System.Exception e)
             {
@@ -137,7 +179,9 @@ namespace Core
                 return (1f, true, 5f, 3f, Color.white, Color.yellow, Color.red);
             }
 
-            return (Config.timeUpDelay, Config.showTimeWarning, Config.warningThreshold, Config.criticalThreshold, Config.normalColor, Config.warningColor, Config.criticalColor);
+            var settings = (Config.timeUpDelay, Config.showTimeWarning, Config.warningThreshold, Config.criticalThreshold, Config.normalColor, Config.warningColor, Config.criticalColor);
+            LogDebug($"获取全局设置: 警告阈值={settings.warningThreshold}秒, 危险阈值={settings.criticalThreshold}秒");
+            return settings;
         }
 
         /// <summary>
@@ -146,7 +190,9 @@ namespace Core
         /// <returns>是否已设置配置</returns>
         public static bool IsConfigured()
         {
-            return initialized && Config != null;
+            bool configured = initialized && Config != null;
+            LogDebug($"配置状态检查: 已初始化={initialized}, 配置存在={Config != null}, 整体状态={configured}");
+            return configured;
         }
 
         /// <summary>
@@ -160,7 +206,17 @@ namespace Core
                 return "Timer配置未设置";
             }
 
-            return Config.GetConfigSummary();
+            try
+            {
+                string summary = Config.GetConfigSummary();
+                LogDebug($"获取配置摘要: {summary} (配置ID: {Config.GetInstanceID()})");
+                return summary;
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"获取配置摘要失败: {e.Message}");
+                return "配置摘要获取失败";
+            }
         }
 
         /// <summary>
@@ -169,7 +225,63 @@ namespace Core
         public static void ResetToDefault()
         {
             LogDebug("重置Timer配置为默认值");
+
+            if (Config != null)
+            {
+                try
+                {
+                    // 优先重置当前配置，保持引用不变
+                    Config.ResetToDefault();
+                    LogDebug($"当前配置已重置 (配置ID: {Config.GetInstanceID()})");
+                    return;
+                }
+                catch (System.Exception e)
+                {
+                    LogDebug($"重置当前配置失败: {e.Message}，将加载新的默认配置");
+                }
+            }
+
+            // 如果重置失败或配置为空，加载新的默认配置
             LoadDefaultConfig();
+        }
+
+        /// <summary>
+        /// 获取配置状态信息（调试用）
+        /// </summary>
+        /// <returns>详细的配置状态信息</returns>
+        public static string GetConfigStatus()
+        {
+            var status = "=== TimerConfigManager状态 ===\n";
+            status += $"已初始化: {initialized}\n";
+            status += $"配置实例: {(Config != null ? "存在" : "不存在")}\n";
+
+            if (Config != null)
+            {
+                status += $"配置名称: {Config.ConfigName}\n";
+                status += $"配置ID: {Config.GetInstanceID()}\n";
+                status += $"配置有效性: {ValidateCurrentConfig()}\n";
+
+                try
+                {
+                    var timers = Config.GetAllTimers();
+                    status += $"配置的题型数量: {timers.Length}\n";
+
+                    if (timers.Length > 0)
+                    {
+                        status += "题型时间配置:\n";
+                        foreach (var timer in timers)
+                        {
+                            status += $"  {timer.questionType}: {timer.baseTimeLimit}秒\n";
+                        }
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    status += $"获取配置详情失败: {e.Message}\n";
+                }
+            }
+
+            return status;
         }
 
         /// <summary>
@@ -184,7 +296,7 @@ namespace Core
             if (resourceConfig != null)
             {
                 Config = resourceConfig;
-                LogDebug($"从Resources加载Timer配置: {resourceConfig.ConfigName}");
+                LogDebug($"从Resources加载Timer配置: {resourceConfig.ConfigName} (ID: {resourceConfig.GetInstanceID()})");
                 return;
             }
 
@@ -201,7 +313,7 @@ namespace Core
                 if (config != null)
                 {
                     Config = config;
-                    LogDebug($"从Resources路径 {path} 加载Timer配置: {config.ConfigName}");
+                    LogDebug($"从Resources路径 {path} 加载Timer配置: {config.ConfigName} (ID: {config.GetInstanceID()})");
                     return;
                 }
             }
@@ -219,7 +331,7 @@ namespace Core
             var defaultConfig = ScriptableObject.CreateInstance<TimerConfig>();
             defaultConfig.ResetToDefault();
             Config = defaultConfig;
-            LogDebug("运行时默认Timer配置创建完成");
+            LogDebug($"运行时默认Timer配置创建完成 (ID: {defaultConfig.GetInstanceID()})");
         }
 
         /// <summary>
@@ -271,9 +383,21 @@ namespace Core
         /// </summary>
         private static void LogDebug(string message)
         {
+            if (enableDebugLogs)
+            {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log($"[TimerConfigManager] {message}");
+                Debug.Log($"[TimerConfigManager] {message}");
 #endif
+            }
+        }
+
+        /// <summary>
+        /// 设置调试日志开关
+        /// </summary>
+        public static void SetDebugLogs(bool enabled)
+        {
+            enableDebugLogs = enabled;
+            LogDebug($"调试日志已{(enabled ? "启用" : "禁用")}");
         }
 
 #if UNITY_EDITOR
@@ -294,6 +418,15 @@ namespace Core
         /// </summary>
         [UnityEditor.MenuItem("Tools/Timer Config/Show Current Config")]
         public static void ShowCurrentConfig()
+        {
+            Debug.Log($"[TimerConfigManager] 当前配置状态:\n{GetConfigStatus()}");
+        }
+
+        /// <summary>
+        /// 编辑器专用：显示配置摘要
+        /// </summary>
+        [UnityEditor.MenuItem("Tools/Timer Config/Show Config Summary")]
+        public static void ShowConfigSummary()
         {
             Debug.Log($"[TimerConfigManager] 当前配置摘要:\n{GetConfigSummary()}");
         }

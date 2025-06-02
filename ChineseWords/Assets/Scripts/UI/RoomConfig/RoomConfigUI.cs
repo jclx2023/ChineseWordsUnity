@@ -347,7 +347,7 @@ namespace UI.RoomConfig
                         LogDebug("Timer配置面板初始化完成");
                     }
 
-                    // 通知Extension组件（如果需要）
+                    // 通知Extension组件
                     NotifyExtensionAboutTimerPanel();
                 }
                 else
@@ -401,9 +401,28 @@ namespace UI.RoomConfig
             var extension = GetComponent<RoomConfigUIExtension>();
             if (extension != null && timerConfigPanel != null)
             {
-                // 如果Extension支持Timer配置，可以在这里通知
-                // extension.SetTimerConfigPanel(timerConfigPanel);
-                LogDebug("Timer面板创建完成（Extension支持待实现）");
+                // 使用反射或检查Extension是否有Timer面板支持方法
+                var setTimerMethod = extension.GetType().GetMethod("SetTimerConfigPanel");
+                if (setTimerMethod != null)
+                {
+                    try
+                    {
+                        setTimerMethod.Invoke(extension, new object[] { timerConfigPanel });
+                        LogDebug("已通知Extension组件Timer面板创建完成");
+                    }
+                    catch (System.Exception e)
+                    {
+                        LogDebug($"通知Extension Timer面板失败: {e.Message}");
+                    }
+                }
+                else
+                {
+                    LogDebug("Extension组件不支持Timer面板设置方法");
+                }
+            }
+            else
+            {
+                LogDebug("Extension组件不存在或Timer面板为空");
             }
         }
 

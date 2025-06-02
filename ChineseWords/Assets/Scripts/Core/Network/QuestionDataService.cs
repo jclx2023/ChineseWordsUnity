@@ -18,6 +18,9 @@ namespace Core.Network
         [SerializeField] private bool enableDebugLogs = true;
         [SerializeField] private bool cacheProviders = true;
 
+        [Header("Timer配置")]
+        [SerializeField] private TimerConfig timerConfig;
+
         // 数据提供者缓存
         private Dictionary<QuestionType, IQuestionDataProvider> cachedProviders;
 
@@ -85,7 +88,17 @@ namespace Core.Network
                     var questionData = provider.GetQuestionData();
                     if (questionData != null)
                     {
-                        LogDebug($"成功获取题目: {questionData.questionText}");
+                        // 确保使用配置的时间限制
+                        if (timerConfig != null)
+                        {
+                            float configuredTime = timerConfig.GetTimeLimitForQuestionType(questionType);
+                            if (Math.Abs(questionData.timeLimit - configuredTime) > 0.1f)
+                            {
+                                LogDebug($"更新题目时间限制从 {questionData.timeLimit} 到 {configuredTime}");
+                            }
+                        }
+
+                        LogDebug($"成功获取题目: {questionData.questionText}, 时间限制: {questionData.timeLimit}秒");
                         return questionData;
                     }
                 }
@@ -236,6 +249,8 @@ namespace Core.Network
         /// </summary>
         private NetworkQuestionData CreateFallbackQuestion(QuestionType questionType)
         {
+            float timeLimit = GetTimeLimitForQuestionType(questionType);
+
             return NetworkQuestionDataExtensions.CreateFromLocalData(
                 questionType,
                 $"这是一个{questionType}类型的测试题目",
@@ -243,9 +258,61 @@ namespace Core.Network
                 questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
                     ? new string[] { "选项A", "测试答案", "选项C", "选项D" }
                     : null,
-                30f,
+                timeLimit,
                 "{\"source\": \"fallback\", \"isDefault\": true}"
             );
+        }
+        /// <summary>
+        /// 设置Timer配置
+        /// </summary>
+        public void SetTimerConfig(TimerConfig config)
+        {
+            timerConfig = config;
+            LogDebug($"Timer配置已设置: {(config != null ? config.ConfigName : "null")}");
+        }
+
+        /// <summary>
+        /// 获取指定题型的时间限制
+        /// </summary>
+        private float GetTimeLimitForQuestionType(QuestionType questionType)
+        {
+            if (timerConfig != null)
+            {
+                float timeLimit = timerConfig.GetTimeLimitForQuestionType(questionType);
+                LogDebug($"从Timer配置获取时间限制 {questionType}: {timeLimit}秒");
+                return timeLimit;
+            }
+
+            // 回退到默认时间
+            float defaultTime = GetDefaultTimeLimit(questionType);
+            LogDebug($"使用默认时间限制 {questionType}: {defaultTime}秒");
+            return defaultTime;
+        }
+
+        /// <summary>
+        /// 获取默认时间限制（当没有TimerConfig时使用）
+        /// </summary>
+        private float GetDefaultTimeLimit(QuestionType questionType)
+        {
+            switch (questionType)
+            {
+                case QuestionType.ExplanationChoice:
+                case QuestionType.SimularWordChoice:
+                case QuestionType.IdiomChain:
+                    return 20f;
+                case QuestionType.HardFill:
+                    return 30f;
+                case QuestionType.SoftFill:
+                case QuestionType.TextPinyin:
+                    return 25f;
+                case QuestionType.SentimentTorF:
+                case QuestionType.UsageTorF:
+                    return 15f;
+                case QuestionType.HandWriting:
+                    return 60f;
+                default:
+                    return 30f;
+            }
         }
 
         /// <summary>

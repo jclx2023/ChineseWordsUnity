@@ -4,6 +4,7 @@ using System.Collections;
 using Core;
 using Core.Network;
 using TMPro;
+using System.Linq;
 
 namespace UI.RoomConfig
 {
@@ -531,34 +532,50 @@ namespace UI.RoomConfig
 
             try
             {
-                // 假设NQMC有Timer相关字段，使用反射更新
-                // 如果NQMC没有Timer字段，可能需要通过其他方式应用Timer配置
+                var allTimers = config.GetAllTimers();
+                if (allTimers.Length == 0)
+                {
+                    LogDebug("Timer配置为空，跳过更新");
+                    return;
+                }
+
+                // 方案1：尝试更新全局时间限制字段
                 var questionTimeLimitField = typeof(NetworkQuestionManagerController).GetField("questionTimeLimit",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
                 if (questionTimeLimitField != null)
                 {
-                    // 获取所有Timer的平均时间作为全局时间限制
-                    var allTimers = config.GetAllTimers();
-                    if (allTimers.Length > 0)
+                    // 使用平均时间作为全局时间限制
+                    float avgTimeLimit = allTimers.Average(t => t.baseTimeLimit);
+                    questionTimeLimitField.SetValue(nqmc, avgTimeLimit);
+                    LogDebug($"NQMC全局时间限制已更新为平均值: {avgTimeLimit:F1}秒");
+                }
+
+                // 方案2：尝试更新题型特定的时间字典
+                var typeTimeLimitsField = typeof(NetworkQuestionManagerController).GetField("typeTimeLimits",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (typeTimeLimitsField != null)
+                {
+                    var typeTimeLimits = typeTimeLimitsField.GetValue(nqmc) as System.Collections.Generic.Dictionary<Core.QuestionType, float>;
+                    if (typeTimeLimits != null)
                     {
-                        float avgTimeLimit = 0f;
+                        typeTimeLimits.Clear();
                         foreach (var timer in allTimers)
                         {
-                            avgTimeLimit += timer.baseTimeLimit;
+                            typeTimeLimits[timer.questionType] = timer.baseTimeLimit;
                         }
-                        avgTimeLimit /= allTimers.Length;
-
-                        questionTimeLimitField.SetValue(nqmc, avgTimeLimit);
-                        LogDebug($"NQMC时间限制已更新为平均值: {avgTimeLimit}秒");
+                        LogDebug($"NQMC题型时间字典已更新，包含 {typeTimeLimits.Count} 种题型");
                     }
                 }
                 else
                 {
-                    LogDebug("NQMC没有questionTimeLimit字段，Timer配置可能需要其他方式应用");
+                    LogDebug("NQMC没有typeTimeLimits字段，使用全局时间限制");
                 }
 
-                LogDebug("NQMC Timer配置更新完成");
+                // 方案3：如果有其他Timer相关字段，可以在这里添加
+
+                LogDebug($"NQMC Timer配置更新完成 - 配置了{allTimers.Length}个题型的时间");
             }
             catch (System.Exception e)
             {

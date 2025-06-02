@@ -22,6 +22,7 @@ MonoBehaviour:
     damagePerWrongAnswer: 20
   questionSettings:
     weightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
+    timerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
   configName: "\u9ED8\u8BA4\u914D\u7F6E"
   configDescription: "\u6807\u51C6\u6E38\u620F\u914D\u7F6E"
   configVersion: 0

@@ -8,7 +8,7 @@ using System.Linq;
 namespace UI.RoomConfig
 {
     /// <summary>
-    /// Timer配置面板 - 修复布局问题
+    /// Timer配置面板 - 支持单题型独立配置
     /// </summary>
     public class TimerConfigPanel : MonoBehaviour
     {
@@ -20,7 +20,7 @@ namespace UI.RoomConfig
         [SerializeField] private GameObject timerSliderItemPrefab;
 
         [Header("布局设置")]
-        [SerializeField] private bool autoSetupLayout = true; // 自动设置布局
+        [SerializeField] private bool autoSetupLayout = true;
         [SerializeField] private float itemSpacing = 5f;
         [SerializeField] private float itemHeight = 40f;
         [SerializeField] private int paddingLeft = 10;
@@ -28,18 +28,21 @@ namespace UI.RoomConfig
         [SerializeField] private int paddingTop = 10;
         [SerializeField] private int paddingBottom = 10;
 
-        [Header("自动创建UI")]
-        [SerializeField] private bool autoFindComponents = false;
-        [SerializeField] private bool enableDebugLogs = true;
+        [Header("设置")]
+        [SerializeField] private bool enableDebugLogs = false;
         [SerializeField] private bool preventDuplicateInit = true;
 
-        // 支持的题型分组（简化为4大类）
-        private static readonly Dictionary<string, QuestionType[]> SupportedQuestionGroups = new Dictionary<string, QuestionType[]>
+        // 支持的题型（单独配置，不分组）
+        private static readonly QuestionType[] SupportedQuestionTypes = new QuestionType[]
         {
-            { "选择题", new[] { QuestionType.ExplanationChoice, QuestionType.SimularWordChoice } },
-            { "填空题", new[] { QuestionType.HardFill, QuestionType.SoftFill, QuestionType.TextPinyin, QuestionType.IdiomChain } },
-            { "判断题", new[] { QuestionType.SentimentTorF, QuestionType.UsageTorF } },
-            { "手写题", new[] { QuestionType.HandWriting } }
+            QuestionType.ExplanationChoice,  // 词语解释
+            QuestionType.SimularWordChoice,  // 近义词选择
+            QuestionType.HardFill,           // 硬性填空
+            QuestionType.SoftFill,           // 软性填空
+            QuestionType.TextPinyin,         // 拼音填空
+            QuestionType.IdiomChain,         // 成语接龙
+            QuestionType.SentimentTorF,      // 情感判断
+            QuestionType.UsageTorF,          // 用法判断
         };
 
         // 配置引用
@@ -56,20 +59,18 @@ namespace UI.RoomConfig
         public System.Action OnConfigChanged;
 
         /// <summary>
-        /// Timer滑条项管理器
+        /// Timer滑条项管理器 - 简化为单题型版本
         /// </summary>
         [System.Serializable]
         private class TimerSliderItemManager
         {
-            public string groupName;
-            public QuestionType[] questionTypes;
+            public QuestionType questionType;
             public GameObject itemObject;
             public TimerSliderItem itemScript;
 
-            public void Initialize(string name, QuestionType[] types, GameObject obj)
+            public void Initialize(QuestionType type, GameObject obj)
             {
-                groupName = name;
-                questionTypes = types;
+                questionType = type;
                 itemObject = obj;
                 itemScript = obj.GetComponent<TimerSliderItem>();
 
@@ -83,32 +84,19 @@ namespace UI.RoomConfig
             {
                 if (config == null || itemScript == null) return;
 
-                // 获取该组第一个题型的时间作为代表
-                var representativeType = questionTypes.First();
-                var timerSettings = config.GetTimerForQuestionType(representativeType);
+                var timerSettings = config.GetTimerForQuestionType(questionType);
                 float timeLimit = timerSettings.baseTimeLimit;
 
-                // 设置名称和时间
-                itemScript.SetName(groupName);
+                // 设置题型名称和时间
+                itemScript.SetName(GetQuestionTypeDisplayName(questionType));
                 itemScript.SetTimeLimit(timeLimit);
-
-                // 显示时间范围（如果组内有不同时间）
-                var allTimes = questionTypes.Select(type => config.GetTimeLimitForQuestionType(type)).Distinct().ToArray();
-                if (allTimes.Length > 1)
-                {
-                    itemScript.SetTimeRange($"{allTimes.Min()}-{allTimes.Max()}秒");
-                }
-                else
-                {
-                    itemScript.SetTimeRange($"{timeLimit}秒");
-                }
             }
 
-            public void BindEvents(System.Action<string> onChanged)
+            public void BindEvents(System.Action<QuestionType> onChanged)
             {
                 if (itemScript != null)
                 {
-                    itemScript.OnValueChanged = (timeLimit) => onChanged?.Invoke(groupName);
+                    itemScript.OnValueChanged = (timeLimit) => onChanged?.Invoke(questionType);
                 }
             }
 
@@ -124,25 +112,36 @@ namespace UI.RoomConfig
             {
                 return itemScript != null ? itemScript.GetTimeLimit() : 30f;
             }
+
+            private string GetQuestionTypeDisplayName(QuestionType questionType)
+            {
+                switch (questionType)
+                {
+                    case QuestionType.ExplanationChoice: return "词语解释";
+                    case QuestionType.SimularWordChoice: return "近义词选择";
+                    case QuestionType.HardFill: return "硬性填空";
+                    case QuestionType.SoftFill: return "软性填空";
+                    case QuestionType.TextPinyin: return "拼音填空";
+                    case QuestionType.IdiomChain: return "成语接龙";
+                    case QuestionType.SentimentTorF: return "情感判断";
+                    case QuestionType.UsageTorF: return "用法判断";
+                    default: return questionType.ToString();
+                }
+            }
         }
 
         private void Awake()
         {
-            LogDebug("TimerConfigPanel Awake");
             CheckExternalManagement();
 
             if (!isExternallyManaged)
             {
-                LogDebug("独立模式，验证手动绑定的组件");
                 ValidateManualBindings();
             }
         }
 
         private void Start()
         {
-            LogDebug("TimerConfigPanel Start");
-
-            // 如果启用自动布局设置，设置容器布局
             if (autoSetupLayout && timerItemsContainer != null)
             {
                 SetupContainerLayout();
@@ -150,26 +149,20 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 设置容器布局组件 - 修复滑条挤在一起的问题
+        /// 设置容器布局组件
         /// </summary>
         private void SetupContainerLayout()
         {
-            LogDebug("设置Timer容器布局");
-
             try
             {
-                // 添加或获取VerticalLayoutGroup
                 var verticalLayoutGroup = timerItemsContainer.GetComponent<VerticalLayoutGroup>();
                 if (verticalLayoutGroup == null)
                 {
                     verticalLayoutGroup = timerItemsContainer.gameObject.AddComponent<VerticalLayoutGroup>();
-                    LogDebug("添加VerticalLayoutGroup组件");
                 }
 
-                // 创建RectOffset（在运行时创建，避免构造函数问题）
                 var containerPadding = new RectOffset(paddingLeft, paddingRight, paddingTop, paddingBottom);
 
-                // 配置VerticalLayoutGroup
                 verticalLayoutGroup.childAlignment = TextAnchor.UpperCenter;
                 verticalLayoutGroup.childControlWidth = true;
                 verticalLayoutGroup.childControlHeight = false;
@@ -178,17 +171,12 @@ namespace UI.RoomConfig
                 verticalLayoutGroup.spacing = itemSpacing;
                 verticalLayoutGroup.padding = containerPadding;
 
-                LogDebug($"VerticalLayoutGroup配置: spacing={itemSpacing}, padding=({paddingLeft},{paddingRight},{paddingTop},{paddingBottom})");
-
-                // 添加或获取ContentSizeFitter
                 var contentSizeFitter = timerItemsContainer.GetComponent<ContentSizeFitter>();
                 if (contentSizeFitter == null)
                 {
                     contentSizeFitter = timerItemsContainer.gameObject.AddComponent<ContentSizeFitter>();
-                    LogDebug("添加ContentSizeFitter组件");
                 }
 
-                // 配置ContentSizeFitter
                 contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
                 contentSizeFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
@@ -209,19 +197,14 @@ namespace UI.RoomConfig
 
             if (timerItemsContainer == null)
             {
-                Debug.LogError("[TimerConfigPanel] timerItemsContainer未绑定！请在Inspector中拖拽Content到此字段");
+                Debug.LogError("[TimerConfigPanel] timerItemsContainer未绑定！");
                 isValid = false;
             }
 
             if (timerSliderItemPrefab == null)
             {
-                Debug.LogError("[TimerConfigPanel] timerSliderItemPrefab未绑定！请在Inspector中拖拽TimerSliderItem预制体到此字段");
+                Debug.LogError("[TimerConfigPanel] timerSliderItemPrefab未绑定！");
                 isValid = false;
-            }
-
-            if (statusText == null)
-            {
-                LogDebug("statusText未绑定，状态显示功能将不可用");
             }
 
             LogDebug($"手动绑定验证完成 - {(isValid ? "✓ 通过" : "✗ 失败")}");
@@ -250,11 +233,9 @@ namespace UI.RoomConfig
         /// </summary>
         public void Initialize(TimerConfig config)
         {
-            LogDebug($"Initialize调用 - 已初始化: {isInitialized}, 防重复: {preventDuplicateInit}");
-
             if (isInitialized && preventDuplicateInit)
             {
-                LogDebug("已经初始化过，强制跳过重复初始化");
+                LogDebug("已经初始化过，跳过重复初始化");
                 return;
             }
 
@@ -262,32 +243,28 @@ namespace UI.RoomConfig
 
             if (currentConfig == null)
             {
-                LogDebug("警告：传入的配置为空，使用默认配置");
+                LogDebug("传入的配置为空，使用默认配置");
                 currentConfig = TimerConfigManager.Config ?? CreateDefaultConfig();
             }
 
             try
             {
-                // 验证必要组件
                 if (!ValidateRequiredComponents())
                 {
                     return;
                 }
 
-                // 确保布局设置完成
                 if (autoSetupLayout && timerItemsContainer != null)
                 {
                     SetupContainerLayout();
                 }
-
-                LogDebug($"开始创建Timer项，题型组数量: {SupportedQuestionGroups.Count}");
 
                 ClearTimerItems();
                 CreateTimerItems();
                 RefreshDisplay();
 
                 isInitialized = true;
-                LogDebug($"✓ Timer配置面板初始化完成，实际创建项目数: {timerItems.Count}");
+                LogDebug($"Timer配置面板初始化完成，创建了 {timerItems.Count} 个配置项");
             }
             catch (System.Exception e)
             {
@@ -302,13 +279,13 @@ namespace UI.RoomConfig
         {
             if (timerItemsContainer == null)
             {
-                Debug.LogError("[TimerConfigPanel] timerItemsContainer未设置，无法创建Timer项");
+                Debug.LogError("[TimerConfigPanel] timerItemsContainer未设置");
                 return false;
             }
 
             if (timerSliderItemPrefab == null)
             {
-                Debug.LogError("[TimerConfigPanel] timerSliderItemPrefab未设置，无法创建Timer项");
+                Debug.LogError("[TimerConfigPanel] timerSliderItemPrefab未设置");
                 return false;
             }
 
@@ -316,17 +293,15 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 创建Timer配置项
+        /// 创建Timer配置项 - 为每个题型创建独立配置
         /// </summary>
         private void CreateTimerItems()
         {
-            LogDebug("开始创建Timer配置项");
-
             try
             {
-                foreach (var group in SupportedQuestionGroups)
+                foreach (var questionType in SupportedQuestionTypes)
                 {
-                    CreateTimerItemFromPrefab(group.Key, group.Value);
+                    CreateTimerItemFromPrefab(questionType);
                 }
 
                 LogDebug($"创建了 {timerItems.Count} 个Timer配置项");
@@ -338,24 +313,22 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 从预制体创建Timer配置项 - 添加布局支持
+        /// 从预制体创建单个题型的Timer配置项
         /// </summary>
-        private void CreateTimerItemFromPrefab(string groupName, QuestionType[] questionTypes)
+        private void CreateTimerItemFromPrefab(QuestionType questionType)
         {
             try
             {
                 GameObject itemObj = Instantiate(timerSliderItemPrefab, timerItemsContainer);
-                itemObj.name = $"TimerSliderItem_{groupName}";
+                itemObj.name = $"TimerSliderItem_{questionType}";
 
-                // 添加LayoutElement组件 - 关键修复
+                // 添加LayoutElement组件
                 var layoutElement = itemObj.GetComponent<LayoutElement>();
                 if (layoutElement == null)
                 {
                     layoutElement = itemObj.AddComponent<LayoutElement>();
-                    LogDebug($"为{groupName}添加LayoutElement组件");
                 }
 
-                // 配置LayoutElement
                 layoutElement.preferredHeight = itemHeight;
                 layoutElement.flexibleWidth = 1f;
                 layoutElement.minHeight = itemHeight - 5f;
@@ -373,7 +346,7 @@ namespace UI.RoomConfig
 
                 // 创建Timer项管理器
                 var timerItem = new TimerSliderItemManager();
-                timerItem.Initialize(groupName, questionTypes, itemObj);
+                timerItem.Initialize(questionType, itemObj);
 
                 if (timerItem.itemScript != null)
                 {
@@ -381,46 +354,43 @@ namespace UI.RoomConfig
                     timerItem.BindEvents(OnTimerItemChanged);
                     timerItems.Add(timerItem);
 
-                    LogDebug($"✓ 创建Timer项: {groupName} (高度: {itemHeight})");
+                    LogDebug($"✓ 创建Timer项: {questionType}");
                 }
                 else
                 {
-                    Debug.LogError($"TimerSliderItem预制体缺少TimerSliderItem脚本，删除对象: {groupName}");
+                    Debug.LogError($"TimerSliderItem预制体缺少TimerSliderItem脚本: {questionType}");
                     Destroy(itemObj);
                 }
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[TimerConfigPanel] 创建Timer项 {groupName} 失败: {e.Message}");
+                Debug.LogError($"[TimerConfigPanel] 创建Timer项 {questionType} 失败: {e.Message}");
             }
         }
 
         /// <summary>
-        /// Timer项变化处理
+        /// Timer项变化处理 - 处理单个题型的时间变更
         /// </summary>
-        private void OnTimerItemChanged(string groupName)
+        private void OnTimerItemChanged(QuestionType questionType)
         {
             if (currentConfig == null) return;
 
             try
             {
-                var timerItem = timerItems.Find(item => item.groupName == groupName);
+                var timerItem = timerItems.Find(item => item.questionType == questionType);
                 if (timerItem == null) return;
 
                 float newTimeLimit = timerItem.GetTimeLimit();
 
-                // 更新该组所有题型的时间
-                foreach (var questionType in timerItem.questionTypes)
+                // 更新单个题型的时间配置
+                var timerSettings = new TimerConfig.QuestionTypeTimer
                 {
-                    var timerSettings = new TimerConfig.QuestionTypeTimer
-                    {
-                        questionType = questionType,
-                        baseTimeLimit = newTimeLimit
-                    };
-                    currentConfig.SetTimerForQuestionType(questionType, timerSettings);
-                }
+                    questionType = questionType,
+                    baseTimeLimit = newTimeLimit
+                };
+                currentConfig.SetTimerForQuestionType(questionType, timerSettings);
 
-                LogDebug($"Timer变更: {groupName} = {newTimeLimit}秒");
+                LogDebug($"Timer变更: {questionType} = {newTimeLimit}秒");
 
                 UpdateStatusText();
                 OnConfigChanged?.Invoke();
@@ -437,8 +407,6 @@ namespace UI.RoomConfig
         public void RefreshDisplay()
         {
             if (currentConfig == null) return;
-
-            LogDebug("刷新Timer配置显示");
 
             try
             {
@@ -467,12 +435,14 @@ namespace UI.RoomConfig
                 var globalSettings = TimerConfigManager.GetGlobalSettings();
                 string statusMessage = $"警告阈值: {globalSettings.warningThreshold}秒, 危险阈值: {globalSettings.criticalThreshold}秒";
 
-                // 添加平均时间信息
                 var allTimers = currentConfig.GetAllTimers();
                 if (allTimers.Length > 0)
                 {
                     float avgTime = allTimers.Average(t => t.baseTimeLimit);
-                    statusMessage += $"\n平均答题时间: {avgTime:F1}秒";
+                    float minTime = allTimers.Min(t => t.baseTimeLimit);
+                    float maxTime = allTimers.Max(t => t.baseTimeLimit);
+
+                    statusMessage += $"\n时间范围: {minTime:F0}-{maxTime:F0}秒, 平均: {avgTime:F1}秒";
                 }
 
                 statusText.text = statusMessage;
@@ -488,8 +458,6 @@ namespace UI.RoomConfig
         /// </summary>
         private void ClearTimerItems()
         {
-            LogDebug($"清空现有Timer项，当前数量: {timerItems.Count}");
-
             try
             {
                 foreach (var item in timerItems)
@@ -507,6 +475,7 @@ namespace UI.RoomConfig
 
                 timerItems.Clear();
 
+                // 清理容器中的残留对象
                 if (timerItemsContainer != null)
                 {
                     var existingItems = new System.Collections.Generic.List<Transform>();
@@ -518,20 +487,14 @@ namespace UI.RoomConfig
                         }
                     }
 
-                    if (existingItems.Count > 0)
+                    foreach (var item in existingItems)
                     {
-                        LogDebug($"发现容器中还有 {existingItems.Count} 个残留Timer项，将全部清除");
-                        foreach (var item in existingItems)
-                        {
-                            if (Application.isPlaying)
-                                Destroy(item.gameObject);
-                            else
-                                DestroyImmediate(item.gameObject);
-                        }
+                        if (Application.isPlaying)
+                            Destroy(item.gameObject);
+                        else
+                            DestroyImmediate(item.gameObject);
                     }
                 }
-
-                LogDebug("Timer项清空完成");
             }
             catch (System.Exception e)
             {
@@ -574,7 +537,6 @@ namespace UI.RoomConfig
             {
                 try
                 {
-                    LogDebug("重置为默认配置");
                     currentConfig.ResetToDefault();
                     RefreshDisplay();
                     OnConfigChanged?.Invoke();
@@ -583,18 +545,6 @@ namespace UI.RoomConfig
                 {
                     Debug.LogError($"[TimerConfigPanel] 重置配置失败: {e.Message}");
                 }
-            }
-        }
-
-        /// <summary>
-        /// 强制重新设置布局
-        /// </summary>
-        public void ForceSetupLayout()
-        {
-            if (timerItemsContainer != null)
-            {
-                SetupContainerLayout();
-                LogDebug("强制重新设置布局完成");
             }
         }
 
@@ -617,71 +567,11 @@ namespace UI.RoomConfig
             try
             {
                 ClearTimerItems();
-                LogDebug("Timer配置面板已销毁");
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"[TimerConfigPanel] 销毁时清理失败: {e.Message}");
             }
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("验证手动绑定")]
-        private void EditorValidateManualBindings()
-        {
-            ValidateManualBindings();
-        }
-
-        [ContextMenu("强制设置布局")]
-        private void EditorForceSetupLayout()
-        {
-            if (Application.isPlaying)
-            {
-                ForceSetupLayout();
-            }
-        }
-
-        [ContextMenu("显示组件状态")]
-        private void EditorShowComponentStatus()
-        {
-            string status = "=== Timer配置面板组件状态 ===\n";
-            status += $"Timer项容器: {(timerItemsContainer != null ? "✓" : "✗")}\n";
-            status += $"Timer滑条预制体: {(timerSliderItemPrefab != null ? "✓" : "✗")}\n";
-            status += $"当前配置: {(currentConfig != null ? "✓" : "✗")}\n";
-            status += $"Timer项数量: {timerItems.Count}\n";
-            status += $"状态文本: {(statusText != null ? "✓" : "✗")}\n";
-            status += $"自动布局: {autoSetupLayout}\n";
-            status += $"项目间距: {itemSpacing}\n";
-            status += $"项目高度: {itemHeight}\n";
-            status += $"容器内边距: ({paddingLeft},{paddingRight},{paddingTop},{paddingBottom})\n";
-
-            if (timerItemsContainer != null)
-            {
-                var vlg = timerItemsContainer.GetComponent<VerticalLayoutGroup>();
-                var csf = timerItemsContainer.GetComponent<ContentSizeFitter>();
-                status += $"VerticalLayoutGroup: {(vlg != null ? "✓" : "✗")}\n";
-                status += $"ContentSizeFitter: {(csf != null ? "✓" : "✗")}\n";
-            }
-
-            LogDebug(status);
-        }
-
-        [ContextMenu("测试创建Timer项")]
-        private void EditorTestCreateTimerItems()
-        {
-            if (Application.isPlaying && ValidateRequiredComponents())
-            {
-                if (currentConfig == null)
-                    currentConfig = CreateDefaultConfig();
-
-                // 强制设置布局
-                SetupContainerLayout();
-
-                ClearTimerItems();
-                CreateTimerItems();
-                LogDebug("测试创建Timer项完成");
-            }
-        }
-#endif
     }
 }
