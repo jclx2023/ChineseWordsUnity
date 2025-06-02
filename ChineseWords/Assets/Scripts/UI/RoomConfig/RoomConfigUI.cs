@@ -9,32 +9,39 @@ using TMPro;
 namespace UI.RoomConfig
 {
     /// <summary>
-    /// 简化版房间配置UI管理器
-    /// 直接使用现有的QuestionWeight.prefab，不重复创建组件
+    /// 房间配置UI管理器
+    /// 支持权重配置（标签页0）和Timer配置（标签页1）
     /// </summary>
     public class RoomConfigUI : MonoBehaviour
     {
         [Header("预制体引用")]
         [SerializeField] private GameObject questionWeightPrefab;
+        [SerializeField] private GameObject timerConfigPrefab;
         [SerializeField] private string questionWeightPrefabPath = "Prefabs/UI/QuestionWeight";
+        [SerializeField] private string timerConfigPrefabPath = "Prefabs/UI/TimerConfig";
 
         [Header("标签页系统")]
         [SerializeField] private Transform[] tabContents;
         [SerializeField] private Button[] tabButtons;
         [SerializeField] private int currentTabIndex = 0;
 
-        [Header("权重配置")]
+        [Header("配置")]
         [SerializeField] private QuestionWeightConfig defaultWeightConfig;
+        [SerializeField] private TimerConfig defaultTimerConfig;
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // 权重配置面板引用（从预制体实例化得到）
+        // 配置面板引用
         private QuestionWeightConfigPanel questionWeightPanel;
         private GameObject questionWeightPanelInstance;
 
+        private TimerConfigPanel timerConfigPanel;
+        private GameObject timerConfigPanelInstance;
+
         // UI状态
         private bool isInitialized = false;
+        private bool isInstantiating = false;
 
         private void Awake()
         {
@@ -54,13 +61,13 @@ namespace UI.RoomConfig
             LogDebug("开始初始化UI");
 
             // 设置默认配置
-            SetupDefaultWeightConfig();
+            SetupDefaultConfigs();
 
             // 等待一帧确保所有组件就绪
             yield return null;
 
             // 加载预制体引用
-            yield return StartCoroutine(LoadQuestionWeightPrefab());
+            yield return StartCoroutine(LoadConfigPrefabs());
 
             // 查找或创建标签页容器
             yield return StartCoroutine(SetupTabContainers());
@@ -68,8 +75,8 @@ namespace UI.RoomConfig
             // 设置标签页按钮
             SetupTabButtons();
 
-            // 实例化权重配置预制体
-            yield return StartCoroutine(InstantiateQuestionWeightPrefab());
+            // 实例化配置预制体
+            yield return StartCoroutine(InstantiateConfigPrefabs());
 
             // 显示默认标签页
             SwitchToTab(currentTabIndex);
@@ -79,10 +86,11 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 设置默认权重配置
+        /// 设置默认配置
         /// </summary>
-        private void SetupDefaultWeightConfig()
+        private void SetupDefaultConfigs()
         {
+            // 设置权重配置
             if (defaultWeightConfig != null)
             {
                 QuestionWeightManager.SetConfig(defaultWeightConfig);
@@ -92,35 +100,60 @@ namespace UI.RoomConfig
             {
                 LogDebug("警告：未设置默认权重配置");
             }
+
+            // 设置Timer配置
+            if (defaultTimerConfig != null)
+            {
+                TimerConfigManager.SetConfig(defaultTimerConfig);
+                LogDebug("已设置默认Timer配置");
+            }
+            else
+            {
+                LogDebug("警告：未设置默认Timer配置");
+            }
         }
 
         /// <summary>
-        /// 加载权重配置预制体
+        /// 加载配置预制体
         /// </summary>
-        private IEnumerator LoadQuestionWeightPrefab()
+        private IEnumerator LoadConfigPrefabs()
         {
-            LogDebug("加载权重配置预制体");
+            LogDebug("加载配置预制体");
 
+            // 加载权重配置预制体
             if (questionWeightPrefab == null)
             {
-                LogDebug($"从Resources加载预制体: {questionWeightPrefabPath}");
-
+                LogDebug($"从Resources加载权重配置预制体: {questionWeightPrefabPath}");
                 ResourceRequest request = Resources.LoadAsync<GameObject>(questionWeightPrefabPath);
                 yield return request;
 
                 if (request.asset != null)
                 {
                     questionWeightPrefab = request.asset as GameObject;
-                    LogDebug("预制体加载成功");
+                    LogDebug("权重配置预制体加载成功");
                 }
                 else
                 {
-                    Debug.LogError($"[RoomConfigUI] 无法加载预制体: {questionWeightPrefabPath}");
+                    Debug.LogError($"[RoomConfigUI] 无法加载权重配置预制体: {questionWeightPrefabPath}");
                 }
             }
-            else
+
+            // 加载Timer配置预制体
+            if (timerConfigPrefab == null)
             {
-                LogDebug("使用Inspector中设置的预制体");
+                LogDebug($"从Resources加载Timer配置预制体: {timerConfigPrefabPath}");
+                ResourceRequest request = Resources.LoadAsync<GameObject>(timerConfigPrefabPath);
+                yield return request;
+
+                if (request.asset != null)
+                {
+                    timerConfigPrefab = request.asset as GameObject;
+                    LogDebug("Timer配置预制体加载成功");
+                }
+                else
+                {
+                    Debug.LogError($"[RoomConfigUI] 无法加载Timer配置预制体: {timerConfigPrefabPath}");
+                }
             }
         }
 
@@ -159,14 +192,13 @@ namespace UI.RoomConfig
             LogDebug($"标签页容器设置完成，共 {tabContents.Length} 个");
             yield return null;
         }
-        private bool isInstantiating = false;
 
         /// <summary>
-        /// 实例化权重配置预制体
+        /// 实例化配置预制体
         /// </summary>
-        private IEnumerator InstantiateQuestionWeightPrefab()
+        private IEnumerator InstantiateConfigPrefabs()
         {
-            LogDebug($"InstantiateQuestionWeightPrefab 被调用 - 调用堆栈: {System.Environment.StackTrace}");
+            LogDebug("实例化配置预制体");
 
             // 防止重复调用
             if (isInstantiating)
@@ -175,124 +207,172 @@ namespace UI.RoomConfig
                 yield break;
             }
 
-            if (questionWeightPanelInstance != null)
-            {
-                LogDebug("实例已存在，跳过重复实例化");
-                yield break;
-            }
-
             isInstantiating = true;
 
             try
             {
-                LogDebug("=== 开始实例化权重配置预制体 ===");
+                // 实例化权重配置预制体（标签页0）
+                yield return StartCoroutine(InstantiateQuestionWeightPrefab());
 
-                if (questionWeightPrefab == null)
-                {
-                    Debug.LogError("[RoomConfigUI] 权重配置预制体为空，无法实例化");
-                    yield break;
-                }
-
-                if (tabContents == null || tabContents.Length == 0 || tabContents[0] == null)
-                {
-                    Debug.LogError("[RoomConfigUI] 权重配置容器不存在");
-                    yield break;
-                }
-
-                // 清空标签页0的内容
-                Transform weightContainer = tabContents[0];
-                LogDebug($"目标容器: {weightContainer.name}, 实例化前子对象数: {weightContainer.childCount}");
-
-                ClearContainer(weightContainer);
-
-                LogDebug($"清理后子对象数: {weightContainer.childCount}");
-
-                // 检查是否已存在实例
-                if (questionWeightPanelInstance != null)
-                {
-                    LogDebug("发现现有实例，先销毁");
-                    Destroy(questionWeightPanelInstance);
-                    questionWeightPanelInstance = null;
-                    questionWeightPanel = null;
-                    yield return null; // 等待销毁完成
-                }
-
-                // 实例化预制体
-                try
-                {
-                    LogDebug("开始实例化预制体");
-                    questionWeightPanelInstance = Instantiate(questionWeightPrefab, weightContainer);
-                    questionWeightPanelInstance.name = "QuestionWeightPanel_Instance";
-                    LogDebug($"实例化完成: {questionWeightPanelInstance.name}");
-
-                    // 设置RectTransform以填满容器
-                    RectTransform panelRect = questionWeightPanelInstance.GetComponent<RectTransform>();
-                    if (panelRect != null)
-                    {
-                        panelRect.anchorMin = Vector2.zero;
-                        panelRect.anchorMax = Vector2.one;
-                        panelRect.offsetMin = Vector2.zero;
-                        panelRect.offsetMax = Vector2.zero;
-                        LogDebug("RectTransform设置完成");
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"[RoomConfigUI] 实例化预制体失败: {e.Message}");
-                    yield break;
-                }
-
-                // 等待一帧确保实例化完成
-                yield return null;
-
-                // 获取预制体上的QuestionWeightConfigPanel组件
-                try
-                {
-                    questionWeightPanel = questionWeightPanelInstance.GetComponent<QuestionWeightConfigPanel>();
-
-                    if (questionWeightPanel != null)
-                    {
-                        LogDebug("成功获取预制体上的QuestionWeightConfigPanel组件");
-
-                        // **恢复手动初始化调用**
-                        var config = QuestionWeightManager.Config;
-                        if (config != null)
-                        {
-                            LogDebug("使用QuestionWeightManager.Config手动初始化QuestionWeightConfigPanel");
-                            questionWeightPanel.Initialize(config);
-                        }
-                        else
-                        {
-                            LogDebug("警告：QuestionWeightManager.Config为空，使用默认配置");
-                            if (defaultWeightConfig != null)
-                            {
-                                LogDebug("使用defaultWeightConfig初始化");
-                                questionWeightPanel.Initialize(defaultWeightConfig);
-                            }
-                            else
-                            {
-                                Debug.LogError("[RoomConfigUI] 没有可用的权重配置！无法初始化权重面板");
-                            }
-                        }
-
-                        // 通知Extension组件
-                        NotifyExtensionAboutWeightPanel();
-                    }
-                    else
-                    {
-                        Debug.LogError("[RoomConfigUI] 预制体上没有QuestionWeightConfigPanel组件");
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"[RoomConfigUI] 获取组件失败: {e.Message}");
-                }
-
-                LogDebug("=== 权重配置预制体实例化流程结束 ===");
+                // 实例化Timer配置预制体（标签页1）
+                yield return StartCoroutine(InstantiateTimerConfigPrefab());
             }
             finally
             {
                 isInstantiating = false;
+            }
+        }
+
+        /// <summary>
+        /// 实例化权重配置预制体
+        /// </summary>
+        private IEnumerator InstantiateQuestionWeightPrefab()
+        {
+            LogDebug("实例化权重配置预制体");
+
+            if (questionWeightPrefab == null)
+            {
+                Debug.LogError("[RoomConfigUI] 权重配置预制体为空，无法实例化");
+                yield break;
+            }
+
+            if (tabContents == null || tabContents.Length == 0 || tabContents[0] == null)
+            {
+                Debug.LogError("[RoomConfigUI] 权重配置容器不存在");
+                yield break;
+            }
+
+            // 清空标签页0的内容
+            Transform weightContainer = tabContents[0];
+            ClearContainer(weightContainer);
+
+            // 实例化预制体
+            try
+            {
+                questionWeightPanelInstance = Instantiate(questionWeightPrefab, weightContainer);
+                questionWeightPanelInstance.name = "QuestionWeightPanel_Instance";
+
+                SetPanelRectTransform(questionWeightPanelInstance);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[RoomConfigUI] 实例化权重配置预制体失败: {e.Message}");
+                yield break;
+            }
+
+            yield return null;
+
+            // 获取组件并初始化
+            try
+            {
+                questionWeightPanel = questionWeightPanelInstance.GetComponent<QuestionWeightConfigPanel>();
+
+                if (questionWeightPanel != null)
+                {
+                    LogDebug("成功获取QuestionWeightConfigPanel组件");
+
+                    var config = QuestionWeightManager.Config;
+                    if (config != null)
+                    {
+                        questionWeightPanel.Initialize(config);
+                        LogDebug("权重配置面板初始化完成");
+                    }
+
+                    // 通知Extension组件
+                    NotifyExtensionAboutWeightPanel();
+                }
+                else
+                {
+                    Debug.LogError("[RoomConfigUI] 预制体上没有QuestionWeightConfigPanel组件");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[RoomConfigUI] 权重配置组件初始化失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 实例化Timer配置预制体
+        /// </summary>
+        private IEnumerator InstantiateTimerConfigPrefab()
+        {
+            LogDebug("实例化Timer配置预制体");
+
+            if (timerConfigPrefab == null)
+            {
+                Debug.LogError("[RoomConfigUI] Timer配置预制体为空，无法实例化");
+                yield break;
+            }
+
+            if (tabContents == null || tabContents.Length < 2 || tabContents[1] == null)
+            {
+                Debug.LogError("[RoomConfigUI] Timer配置容器不存在");
+                yield break;
+            }
+
+            // 清空标签页1的内容
+            Transform timerContainer = tabContents[1];
+            ClearContainer(timerContainer);
+
+            // 实例化预制体
+            try
+            {
+                timerConfigPanelInstance = Instantiate(timerConfigPrefab, timerContainer);
+                timerConfigPanelInstance.name = "TimerConfigPanel_Instance";
+
+                SetPanelRectTransform(timerConfigPanelInstance);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[RoomConfigUI] 实例化Timer配置预制体失败: {e.Message}");
+                yield break;
+            }
+
+            yield return null;
+
+            // 获取组件并初始化
+            try
+            {
+                timerConfigPanel = timerConfigPanelInstance.GetComponent<TimerConfigPanel>();
+
+                if (timerConfigPanel != null)
+                {
+                    LogDebug("成功获取TimerConfigPanel组件");
+
+                    var config = TimerConfigManager.Config;
+                    if (config != null)
+                    {
+                        timerConfigPanel.Initialize(config);
+                        LogDebug("Timer配置面板初始化完成");
+                    }
+
+                    // 通知Extension组件（如果需要）
+                    NotifyExtensionAboutTimerPanel();
+                }
+                else
+                {
+                    Debug.LogError("[RoomConfigUI] 预制体上没有TimerConfigPanel组件");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[RoomConfigUI] Timer配置组件初始化失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 设置面板RectTransform
+        /// </summary>
+        private void SetPanelRectTransform(GameObject panelInstance)
+        {
+            RectTransform panelRect = panelInstance.GetComponent<RectTransform>();
+            if (panelRect != null)
+            {
+                panelRect.anchorMin = Vector2.zero;
+                panelRect.anchorMax = Vector2.one;
+                panelRect.offsetMin = Vector2.zero;
+                panelRect.offsetMax = Vector2.zero;
             }
         }
 
@@ -310,6 +390,20 @@ namespace UI.RoomConfig
             else
             {
                 LogDebug("Extension组件不存在或权重面板为空");
+            }
+        }
+
+        /// <summary>
+        /// 通知Extension组件Timer面板已创建
+        /// </summary>
+        private void NotifyExtensionAboutTimerPanel()
+        {
+            var extension = GetComponent<RoomConfigUIExtension>();
+            if (extension != null && timerConfigPanel != null)
+            {
+                // 如果Extension支持Timer配置，可以在这里通知
+                // extension.SetTimerConfigPanel(timerConfigPanel);
+                LogDebug("Timer面板创建完成（Extension支持待实现）");
             }
         }
 
@@ -581,6 +675,14 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 获取Timer配置面板
+        /// </summary>
+        public TimerConfigPanel GetTimerConfigPanel()
+        {
+            return timerConfigPanel;
+        }
+
+        /// <summary>
         /// 获取当前标签页索引
         /// </summary>
         public int GetActiveTabIndex()
@@ -629,6 +731,27 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 强制重新创建Timer配置面板
+        /// </summary>
+        public void RecreateTimerConfigPanel()
+        {
+            LogDebug("强制重新创建Timer配置面板");
+
+            if (timerConfigPanelInstance != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(timerConfigPanelInstance);
+                else
+                    DestroyImmediate(timerConfigPanelInstance);
+
+                timerConfigPanelInstance = null;
+                timerConfigPanel = null;
+            }
+
+            StartCoroutine(InstantiateTimerConfigPrefab());
+        }
+
+        /// <summary>
         /// 获取UI状态信息
         /// </summary>
         public string GetUIStatus()
@@ -641,7 +764,11 @@ namespace UI.RoomConfig
             status += $"权重配置预制体: {(questionWeightPrefab != null ? "✓" : "✗")}\n";
             status += $"权重配置面板实例: {(questionWeightPanelInstance != null ? "✓" : "✗")}\n";
             status += $"权重配置面板组件: {(questionWeightPanel != null ? "✓" : "✗")}\n";
+            status += $"Timer配置预制体: {(timerConfigPrefab != null ? "✓" : "✗")}\n";
+            status += $"Timer配置面板实例: {(timerConfigPanelInstance != null ? "✓" : "✗")}\n";
+            status += $"Timer配置面板组件: {(timerConfigPanel != null ? "✓" : "✗")}\n";
             status += $"默认权重配置: {(defaultWeightConfig != null ? "✓" : "✗")}\n";
+            status += $"默认Timer配置: {(defaultTimerConfig != null ? "✓" : "✗")}\n";
 
             if (tabContents != null)
             {
@@ -683,20 +810,63 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 刷新Timer配置面板
+        /// </summary>
+        public void RefreshTimerConfigPanel()
+        {
+            if (timerConfigPanel != null)
+            {
+                timerConfigPanel.RefreshDisplay();
+                LogDebug("Timer配置面板已刷新");
+            }
+            else
+            {
+                LogDebug("Timer配置面板不存在，无法刷新");
+            }
+        }
+
+        /// <summary>
         /// 验证当前配置有效性（兼容方法）
         /// </summary>
         public bool ValidateCurrentConfig()
         {
-            var config = QuestionWeightManager.Config;
-            if (config != null)
+            bool isValid = true;
+
+            // 验证权重配置
+            var weightConfig = QuestionWeightManager.Config;
+            if (weightConfig != null)
             {
-                var weights = config.GetWeights();
-                bool isValid = weights.Count > 0;
-                LogDebug($"配置验证结果: {(isValid ? "有效" : "无效")}");
-                return isValid;
+                var weights = weightConfig.GetWeights();
+                if (weights.Count == 0)
+                {
+                    LogDebug("权重配置无效");
+                    isValid = false;
+                }
             }
-            LogDebug("配置验证结果: 无配置");
-            return false;
+            else
+            {
+                LogDebug("权重配置未设置");
+                isValid = false;
+            }
+
+            // 验证Timer配置
+            var timerConfig = TimerConfigManager.Config;
+            if (timerConfig != null)
+            {
+                if (!timerConfig.ValidateConfig())
+                {
+                    LogDebug("Timer配置无效");
+                    isValid = false;
+                }
+            }
+            else
+            {
+                LogDebug("Timer配置未设置");
+                isValid = false;
+            }
+
+            LogDebug($"配置验证结果: {(isValid ? "有效" : "无效")}");
+            return isValid;
         }
 
         #endregion
@@ -721,200 +891,8 @@ namespace UI.RoomConfig
         #endregion
 
         /// <summary>
-        /// 创建备用权重显示（当预制体组件缺失时）
+        /// 调试日志
         /// </summary>
-        private void CreateFallbackWeightDisplay()
-        {
-            LogDebug("创建备用权重显示");
-
-            if (tabContents == null || tabContents.Length == 0 || tabContents[0] == null)
-                return;
-
-            Transform container = tabContents[0];
-
-            // 创建简单的提示文本
-            GameObject textObj = new GameObject("FallbackText");
-            textObj.transform.SetParent(container);
-
-            RectTransform textRect = textObj.AddComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(20, 20);
-            textRect.offsetMax = new Vector2(-20, -20);
-
-            var text = textObj.AddComponent<TMPro.TextMeshProUGUI>();
-            text.text = "权重配置预制体设置错误\n\n请检查：\n" +
-                       "1. QuestionWeight.prefab的QuestionWeightPanel子对象是否有QuestionWeightConfigPanel组件\n" +
-                       "2. 组件的weightItemsContainer是否指向Content\n" +
-                       "3. autoCreateUI是否为true";
-            text.fontSize = 14;
-            text.alignment = TMPro.TextAlignmentOptions.Center;
-            text.color = Color.red;
-
-            LogDebug("备用显示创建完成");
-        }
-
-        /// <summary>
-        /// 设置组件字段
-        /// </summary>
-        private void SetupComponentFields()
-        {
-            try
-            {
-                // 设置autoCreateUI
-                var autoCreateField = typeof(QuestionWeightConfigPanel).GetField("autoCreateUI",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (autoCreateField != null)
-                {
-                    autoCreateField.SetValue(questionWeightPanel, true);
-                    LogDebug("✓ 设置autoCreateUI为true");
-                }
-
-                // 设置weightItemsContainer
-                var containerField = typeof(QuestionWeightConfigPanel).GetField("weightItemsContainer",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (containerField != null)
-                {
-                    var currentContainer = containerField.GetValue(questionWeightPanel) as Transform;
-                    LogDebug($"当前容器设置: {(currentContainer != null ? currentContainer.name : "null")}");
-
-                    if (currentContainer == null)
-                    {
-                        // 尝试多种路径查找Content
-                        string[] contentPaths = {
-                            "QuestionWeightPanel/WeightContainer/Scroll View/Viewport/Content",
-                            "WeightContainer/Scroll View/Viewport/Content",
-                            "Scroll View/Viewport/Content"
-                        };
-
-                        foreach (var path in contentPaths)
-                        {
-                            Transform contentTransform = questionWeightPanelInstance.transform.Find(path);
-                            if (contentTransform != null)
-                            {
-                                containerField.SetValue(questionWeightPanel, contentTransform);
-                                LogDebug($"✓ 自动设置weightItemsContainer: {path}");
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // 设置statusText
-                var statusField = typeof(QuestionWeightConfigPanel).GetField("statusText",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (statusField != null)
-                {
-                    var currentStatus = statusField.GetValue(questionWeightPanel);
-                    LogDebug($"当前状态文本设置: {(currentStatus != null ? "已设置" : "未设置")}");
-
-                    if (currentStatus == null)
-                    {
-                        // 尝试多种路径查找PreviewText
-                        string[] previewPaths = {
-                            "QuestionWeightPanel/PreviewContainer/PreviewText",
-                            "PreviewContainer/PreviewText",
-                            "PreviewText"
-                        };
-
-                        foreach (var path in previewPaths)
-                        {
-                            Transform previewTransform = questionWeightPanelInstance.transform.Find(path);
-                            if (previewTransform != null)
-                            {
-                                var previewText = previewTransform.GetComponent<TMPro.TextMeshProUGUI>();
-                                if (previewText != null)
-                                {
-                                    statusField.SetValue(questionWeightPanel, previewText);
-                                    LogDebug($"✓ 自动设置statusText: {path}");
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                LogDebug($"设置组件字段失败: {e.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 触发组件Awake
-        /// </summary>
-        private void TriggerComponentAwake()
-        {
-            try
-            {
-                var awakeMethod = typeof(QuestionWeightConfigPanel).GetMethod("Awake",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (awakeMethod != null)
-                {
-                    awakeMethod.Invoke(questionWeightPanel, null);
-                    LogDebug("✓ 手动触发Awake方法");
-                }
-            }
-            catch (System.Exception e)
-            {
-                LogDebug($"触发Awake失败: {e.Message}");
-            }
-        }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示UI状态")]
-        private void EditorShowUIStatus()
-        {
-            LogDebug(GetUIStatus());
-        }
-
-        [ContextMenu("切换到权重配置标签页")]
-        private void EditorSwitchToWeightTab()
-        {
-            if (Application.isPlaying)
-            {
-                SwitchToTab(0);
-            }
-        }
-
-        [ContextMenu("重新创建权重配置面板")]
-        private void EditorRecreateWeightPanel()
-        {
-            if (Application.isPlaying)
-            {
-                RecreateWeightConfigPanel();
-            }
-        }
-
-        [ContextMenu("测试实例化预制体")]
-        private void EditorTestInstantiatePrefab()
-        {
-            if (Application.isPlaying)
-            {
-                StartCoroutine(InstantiateQuestionWeightPrefab());
-            }
-        }
-#endif
-
-        /// <summary>
-        /// 递归显示Transform层级结构（调试用）
-        /// </summary>
-        private void LogTransformHierarchy(Transform transform, int indent)
-        {
-            string indentStr = new string(' ', indent * 2);
-            var components = transform.GetComponents<Component>();
-            string componentNames = string.Join(", ", System.Array.ConvertAll(components, c => c.GetType().Name));
-
-            LogDebug($"{indentStr}├─ {transform.name} ({componentNames})");
-
-            if (indent < 3) // 限制递归深度
-            {
-                foreach (Transform child in transform)
-                {
-                    LogTransformHierarchy(child, indent + 1);
-                }
-            }
-        }
         private void LogDebug(string message)
         {
             if (enableDebugLogs)

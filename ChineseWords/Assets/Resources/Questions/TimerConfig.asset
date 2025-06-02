@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 969fe86032b1d7a419f1aab9130c261e, type: 3}
+  m_Name: TimerConfig
+  m_EditorClassIdentifier: 
+  questionTypeTimers:
+  - questionType: 9
+    baseTimeLimit: 20
+  - questionType: 7
+    baseTimeLimit: 20
+  - questionType: 3
+    baseTimeLimit: 30
+  - questionType: 4
+    baseTimeLimit: 25
+  - questionType: 2
+    baseTimeLimit: 25
+  - questionType: 1
+    baseTimeLimit: 20
+  - questionType: 6
+    baseTimeLimit: 15
+  - questionType: 8
+    baseTimeLimit: 15
+  - questionType: 0
+    baseTimeLimit: 60
+  timeUpDelay: 1
+  showTimeWarning: 1
+  warningThreshold: 5
+  criticalThreshold: 3
+  normalColor: {r: 1, g: 1, b: 1, a: 1}
+  warningColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  criticalColor: {r: 1, g: 0, b: 0, a: 1}
+  configName: "\u9ED8\u8BA4Timer\u914D\u7F6E"
+  configDescription: "\u6807\u51C6\u9898\u578B\u65F6\u95F4\u914D\u7F6E"

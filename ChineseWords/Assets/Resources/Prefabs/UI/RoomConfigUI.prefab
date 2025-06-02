@@ -584,7 +584,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   questionWeightPrefab: {fileID: 7932196985109240223, guid: d66593921c80baf4382440245c863290, type: 3}
+  timerConfigPrefab: {fileID: 3555640306963190840, guid: 55e77155867d00e47a2ab0e6f2a8a18f, type: 3}
   questionWeightPrefabPath: Prefabs/UI/QuestionWeight
+  timerConfigPrefabPath: Prefabs/UI/TimerConfig
   tabContents:
   - {fileID: 0}
   - {fileID: 0}
@@ -595,6 +597,7 @@ MonoBehaviour:
   - {fileID: 457760677323918888}
   currentTabIndex: 0
   defaultWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
+  defaultTimerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
   enableDebugLogs: 1
 --- !u!114 &6986105185185227008
 MonoBehaviour:
@@ -609,6 +612,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   defaultWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
+  defaultTimerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
   applyButton: {fileID: 4024448721001037396}
   resetButton: {fileID: 8019926360885157012}
   closeButton: {fileID: 1431431782308639782}
