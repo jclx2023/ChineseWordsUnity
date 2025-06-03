@@ -1811,6 +1811,9 @@ MonoBehaviour:
   healthText: {fileID: 579353659}
   gameOverPanel: {fileID: 0}
   healthTextFormat: "\u8840\u91CF\uFF1A{0}"
+  healthWithMaxFormat: "\u8840\u91CF\uFF1A{0}/{1}"
+  showMaxHealth: 0
+  showHealthPercentage: 0
   enableDebugLog: 1
 --- !u!114 &1644422176
 MonoBehaviour:
@@ -1855,6 +1858,11 @@ MonoBehaviour:
   isDualLayerArchitecture: 1
   isServerLayerOnly: 0
   enableDebugLogs: 1
+  questionWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
+  timerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
+  hpConfig: {fileID: 11400000, guid: de39ea7926d9eca49b5176a39e01425f, type: 2}
+  useCustomHPConfig: 0
+  enableIdiomChain: 1
 --- !u!114 &1644422178
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1869,6 +1877,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enableDebugLogs: 1
   cacheProviders: 1
+  timerConfig: {fileID: 0}
 --- !u!1 &1678533145
 GameObject:
   m_ObjectHideFlags: 0

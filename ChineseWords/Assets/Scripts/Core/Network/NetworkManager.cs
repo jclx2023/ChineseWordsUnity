@@ -53,7 +53,7 @@ namespace Core.Network
         public static event Action OnDisconnected;
         public static event Action<NetworkQuestionData> OnQuestionReceived;
         public static event Action<bool, string> OnAnswerResultReceived;
-        public static event Action<ushort, int> OnHealthUpdated;
+        public static event Action<ushort, int, int> OnHealthUpdated;
         public static event Action<ushort> OnPlayerTurnChanged;
 
         // 新增Host-Client特有事件
@@ -721,9 +721,15 @@ namespace Core.Network
         {
             ushort playerId = message.GetUShort();
             int newHealth = message.GetInt();
+            int maxHealth = message.GetInt();
 
-            Debug.Log($"玩家 {playerId} 血量更新: {newHealth}");
-            OnHealthUpdated?.Invoke(playerId, newHealth);
+            Debug.Log($"玩家 {playerId} 血量更新: {newHealth}/{maxHealth}");
+
+            // 触发通用血量更新事件（向后兼容）
+            OnHealthUpdated?.Invoke(playerId, newHealth, maxHealth);
+
+            // 处理本地玩家血量更新
+            ProcessLocalPlayerHealthUpdate(playerId, newHealth, maxHealth);
         }
 
         [MessageHandler((ushort)NetworkMessageType.PlayerTurnChanged)]
@@ -906,7 +912,51 @@ namespace Core.Network
         }
 
         #endregion
+        #region 客户端血量管理
 
+        /// <summary>
+        /// 处理本地玩家血量更新
+        /// </summary>
+        private static void ProcessLocalPlayerHealthUpdate(ushort playerId, int newHealth, int maxHealth)
+        {
+            // 检查是否是本地玩家
+            if (IsLocalPlayer(playerId))
+            {
+                var healthManager = FindObjectOfType<Managers.PlayerHealthManager>();
+                if (healthManager != null)
+                {
+                    healthManager.OnNetworkHealthUpdate(newHealth, maxHealth);
+                    Debug.Log($"[NetworkManager] 更新本地玩家血量: {newHealth}/{maxHealth}");
+                }
+                else
+                {
+                    Debug.LogWarning("[NetworkManager] 未找到PlayerHealthManager组件");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 检查指定玩家ID是否为本地玩家
+        /// </summary>
+        private static bool IsLocalPlayer(ushort playerId)
+        {
+            if (Instance == null) return false;
+
+            // Host模式：检查是否是Host玩家
+            if (Instance.IsHost)
+            {
+                return Instance.IsHostPlayer(playerId);
+            }
+            // Client模式：检查是否是自己的ClientId
+            else if (Instance.IsClient)
+            {
+                return playerId == Instance.ClientId;
+            }
+
+            return false;
+        }
+
+        #endregion
         #region 辅助方法
 
         /// <summary>

@@ -34,6 +34,13 @@ namespace Core.Network
         [Header("Timer配置")]
         [SerializeField] private TimerConfig timerConfig;
 
+        [Header("HP配置")]
+        [SerializeField] private HPConfig hpConfig;
+        [SerializeField] private bool useCustomHPConfig = false;
+
+        // HP管理器
+        private PlayerHPManager hpManager;
+
         [Header("成语接龙设置")]
         [SerializeField] private bool enableIdiomChain = true;
 
@@ -324,6 +331,9 @@ namespace Core.Network
                 yield break;
             }
 
+            // 新增：初始化HP管理器
+            yield return StartCoroutine(InitializeHPManager());
+
             // 记录NetworkManager的当前状态
             if (NetworkManager.Instance != null)
             {
@@ -337,20 +347,17 @@ namespace Core.Network
             isInitialized = true;
             LogDebug($"主机游戏初始化完成，当前玩家数: {playerStates.Count}");
 
-            // 修复：完全移除自动添加Host的逻辑
-            // 房间系统已经处理了所有玩家数据，不需要额外添加
             LogDebug("跳过Host自动添加，完全依赖房间数据");
 
-            // 验证房主数量
             ValidateHostCount();
 
-            // 简化开始逻辑：从房间来的就直接开始
             if (autoStartGame && playerStates.Count > 0)
             {
                 LogDebug("从房间系统进入，直接开始游戏");
                 Invoke(nameof(StartHostGame), gameStartDelay);
             }
         }
+
 
         /// <summary>
         /// 从房间系统同步玩家数据（修复重复房主问题）
@@ -498,30 +505,41 @@ namespace Core.Network
             ValidateHostCount();
         }
 
-        /// <summary>
-        /// 从房间数据添加玩家（修复版本）
-        /// </summary>
         private void AddPlayerFromRoom(ushort playerId, string playerName)
         {
+            LogDebug($"=== AddPlayerFromRoom开始 === 玩家ID: {playerId}, 名称: {playerName}");
+
             if (playerStates.ContainsKey(playerId))
             {
                 LogDebug($"玩家 {playerId} 已存在，跳过添加");
                 return;
             }
 
-            // **使用NetworkManager的统一接口判断是否为Host**
             bool isHostPlayer = NetworkManager.Instance?.IsHostPlayer(playerId) ?? false;
+            int initialHealth = hpManager?.GetEffectiveInitialHealth() ?? initialPlayerHealth;
 
             playerStates[playerId] = new PlayerGameState
             {
                 playerId = playerId,
                 playerName = isHostPlayer ? "房主" : playerName,
-                health = initialPlayerHealth,
+                health = initialHealth,
+                maxHealth = initialHealth,
                 isAlive = true,
-                isReady = true // 从房间来的都是准备好的
+                isReady = true
             };
 
-            LogDebug($"从房间添加玩家: {playerName} (ID: {playerId}, IsHost: {isHostPlayer})");
+            // 在HP管理器中初始化玩家
+            if (hpManager != null)
+            {
+                hpManager.InitializePlayer(playerId, initialHealth);
+                LogDebug($"在HP管理器中初始化玩家 {playerId}");
+            }
+            else
+            {
+                LogDebug("hpManager为空，无法初始化玩家HP");
+            }
+
+            LogDebug($"=== AddPlayerFromRoom完成 === 玩家: {playerName}, HP: {initialHealth}/{initialHealth}");
         }
 
         /// <summary>
@@ -614,16 +632,26 @@ namespace Core.Network
                 return;
             }
 
+            // 获取HP管理器的初始血量
+            int initialHealth = hpManager?.GetEffectiveInitialHealth() ?? initialPlayerHealth;
+
             playerStates[playerId] = new PlayerGameState
             {
                 playerId = playerId,
                 playerName = playerName ?? $"玩家{playerId}",
-                health = initialPlayerHealth,
+                health = initialHealth,
                 isAlive = true,
                 isReady = false
             };
 
-            LogDebug($"添加玩家: {playerId} ({playerName}), 当前玩家数: {playerStates.Count}");
+            // 在HP管理器中初始化玩家
+            if (hpManager != null)
+            {
+                hpManager.InitializePlayer(playerId, initialHealth);
+                LogDebug($"在HP管理器中初始化玩家 {playerId}");
+            }
+
+            LogDebug($"添加玩家: {playerId} ({playerName}), 当前玩家数: {playerStates.Count}, HP: {initialHealth}");
         }
 
         /// <summary>
@@ -649,6 +677,13 @@ namespace Core.Network
 
             string playerName = playerStates[playerId].playerName;
             playerStates.Remove(playerId);
+
+            // 从HP管理器中移除玩家
+            if (hpManager != null)
+            {
+                hpManager.RemovePlayer(playerId);
+                LogDebug($"从HP管理器中移除玩家 {playerId}");
+            }
 
             LogDebug($"移除玩家: {playerId} ({playerName}), 剩余玩家数: {playerStates.Count}");
 
@@ -920,14 +955,27 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 检查游戏结束条件（简化版本）
+        /// 检查游戏结束条件（使用HP管理器）
         /// </summary>
         private void CheckGameEndConditions()
         {
             if (!gameInProgress)
                 return;
 
-            var alivePlayers = playerStates.Where(p => p.Value.isAlive).ToList();
+            List<ushort> alivePlayers;
+
+            // 优先使用HP管理器获取存活玩家
+            if (hpManager != null)
+            {
+                alivePlayers = hpManager.GetAlivePlayerIds();
+                LogDebug($"HP管理器报告存活玩家数: {alivePlayers.Count}");
+            }
+            else
+            {
+                // 回退到原有逻辑
+                alivePlayers = playerStates.Where(p => p.Value.isAlive).Select(p => p.Key).ToList();
+                LogDebug($"原有逻辑检测存活玩家数: {alivePlayers.Count}");
+            }
 
             if (alivePlayers.Count == 0)
             {
@@ -936,9 +984,12 @@ namespace Core.Network
             }
             else if (alivePlayers.Count == 1)
             {
-                var winner = alivePlayers.First();
-                LogDebug($"游戏结束：玩家 {winner.Key} 获胜");
-                EndGame($"游戏结束：{winner.Value.playerName} 获胜！");
+                var winnerId = alivePlayers[0];
+                var winnerName = playerStates.ContainsKey(winnerId) ?
+                    playerStates[winnerId].playerName : $"玩家{winnerId}";
+
+                LogDebug($"游戏结束：玩家 {winnerId} ({winnerName}) 获胜");
+                EndGame($"游戏结束：{winnerName} 获胜！");
             }
             else if (playerStates.Count == 0)
             {
@@ -1091,7 +1142,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 更新玩家状态（简化版本）
+        /// 更新玩家状态（使用HP管理器）
         /// </summary>
         private void UpdatePlayerState(ushort playerId, bool isCorrect)
         {
@@ -1103,9 +1154,11 @@ namespace Core.Network
             if (isCorrect)
             {
                 LogDebug($"玩家 {playerId} 答对了");
+
+                // 处理成语接龙逻辑
                 if (isIdiomChainActive && currentQuestion?.questionType == QuestionType.IdiomChain)
                 {
-                    string playerAnswer = GetLastPlayerAnswer(playerId); // 需要缓存玩家答案
+                    string playerAnswer = GetLastPlayerAnswer(playerId);
                     if (!string.IsNullOrEmpty(playerAnswer))
                     {
                         currentIdiomChainWord = playerAnswer.Trim();
@@ -1123,16 +1176,43 @@ namespace Core.Network
             }
             else
             {
-                playerState.health -= damagePerWrongAnswer;
-                if (playerState.health <= 0)
+                // 使用HP管理器处理伤害
+                if (hpManager != null && hpManager.IsPlayerAlive(playerId))
                 {
-                    playerState.health = 0;
-                    playerState.isAlive = false;
-                    LogDebug($"玩家 {playerId} 被淘汰");
+                    bool damageApplied = hpManager.ApplyDamage(playerId, out int newHealth, out bool isDead);
+
+                    if (damageApplied)
+                    {
+                        LogDebug($"玩家 {playerId} 答错，HP管理器处理伤害 - 新血量: {newHealth}, 是否死亡: {isDead}");
+
+                        // HP管理器会通过事件自动更新playerState和发送网络消息
+                        // 这里不需要手动处理
+                    }
+                    else
+                    {
+                        LogDebug($"玩家 {playerId} 伤害处理失败，可能已经死亡");
+                    }
                 }
                 else
                 {
-                    LogDebug($"玩家 {playerId} 答错，生命值: {playerState.health}");
+                    // 回退到原有逻辑（向后兼容）
+                    LogDebug($"HP管理器不可用，使用原有扣血逻辑");
+
+                    int damageAmount = damagePerWrongAnswer;
+                    playerState.health -= damageAmount;
+
+                    if (playerState.health <= 0)
+                    {
+                        playerState.health = 0;
+                        playerState.isAlive = false;
+                        LogDebug($"玩家 {playerId} 被淘汰");
+                    }
+                    else
+                    {
+                        LogDebug($"玩家 {playerId} 答错，生命值: {playerState.health}");
+                    }
+
+                    BroadcastHealthUpdate(playerId, playerState.health);
                 }
 
                 // 成语接龙答错时重置（可选）
@@ -1141,8 +1221,6 @@ namespace Core.Network
                     LogDebug("成语接龙答错，重置接龙状态");
                     ResetIdiomChainState();
                 }
-
-                BroadcastHealthUpdate(playerId, playerState.health);
             }
         }
         private NetworkQuestionData GenerateIdiomChainContinuation(string baseIdiom)
@@ -1376,6 +1454,48 @@ namespace Core.Network
                 // 传统架构：直接广播
                 BroadcastQuestionTraditional(question);
             }
+            SyncAllPlayersHealth();
+        }
+        private void SyncAllPlayersHealth()
+        {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
+            LogDebug("同步所有玩家血量状态...");
+
+            foreach (var playerState in playerStates.Values)
+            {
+                SyncPlayerHealth(playerState.playerId);
+            }
+        }
+        private void SyncPlayerHealth(ushort playerId)
+        {
+            if (!playerStates.ContainsKey(playerId))
+                return;
+
+            var playerState = playerStates[playerId];
+            int currentHealth = playerState.health;
+            int maxHealth = playerState.maxHealth;
+
+            // 从HP管理器获取更准确的数据
+            if (hpManager != null)
+            {
+                var hpInfo = hpManager.GetPlayerHP(playerId);
+                if (hpInfo.currentHealth > 0 || hpInfo.maxHealth > 0)
+                {
+                    currentHealth = hpInfo.currentHealth;
+                    maxHealth = hpInfo.maxHealth;
+                }
+            }
+
+            LogDebug($"同步玩家 {playerId} 血量: {currentHealth}/{maxHealth}");
+
+            // 发送血量同步消息
+            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.HealthUpdate);
+            message.AddUShort(playerId);
+            message.AddInt(currentHealth);
+            message.AddInt(maxHealth);
+            NetworkManager.Instance.BroadcastMessage(message);
         }
 
         /// <summary>
@@ -1491,17 +1611,32 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 广播血量更新
+        /// 广播血量更新（包含最大血量信息）
         /// </summary>
         private void BroadcastHealthUpdate(ushort playerId, int newHealth)
         {
             if (!isInitialized || NetworkManager.Instance == null)
                 return;
 
+            // 获取最大血量信息
+            int maxHealth = 100; // 默认值
+            if (playerStates.ContainsKey(playerId))
+            {
+                maxHealth = playerStates[playerId].maxHealth;
+            }
+            else if (hpManager != null)
+            {
+                var hpInfo = hpManager.GetPlayerHP(playerId);
+                maxHealth = hpInfo.maxHealth;
+            }
+
             Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.HealthUpdate);
             message.AddUShort(playerId);
             message.AddInt(newHealth);
+            message.AddInt(maxHealth); // 新增：发送最大血量
             NetworkManager.Instance.BroadcastMessage(message);
+
+            LogDebug($"广播血量更新: 玩家{playerId}, 血量{newHealth}/{maxHealth}");
         }
 
         /// <summary>
@@ -1521,6 +1656,101 @@ namespace Core.Network
         #endregion
 
         #region 网络事件处理
+        #region HP事件处理
+
+        private void OnPlayerHealthChanged(ushort playerId, int newHealth, int maxHealth)
+        {
+            LogDebug($"玩家 {playerId} 血量变更: {newHealth}/{maxHealth}");
+
+            // 更新playerStates中的血量信息
+            if (playerStates.ContainsKey(playerId))
+            {
+                var playerState = playerStates[playerId];
+                playerState.health = newHealth;
+                playerState.maxHealth = maxHealth;
+                playerState.lastActiveTime = Time.time;
+            }
+            else
+            {
+                Debug.LogWarning($"[HostGameManager] 玩家 {playerId} 不在playerStates中，无法更新血量状态");
+            }
+
+            // 验证血量值的合理性
+            if (newHealth < 0 || maxHealth <= 0 || newHealth > maxHealth)
+            {
+                Debug.LogWarning($"[HostGameManager] 玩家 {playerId} 血量数据异常: {newHealth}/{maxHealth}");
+            }
+
+            // 广播血量更新给客户端
+            BroadcastHealthUpdate(playerId, newHealth);
+        }
+
+        /// <summary>
+        /// 处理玩家死亡事件
+        /// </summary>
+        /// <param name="playerId">死亡的玩家ID</param>
+        private void OnPlayerDied(ushort playerId)
+        {
+            LogDebug($"玩家 {playerId} 已死亡");
+
+            // 更新playerStates中的存活状态
+            if (playerStates.ContainsKey(playerId))
+            {
+                var playerState = playerStates[playerId];
+                playerState.isAlive = false;
+                playerState.health = 0;
+            }
+
+            // 广播玩家死亡信息
+            BroadcastHealthUpdate(playerId, 0);
+
+            // 如果是当前回合玩家死亡，切换到下一个玩家
+            if (currentTurnPlayerId == playerId && gameInProgress)
+            {
+                LogDebug($"当前回合玩家 {playerId} 死亡，切换到下一个玩家");
+                Invoke(nameof(NextPlayerTurn), 1f);
+            }
+
+            // 检查游戏结束条件
+            CheckGameEndConditions();
+        }
+
+        /// <summary>
+        /// 检查PlayerGameState是否有maxHealth字段（向后兼容）
+        /// </summary>
+        private bool HasMaxHealthField(PlayerGameState playerState)
+        {
+            try
+            {
+                var field = typeof(PlayerGameState).GetField("maxHealth");
+                return field != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 设置PlayerGameState的maxHealth字段（向后兼容）
+        /// </summary>
+        private void SetMaxHealth(PlayerGameState playerState, int maxHealth)
+        {
+            try
+            {
+                var field = typeof(PlayerGameState).GetField("maxHealth");
+                if (field != null)
+                {
+                    field.SetValue(playerState, maxHealth);
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"设置maxHealth失败: {e.Message}");
+            }
+        }
+
+        #endregion
 
         private void OnPlayerJoined(ushort playerId)
         {
@@ -1565,7 +1795,21 @@ namespace Core.Network
                 stats += $"Host客户端就绪: {NetworkManager.Instance.IsHostClientReady}\n";
             }
 
-            // 新增：Timer配置信息
+            // HP管理器信息
+            if (hpManager != null)
+            {
+                stats += $"HP配置源: {hpManager.GetHPConfigSource()}\n";
+                stats += $"初始血量: {hpManager.GetEffectiveInitialHealth()}\n";
+                stats += $"答错扣血: {hpManager.GetEffectiveDamageAmount()}\n";
+                stats += $"最多答错: {hpManager.GetMaxWrongAnswers()}次\n";
+                stats += $"HP管理器存活玩家: {hpManager.GetAlivePlayerCount()}\n";
+            }
+            else
+            {
+                stats += "HP管理器: 未初始化\n";
+            }
+
+            // Timer配置信息
             stats += $"Timer配置源: {GetTimerConfigSource()}\n";
             if (currentQuestion != null)
             {
@@ -1688,6 +1932,74 @@ namespace Core.Network
                 Debug.Log($"[HostGameManager] {message}");
             }
         }
+        /// <summary>
+        /// 初始化HP管理器
+        /// </summary>
+        private IEnumerator InitializeHPManager()
+        {
+            LogDebug("初始化HP管理器...");
+
+            // 执行初始化逻辑
+            bool success = InitializeHPManagerInternal();
+
+            // 等待一帧确保初始化完成
+            yield return null;
+
+            if (success)
+            {
+                LogDebug($"HP管理器初始化完成 - 配置源: {hpManager.GetHPConfigSource()}");
+                LogDebug($"HP设置 - 初始血量: {hpManager.GetEffectiveInitialHealth()}, 扣血量: {hpManager.GetEffectiveDamageAmount()}");
+            }
+            else
+            {
+                LogDebug("HP管理器初始化失败，将使用备用方案");
+            }
+        }
+
+        /// <summary>
+        /// HP管理器内部初始化逻辑（非协程方法）
+        /// </summary>
+        private bool InitializeHPManagerInternal()
+        {
+            try
+            {
+                // 创建HP管理器实例
+                hpManager = new PlayerHPManager();
+
+                // 绑定事件
+                hpManager.OnHealthChanged += OnPlayerHealthChanged;
+                hpManager.OnPlayerDied += OnPlayerDied;
+
+                // 初始化HP管理器
+                hpManager.Initialize(hpConfig, useCustomHPConfig);
+
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[HostGameManager] HP管理器初始化失败: {e.Message}");
+
+                try
+                {
+                    // 失败时创建基础HP管理器
+                    hpManager = new PlayerHPManager();
+                    hpManager.Initialize();
+
+                    // 仍然绑定事件
+                    hpManager.OnHealthChanged += OnPlayerHealthChanged;
+                    hpManager.OnPlayerDied += OnPlayerDied;
+
+                    LogDebug("HP管理器使用默认配置初始化完成");
+                    return true;
+                }
+                catch (System.Exception fallbackException)
+                {
+                    Debug.LogError($"[HostGameManager] HP管理器默认初始化也失败: {fallbackException.Message}");
+                    hpManager = null;
+                    return false;
+                }
+            }
+        }
 
         #endregion
 
@@ -1700,6 +2012,14 @@ namespace Core.Network
 
             // 清理服务缓存
             ClearServiceCache();
+
+            // 销毁HP管理器
+            if (hpManager != null)
+            {
+                hpManager.Dispose();
+                hpManager = null;
+                LogDebug("HP管理器已销毁");
+            }
 
             if (Instance == this)
             {
@@ -1723,7 +2043,7 @@ namespace Core.Network
     }
 
     /// <summary>
-    /// 玩家游戏状态（简化版本，移除分数）
+    /// 玩家游戏状态（扩展HP支持）
     /// </summary>
     [System.Serializable]
     public class PlayerGameState
@@ -1731,6 +2051,7 @@ namespace Core.Network
         public ushort playerId;
         public string playerName;
         public int health;
+        public int maxHealth;
         public bool isAlive;
         public bool isReady;
         public float lastActiveTime;
@@ -1738,6 +2059,41 @@ namespace Core.Network
         public PlayerGameState()
         {
             lastActiveTime = Time.time;
+            health = 100;      // 默认值，实际会在初始化时设置
+            maxHealth = 100;   // 默认值，实际会在初始化时设置
+        }
+
+        /// <summary>
+        /// 获取血量百分比
+        /// </summary>
+        public float GetHealthPercentage()
+        {
+            if (maxHealth <= 0) return 0f;
+            return (float)health / maxHealth;
+        }
+
+        /// <summary>
+        /// 检查是否为满血状态
+        /// </summary>
+        public bool IsFullHealth()
+        {
+            return health >= maxHealth;
+        }
+
+        /// <summary>
+        /// 检查是否为低血量（低于30%）
+        /// </summary>
+        public bool IsLowHealth()
+        {
+            return GetHealthPercentage() < 0.3f;
+        }
+
+        /// <summary>
+        /// 检查是否为危险血量（低于10%）
+        /// </summary>
+        public bool IsCriticalHealth()
+        {
+            return GetHealthPercentage() < 0.1f;
         }
     }
 }

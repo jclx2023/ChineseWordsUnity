@@ -134,8 +134,8 @@ namespace Core
             if (timerManager != null)
                 timerManager.ApplyConfig(timeLimit);
 
-            if (healthManager != null)
-                healthManager.ApplyConfig(initialHealth, damagePerWrong);
+            //if (healthManager != null)
+                //healthManager.ApplyConfig(initialHealth, damagePerWrong);
         }
 
         /// <summary>
@@ -328,10 +328,10 @@ namespace Core
 
 
             // 绑定血量管理器
-            //if (healthManager != null)
-            //{
-            //    healthManager.BindManager(currentManager);
-            //}
+            if (healthManager != null)
+            {
+                healthManager.BindManager(currentManager);
+            }
             // 绑定答题结果事件
             currentManager.OnAnswerResult += HandleAnswerResult;
             // 延迟加载题目
