@@ -4,18 +4,20 @@ using System.Collections;
 using Core;
 using Core.Network;
 using TMPro;
+using UI.RoomConfig;
 
 namespace UI.RoomConfig
 {
     /// <summary>
     /// 房间配置UI扩展组件 - 简化版
-    /// 专注于配置管理，不涉及NQMC更新
+    /// 专注于配置管理，支持权重、Timer、HP三套配置系统
     /// </summary>
     public class RoomConfigUIExtension : MonoBehaviour
     {
         [Header("默认配置")]
         [SerializeField] private QuestionWeightConfig defaultWeightConfig;
         [SerializeField] private TimerConfig defaultTimerConfig;
+        [SerializeField] private HPConfig defaultHPConfig;
 
         [Header("Footer按钮")]
         [SerializeField] private Button applyButton;
@@ -28,14 +30,16 @@ namespace UI.RoomConfig
         // 配置面板引用
         private QuestionWeightConfigPanel questionWeightPanel;
         private TimerConfigPanel timerConfigPanel;
+        private HPConfigPanel hpConfigPanel;
         private RoomConfigUI mainConfigUI;
 
         // 配置状态
         private bool hasUnsavedWeightChanges = false;
         private bool hasUnsavedTimerChanges = false;
+        private bool hasUnsavedHPChanges = false;
 
         // 计算属性
-        private bool HasUnsavedChanges => hasUnsavedWeightChanges || hasUnsavedTimerChanges;
+        private bool HasUnsavedChanges => hasUnsavedWeightChanges || hasUnsavedTimerChanges || hasUnsavedHPChanges;
 
         private void Awake()
         {
@@ -118,6 +122,55 @@ namespace UI.RoomConfig
                 LogDebug("未设置默认Timer配置，使用系统默认");
                 TimerConfigManager.Initialize();
             }
+
+            // 设置HP配置 - 仿照Timer配置模式
+            if (defaultHPConfig != null)
+            {
+                LogDebug($"开始设置HP配置: {defaultHPConfig.ConfigName} (ID: {defaultHPConfig.GetInstanceID()})");
+
+                // 步骤1：检查HPConfigManager初始化状态
+                bool wasInitialized = HPConfigManager.IsConfigured();
+                LogDebug($"设置前HPConfigManager初始化状态: {wasInitialized}");
+
+                // 步骤2：使用ForceSetConfig
+                HPConfigManager.ForceSetConfig(defaultHPConfig);
+                LogDebug("HP ForceSetConfig 调用完成");
+
+                // 步骤3：立即验证
+                var managerConfig = HPConfigManager.Config;
+                LogDebug($"设置后HP管理器配置ID: {managerConfig?.GetInstanceID()}");
+                LogDebug($"设置后HP管理器配置名称: {managerConfig?.ConfigName}");
+
+                bool referenceMatch = (defaultHPConfig == managerConfig);
+                LogDebug($"HP配置引用验证: {(referenceMatch ? "✓ 一致" : "✗ 不一致")}");
+
+                if (!referenceMatch)
+                {
+                    Debug.LogError("[RoomConfigUIExtension] HP配置引用不一致，这会导致实时更新失败！");
+
+                    // 尝试再次强制设置
+                    LogDebug("尝试第二次强制设置HP配置...");
+                    HPConfigManager.ForceSetConfig(defaultHPConfig);
+
+                    var secondCheck = HPConfigManager.Config;
+                    bool secondMatch = (defaultHPConfig == secondCheck);
+                    LogDebug($"HP第二次设置结果: {(secondMatch ? "✓ 成功" : "✗ 仍然失败")}");
+
+                    if (!secondMatch)
+                    {
+                        Debug.LogError("HP配置引用问题无法解决，请检查HPConfigManager.Initialize()逻辑");
+                    }
+                }
+                else
+                {
+                    LogDebug("HP配置设置成功");
+                }
+            }
+            else
+            {
+                LogDebug("未设置默认HP配置，使用系统默认");
+                HPConfigManager.Initialize();
+            }
         }
 
         /// <summary>
@@ -154,8 +207,19 @@ namespace UI.RoomConfig
                     }
                 }
 
+                // 查找HP配置面板
+                if (hpConfigPanel == null)
+                {
+                    hpConfigPanel = FindObjectOfType<HPConfigPanel>();
+                    if (hpConfigPanel != null)
+                    {
+                        LogDebug($"找到HP配置面板: {hpConfigPanel.name}");
+                        SetupHPPanelEvents();
+                    }
+                }
+
                 // 如果都找到了，退出循环
-                if (questionWeightPanel != null && timerConfigPanel != null)
+                if (questionWeightPanel != null && timerConfigPanel != null && hpConfigPanel != null)
                 {
                     break;
                 }
@@ -168,6 +232,8 @@ namespace UI.RoomConfig
                 LogDebug("警告：未找到权重配置面板");
             if (timerConfigPanel == null)
                 LogDebug("警告：未找到Timer配置面板");
+            if (hpConfigPanel == null)
+                LogDebug("警告：未找到HP配置面板");
         }
 
         /// <summary>
@@ -193,6 +259,19 @@ namespace UI.RoomConfig
                 timerConfigPanel.OnConfigChanged -= OnTimerConfigChanged;
                 timerConfigPanel.OnConfigChanged += OnTimerConfigChanged;
                 LogDebug("Timer配置面板事件已绑定");
+            }
+        }
+
+        /// <summary>
+        /// 设置HP面板事件
+        /// </summary>
+        private void SetupHPPanelEvents()
+        {
+            if (hpConfigPanel != null)
+            {
+                hpConfigPanel.OnConfigChanged -= OnHPConfigChanged;
+                hpConfigPanel.OnConfigChanged += OnHPConfigChanged;
+                LogDebug("HP配置面板事件已绑定");
             }
         }
 
@@ -254,11 +333,21 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// HP配置变更处理
+        /// </summary>
+        private void OnHPConfigChanged()
+        {
+            hasUnsavedHPChanges = true;
+            UpdateButtonStates();
+            LogDebug("检测到HP配置变更");
+        }
+
+        /// <summary>
         /// 应用按钮点击 - 应用所有配置变更
         /// </summary>
         private void OnApplyClicked()
         {
-            LogDebug($"应用配置变更 - 权重变更: {hasUnsavedWeightChanges}, Timer变更: {hasUnsavedTimerChanges}");
+            LogDebug($"应用配置变更 - 权重变更: {hasUnsavedWeightChanges}, Timer变更: {hasUnsavedTimerChanges}, HP变更: {hasUnsavedHPChanges}");
 
             try
             {
@@ -283,6 +372,17 @@ namespace UI.RoomConfig
                     {
                         hasUnsavedTimerChanges = false;
                         LogDebug("Timer配置应用成功");
+                    }
+                }
+
+                // 应用HP配置变更
+                if (hasUnsavedHPChanges)
+                {
+                    success &= ApplyHPConfigChanges();
+                    if (success)
+                    {
+                        hasUnsavedHPChanges = false;
+                        LogDebug("HP配置应用成功");
                     }
                 }
 
@@ -336,8 +436,21 @@ namespace UI.RoomConfig
                     LogDebug("Timer配置已重置");
                 }
 
+                // 重置HP配置
+                var hpConfig = HPConfigManager.Config;
+                if (hpConfig != null)
+                {
+                    hpConfig.ResetToDefault();
+                    if (hpConfigPanel != null)
+                    {
+                        hpConfigPanel.RefreshDisplay();
+                    }
+                    LogDebug("HP配置已重置");
+                }
+
                 hasUnsavedWeightChanges = false;
                 hasUnsavedTimerChanges = false;
+                hasUnsavedHPChanges = false;
                 UpdateButtonStates();
             }
             catch (System.Exception e)
@@ -358,7 +471,7 @@ namespace UI.RoomConfig
                 // 如果有未保存的变更，提醒用户
                 if (HasUnsavedChanges)
                 {
-                    LogDebug($"有未保存的变更，关闭UI将丢弃变更 - 权重: {hasUnsavedWeightChanges}, Timer: {hasUnsavedTimerChanges}");
+                    LogDebug($"有未保存的变更，关闭UI将丢弃变更 - 权重: {hasUnsavedWeightChanges}, Timer: {hasUnsavedTimerChanges}, HP: {hasUnsavedHPChanges}");
                 }
 
                 // 关闭整个配置UI
@@ -376,6 +489,7 @@ namespace UI.RoomConfig
                 // 重置变更状态
                 hasUnsavedWeightChanges = false;
                 hasUnsavedTimerChanges = false;
+                hasUnsavedHPChanges = false;
                 UpdateButtonStates();
 
                 LogDebug("配置UI已关闭");
@@ -444,6 +558,37 @@ namespace UI.RoomConfig
             catch (System.Exception e)
             {
                 Debug.LogError($"应用Timer配置失败: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 应用HP配置变更到管理器
+        /// </summary>
+        private bool ApplyHPConfigChanges()
+        {
+            var config = HPConfigManager.Config;
+            if (config == null)
+            {
+                LogDebug("警告：无法获取当前HP配置");
+                return false;
+            }
+
+            try
+            {
+                // 通知RoomConfigManager配置已更新
+                if (RoomConfigManager.Instance != null)
+                {
+                    RoomConfigManager.Instance.ApplyConfigChanges();
+                    LogDebug("已通知RoomConfigManager HP配置变更");
+                }
+
+                LogDebug($"HP配置已确认应用: {config.GetConfigSummary()}");
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"应用HP配置失败: {e.Message}");
                 return false;
             }
         }
@@ -535,6 +680,25 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 手动设置HP配置面板引用
+        /// </summary>
+        public void SetHPConfigPanel(HPConfigPanel panel)
+        {
+            if (hpConfigPanel != null)
+            {
+                hpConfigPanel.OnConfigChanged -= OnHPConfigChanged;
+            }
+
+            hpConfigPanel = panel;
+
+            if (hpConfigPanel != null)
+            {
+                SetupHPPanelEvents();
+                LogDebug("手动设置HP配置面板成功");
+            }
+        }
+
+        /// <summary>
         /// 强制更新按钮状态
         /// </summary>
         public void ForceUpdateButtonStates()
@@ -549,18 +713,21 @@ namespace UI.RoomConfig
         {
             string weightSummary = QuestionWeightManager.Config?.GetConfigSummary() ?? "未配置";
             string timerSummary = TimerConfigManager.Config?.GetConfigSummary() ?? "未配置";
-            return $"权重: {weightSummary}, Timer: {timerSummary}";
+            string hpSummary = HPConfigManager.Config?.GetConfigSummary() ?? "未配置";
+            return $"权重: {weightSummary}, Timer: {timerSummary}, HP: {hpSummary}";
         }
 
         /// <summary>
         /// 手动触发配置变更事件
         /// </summary>
-        public void TriggerConfigChanged(bool isWeight = true, bool isTimer = true)
+        public void TriggerConfigChanged(bool isWeight = true, bool isTimer = true, bool isHP = true)
         {
             if (isWeight)
                 OnWeightConfigChanged();
             if (isTimer)
                 OnTimerConfigChanged();
+            if (isHP)
+                OnHPConfigChanged();
         }
 
         #endregion
@@ -578,6 +745,11 @@ namespace UI.RoomConfig
             if (timerConfigPanel != null)
             {
                 timerConfigPanel.OnConfigChanged -= OnTimerConfigChanged;
+            }
+
+            if (hpConfigPanel != null)
+            {
+                hpConfigPanel.OnConfigChanged -= OnHPConfigChanged;
             }
 
             // 清理按钮事件
@@ -611,11 +783,13 @@ namespace UI.RoomConfig
             string status = "=== RoomConfigUIExtension状态 ===\n";
             status += $"权重配置面板: {(questionWeightPanel != null ? "✓" : "✗")}\n";
             status += $"Timer配置面板: {(timerConfigPanel != null ? "✓" : "✗")}\n";
+            status += $"HP配置面板: {(hpConfigPanel != null ? "✓" : "✗")}\n";
             status += $"Apply按钮: {(applyButton != null ? "✓" : "✗")}\n";
             status += $"Reset按钮: {(resetButton != null ? "✓" : "✗")}\n";
             status += $"Close按钮: {(closeButton != null ? "✓" : "✗")}\n";
             status += $"权重未保存变更: {(hasUnsavedWeightChanges ? "是" : "否")}\n";
             status += $"Timer未保存变更: {(hasUnsavedTimerChanges ? "是" : "否")}\n";
+            status += $"HP未保存变更: {(hasUnsavedHPChanges ? "是" : "否")}\n";
             status += $"总体有变更: {(HasUnsavedChanges ? "是" : "否")}\n";
             status += $"配置摘要: {GetConfigSummary()}\n";
 
@@ -642,9 +816,9 @@ namespace UI.RoomConfig
 
                     if (currentConfigField != null)
                     {
-                        var panelConfig = currentConfigField.GetValue(timerConfigPanel) as TimerConfig;
-                        Debug.Log($"面板配置ID: {panelConfig?.GetInstanceID()}");
-                        Debug.Log($"面板与管理器一致: {(panelConfig == managerConfig ? "✓ 一致" : "✗ 不一致")}");
+                        var panelConfig = currentConfigField.GetValue(hpConfigPanel) as HPConfig;
+                        Debug.Log($"HP面板配置ID: {panelConfig?.GetInstanceID()}");
+                        Debug.Log($"HP面板与管理器一致: {(panelConfig == managerConfig ? "✓ 一致" : "✗ 不一致")}");
                     }
                 }
             }
@@ -656,6 +830,24 @@ namespace UI.RoomConfig
             if (Application.isPlaying)
             {
                 OnApplyClicked();
+            }
+        }
+
+        [ContextMenu("测试Reset按钮")]
+        private void EditorTestResetButton()
+        {
+            if (Application.isPlaying)
+            {
+                OnResetClicked();
+            }
+        }
+
+        [ContextMenu("测试Close按钮")]
+        private void EditorTestCloseButton()
+        {
+            if (Application.isPlaying)
+            {
+                OnCloseClicked();
             }
         }
 #endif

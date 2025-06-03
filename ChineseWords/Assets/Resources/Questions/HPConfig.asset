@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f17901729fe130c468b2e2e8a756255f, type: 3}
+  m_Name: HPConfig
+  m_EditorClassIdentifier: 
+  currentHealth: 100
+  damagePerWrong: 10
+  configName: "\u9ED8\u8BA4HP\u914D\u7F6E"
+  configDescription: "\u6807\u51C6\u751F\u547D\u503C\u548C\u6263\u8840\u914D\u7F6E"

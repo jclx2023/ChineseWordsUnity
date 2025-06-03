@@ -307,7 +307,7 @@ namespace Core
             LogDebug("尝试加载默认Timer配置");
 
             // 方法1：从Resources加载
-            var resourceConfig = Resources.Load<TimerConfig>("TimerConfig");
+            var resourceConfig = Resources.Load<TimerConfig>("Questions/TimerConfig");
             if (resourceConfig != null)
             {
                 Config = resourceConfig;
@@ -315,25 +315,7 @@ namespace Core
                 return;
             }
 
-            // 方法2：尝试其他可能的路径
-            string[] possiblePaths = {
-                "Config/TimerConfig",
-                "Configs/TimerConfig",
-                "Game/TimerConfig"
-            };
-
-            foreach (string path in possiblePaths)
-            {
-                var config = Resources.Load<TimerConfig>(path);
-                if (config != null)
-                {
-                    Config = config;
-                    LogDebug($"从Resources路径 {path} 加载Timer配置: {config.ConfigName} (ID: {config.GetInstanceID()})");
-                    return;
-                }
-            }
-
-            // 方法3：创建运行时默认配置
+            // 方法2：创建运行时默认配置
             LogDebug("未找到Timer配置文件，创建运行时默认配置");
             CreateRuntimeDefaultConfig();
         }

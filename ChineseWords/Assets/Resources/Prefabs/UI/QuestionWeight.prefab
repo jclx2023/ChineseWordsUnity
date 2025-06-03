@@ -1157,7 +1157,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Title
+  m_text: "\u9898\u76EE\u6743\u91CD\u914D\u7F6E"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: fedfa0ca645c5054ba4af63c0d8da60b, type: 2}
   m_sharedMaterial: {fileID: 8193477011404785850, guid: fedfa0ca645c5054ba4af63c0d8da60b, type: 2}
@@ -1995,7 +1995,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.21509439, g: 0.21509439, b: 0.21509439, a: 0.6117647}
+  m_Color: {r: 0.21509439, g: 0.21509439, b: 0.21509439, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1

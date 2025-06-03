@@ -195,7 +195,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.6320754, g: 0.15205587, b: 0.1706606, a: 1}
+  m_Color: {r: 0.53453183, g: 0.7924528, b: 0.76784056, a: 0.6745098}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -277,7 +277,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Title
+  m_text: "\u914D\u7F6E\u754C\u9762"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: fedfa0ca645c5054ba4af63c0d8da60b, type: 2}
   m_sharedMaterial: {fileID: 8193477011404785850, guid: fedfa0ca645c5054ba4af63c0d8da60b, type: 2}
@@ -304,8 +304,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 36
-  m_fontSizeBase: 36
+  m_fontSize: 50
+  m_fontSizeBase: 50
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18
@@ -585,8 +585,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   questionWeightPrefab: {fileID: 7932196985109240223, guid: d66593921c80baf4382440245c863290, type: 3}
   timerConfigPrefab: {fileID: 3555640306963190840, guid: 55e77155867d00e47a2ab0e6f2a8a18f, type: 3}
+  hpConfigPrefab: {fileID: 3555640306963190840, guid: 21f2e5064446ec34d8b4ae828145f6d0, type: 3}
   questionWeightPrefabPath: Prefabs/UI/QuestionWeight
   timerConfigPrefabPath: Prefabs/UI/TimerConfig
+  hpConfigPrefabPath: Prefabs/UI/HPConfig
   tabContents:
   - {fileID: 0}
   - {fileID: 0}
@@ -598,6 +600,7 @@ MonoBehaviour:
   currentTabIndex: 0
   defaultWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
   defaultTimerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
+  defaultHPConfig: {fileID: 11400000, guid: de39ea7926d9eca49b5176a39e01425f, type: 2}
   enableDebugLogs: 1
 --- !u!114 &6986105185185227008
 MonoBehaviour:
@@ -613,6 +616,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   defaultWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
   defaultTimerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
+  defaultHPConfig: {fileID: 11400000, guid: de39ea7926d9eca49b5176a39e01425f, type: 2}
   applyButton: {fileID: 4024448721001037396}
   resetButton: {fileID: 8019926360885157012}
   closeButton: {fileID: 1431431782308639782}

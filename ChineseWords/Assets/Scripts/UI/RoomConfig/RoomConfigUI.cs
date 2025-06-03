@@ -9,16 +9,18 @@ using TMPro;
 namespace UI.RoomConfig
 {
     /// <summary>
-    /// 房间配置UI管理器
-    /// 支持权重配置（标签页0）和Timer配置（标签页1）
+    /// 房间配置UI管理器 - 支持HP配置扩展
+    /// 支持权重配置（标签页0）、Timer配置（标签页1）和HP配置（标签页2）
     /// </summary>
     public class RoomConfigUI : MonoBehaviour
     {
         [Header("预制体引用")]
         [SerializeField] private GameObject questionWeightPrefab;
         [SerializeField] private GameObject timerConfigPrefab;
+        [SerializeField] private GameObject hpConfigPrefab;
         [SerializeField] private string questionWeightPrefabPath = "Prefabs/UI/QuestionWeight";
         [SerializeField] private string timerConfigPrefabPath = "Prefabs/UI/TimerConfig";
+        [SerializeField] private string hpConfigPrefabPath = "Prefabs/UI/HPConfig";
 
         [Header("标签页系统")]
         [SerializeField] private Transform[] tabContents;
@@ -28,6 +30,7 @@ namespace UI.RoomConfig
         [Header("配置")]
         [SerializeField] private QuestionWeightConfig defaultWeightConfig;
         [SerializeField] private TimerConfig defaultTimerConfig;
+        [SerializeField] private HPConfig defaultHPConfig;
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -38,6 +41,9 @@ namespace UI.RoomConfig
 
         private TimerConfigPanel timerConfigPanel;
         private GameObject timerConfigPanelInstance;
+
+        private HPConfigPanel hpConfigPanel;
+        private GameObject hpConfigPanelInstance;
 
         // UI状态
         private bool isInitialized = false;
@@ -111,6 +117,17 @@ namespace UI.RoomConfig
             {
                 LogDebug("警告：未设置默认Timer配置");
             }
+
+            // 设置HP配置
+            if (defaultHPConfig != null)
+            {
+                HPConfigManager.SetConfig(defaultHPConfig);
+                LogDebug("已设置默认HP配置");
+            }
+            else
+            {
+                LogDebug("警告：未设置默认HP配置");
+            }
         }
 
         /// <summary>
@@ -155,6 +172,24 @@ namespace UI.RoomConfig
                     Debug.LogError($"[RoomConfigUI] 无法加载Timer配置预制体: {timerConfigPrefabPath}");
                 }
             }
+
+            // 加载HP配置预制体
+            if (hpConfigPrefab == null)
+            {
+                LogDebug($"从Resources加载HP配置预制体: {hpConfigPrefabPath}");
+                ResourceRequest request = Resources.LoadAsync<GameObject>(hpConfigPrefabPath);
+                yield return request;
+
+                if (request.asset != null)
+                {
+                    hpConfigPrefab = request.asset as GameObject;
+                    LogDebug("HP配置预制体加载成功");
+                }
+                else
+                {
+                    Debug.LogError($"[RoomConfigUI] 无法加载HP配置预制体: {hpConfigPrefabPath}");
+                }
+            }
         }
 
         /// <summary>
@@ -167,7 +202,7 @@ namespace UI.RoomConfig
             // 如果没有预设容器，自动查找或创建
             if (tabContents == null || tabContents.Length == 0)
             {
-                tabContents = new Transform[3]; // 3个标签页
+                tabContents = new Transform[3]; // 3个标签页：权重、Timer、HP
 
                 for (int i = 0; i < 3; i++)
                 {
@@ -216,6 +251,9 @@ namespace UI.RoomConfig
 
                 // 实例化Timer配置预制体（标签页1）
                 yield return StartCoroutine(InstantiateTimerConfigPrefab());
+
+                // 实例化HP配置预制体（标签页2）
+                yield return StartCoroutine(InstantiateHPConfigPrefab());
             }
             finally
             {
@@ -362,6 +400,75 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 实例化HP配置预制体
+        /// </summary>
+        private IEnumerator InstantiateHPConfigPrefab()
+        {
+            LogDebug("实例化HP配置预制体");
+
+            if (hpConfigPrefab == null)
+            {
+                Debug.LogError("[RoomConfigUI] HP配置预制体为空，无法实例化");
+                yield break;
+            }
+
+            if (tabContents == null || tabContents.Length < 3 || tabContents[2] == null)
+            {
+                Debug.LogError("[RoomConfigUI] HP配置容器不存在");
+                yield break;
+            }
+
+            // 清空标签页2的内容
+            Transform hpContainer = tabContents[2];
+            ClearContainer(hpContainer);
+
+            // 实例化预制体
+            try
+            {
+                hpConfigPanelInstance = Instantiate(hpConfigPrefab, hpContainer);
+                hpConfigPanelInstance.name = "HPConfigPanel_Instance";
+
+                SetPanelRectTransform(hpConfigPanelInstance);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[RoomConfigUI] 实例化HP配置预制体失败: {e.Message}");
+                yield break;
+            }
+
+            yield return null;
+
+            // 获取组件并初始化
+            try
+            {
+                hpConfigPanel = hpConfigPanelInstance.GetComponent<HPConfigPanel>();
+
+                if (hpConfigPanel != null)
+                {
+                    LogDebug("成功获取HPConfigPanel组件");
+
+                    var config = HPConfigManager.Config;
+                    if (config != null)
+                    {
+                        hpConfigPanel.Initialize(config);
+                        LogDebug("HP配置面板初始化完成");
+                    }
+
+                    // 通知Extension组件
+                    NotifyExtensionAboutHPPanel();
+                }
+                else
+                {
+                    Debug.LogError("[RoomConfigUI] 预制体上没有HPConfigPanel组件");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[RoomConfigUI] HP配置组件初始化失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
         /// 设置面板RectTransform
         /// </summary>
         private void SetPanelRectTransform(GameObject panelInstance)
@@ -423,6 +530,39 @@ namespace UI.RoomConfig
             else
             {
                 LogDebug("Extension组件不存在或Timer面板为空");
+            }
+        }
+
+        /// <summary>
+        /// 通知Extension组件HP面板已创建
+        /// </summary>
+        private void NotifyExtensionAboutHPPanel()
+        {
+            var extension = GetComponent<RoomConfigUIExtension>();
+            if (extension != null && hpConfigPanel != null)
+            {
+                // 使用反射或检查Extension是否有HP面板支持方法
+                var setHPMethod = extension.GetType().GetMethod("SetHPConfigPanel");
+                if (setHPMethod != null)
+                {
+                    try
+                    {
+                        setHPMethod.Invoke(extension, new object[] { hpConfigPanel });
+                        LogDebug("已通知Extension组件HP面板创建完成");
+                    }
+                    catch (System.Exception e)
+                    {
+                        LogDebug($"通知Extension HP面板失败: {e.Message}");
+                    }
+                }
+                else
+                {
+                    LogDebug("Extension组件不支持HP面板设置方法");
+                }
+            }
+            else
+            {
+                LogDebug("Extension组件不存在或HP面板为空");
             }
         }
 
@@ -702,6 +842,14 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 获取HP配置面板
+        /// </summary>
+        public HPConfigPanel GetHPConfigPanel()
+        {
+            return hpConfigPanel;
+        }
+
+        /// <summary>
         /// 获取当前标签页索引
         /// </summary>
         public int GetActiveTabIndex()
@@ -771,6 +919,27 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 强制重新创建HP配置面板
+        /// </summary>
+        public void RecreateHPConfigPanel()
+        {
+            LogDebug("强制重新创建HP配置面板");
+
+            if (hpConfigPanelInstance != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(hpConfigPanelInstance);
+                else
+                    DestroyImmediate(hpConfigPanelInstance);
+
+                hpConfigPanelInstance = null;
+                hpConfigPanel = null;
+            }
+
+            StartCoroutine(InstantiateHPConfigPrefab());
+        }
+
+        /// <summary>
         /// 获取UI状态信息
         /// </summary>
         public string GetUIStatus()
@@ -780,20 +949,31 @@ namespace UI.RoomConfig
             status += $"当前标签页: {currentTabIndex}\n";
             status += $"标签页容器数量: {(tabContents?.Length ?? 0)}\n";
             status += $"标签页按钮数量: {(tabButtons?.Length ?? 0)}\n";
+
+            // 权重配置状态
             status += $"权重配置预制体: {(questionWeightPrefab != null ? "✓" : "✗")}\n";
             status += $"权重配置面板实例: {(questionWeightPanelInstance != null ? "✓" : "✗")}\n";
             status += $"权重配置面板组件: {(questionWeightPanel != null ? "✓" : "✗")}\n";
+            status += $"默认权重配置: {(defaultWeightConfig != null ? "✓" : "✗")}\n";
+
+            // Timer配置状态
             status += $"Timer配置预制体: {(timerConfigPrefab != null ? "✓" : "✗")}\n";
             status += $"Timer配置面板实例: {(timerConfigPanelInstance != null ? "✓" : "✗")}\n";
             status += $"Timer配置面板组件: {(timerConfigPanel != null ? "✓" : "✗")}\n";
-            status += $"默认权重配置: {(defaultWeightConfig != null ? "✓" : "✗")}\n";
             status += $"默认Timer配置: {(defaultTimerConfig != null ? "✓" : "✗")}\n";
+
+            // HP配置状态
+            status += $"HP配置预制体: {(hpConfigPrefab != null ? "✓" : "✗")}\n";
+            status += $"HP配置面板实例: {(hpConfigPanelInstance != null ? "✓" : "✗")}\n";
+            status += $"HP配置面板组件: {(hpConfigPanel != null ? "✓" : "✗")}\n";
+            status += $"默认HP配置: {(defaultHPConfig != null ? "✓" : "✗")}\n";
 
             if (tabContents != null)
             {
                 for (int i = 0; i < tabContents.Length; i++)
                 {
-                    status += $"标签页{i}容器: {(tabContents[i] != null ? "✓" : "✗")}\n";
+                    string tabName = i == 0 ? "权重配置" : i == 1 ? "Timer配置" : i == 2 ? "HP配置" : $"未知{i}";
+                    status += $"标签页{i}({tabName})容器: {(tabContents[i] != null ? "✓" : "✗")}\n";
                 }
             }
 
@@ -845,6 +1025,22 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
+        /// 刷新HP配置面板
+        /// </summary>
+        public void RefreshHPConfigPanel()
+        {
+            if (hpConfigPanel != null)
+            {
+                hpConfigPanel.RefreshDisplay();
+                LogDebug("HP配置面板已刷新");
+            }
+            else
+            {
+                LogDebug("HP配置面板不存在，无法刷新");
+            }
+        }
+
+        /// <summary>
         /// 验证当前配置有效性（兼容方法）
         /// </summary>
         public bool ValidateCurrentConfig()
@@ -884,6 +1080,22 @@ namespace UI.RoomConfig
                 isValid = false;
             }
 
+            // 验证HP配置
+            var hpConfig = HPConfigManager.Config;
+            if (hpConfig != null)
+            {
+                if (!hpConfig.ValidateConfig())
+                {
+                    LogDebug("HP配置无效");
+                    isValid = false;
+                }
+            }
+            else
+            {
+                LogDebug("HP配置未设置");
+                isValid = false;
+            }
+
             LogDebug($"配置验证结果: {(isValid ? "有效" : "无效")}");
             return isValid;
         }
@@ -908,7 +1120,6 @@ namespace UI.RoomConfig
         }
 
         #endregion
-
         /// <summary>
         /// 调试日志
         /// </summary>

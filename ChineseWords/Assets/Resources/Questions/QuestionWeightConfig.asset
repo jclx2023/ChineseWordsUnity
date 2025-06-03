@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   questionWeights:
   - questionType: 1
-    weight: 3.7807333
+    weight: 1
     enabled: 1
   - questionType: 2
-    weight: 5.821865
+    weight: 1
     enabled: 1
   - questionType: 3
     weight: 1
