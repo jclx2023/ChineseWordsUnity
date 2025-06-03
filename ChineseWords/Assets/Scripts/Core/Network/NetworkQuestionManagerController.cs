@@ -394,7 +394,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 延迟加载题目 - 本地模式
+        /// 延迟加载题目 - 本地模式（添加默认时间支持）
         /// </summary>
         private IEnumerator DelayedLoadQuestion()
         {
@@ -402,13 +402,58 @@ namespace Core.Network
             if (currentManager != null)
             {
                 currentManager.LoadQuestion();
-                StartTimer();
-                LogDebug("题目已加载并开始计时");
+
+                // 本地模式也支持动态时间（通过TimerConfig获取）
+                float timeLimit = GetLocalTimeLimit();
+                if (timeLimit > 0)
+                {
+                    StartTimerWithDynamicLimit(timeLimit);
+                    LogDebug($"本地题目已加载并开始计时，时间限制: {timeLimit}秒");
+                }
+                else
+                {
+                    StartTimer();
+                    LogDebug("本地题目已加载并开始计时（使用默认时间）");
+                }
+            }
+        }
+        /// <summary>
+        /// 获取本地模式的时间限制（从TimerConfig）
+        /// </summary>
+        private float GetLocalTimeLimit()
+        {
+            try
+            {
+                // 如果有当前管理器，尝试获取其题型
+                if (currentManager != null)
+                {
+                    // 尝试获取管理器的题型信息
+                    var questionTypeField = currentManager.GetType().GetField("questionType",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (questionTypeField != null && questionTypeField.GetValue(currentManager) is QuestionType questionType)
+                    {
+                        if (TimerConfigManager.Config != null)
+                        {
+                            float timeLimit = TimerConfigManager.Config.GetTimeLimitForQuestionType(questionType);
+                            LogDebug($"从TimerConfig获取本地题型时间限制: {questionType} -> {timeLimit}秒");
+                            return timeLimit;
+                        }
+                    }
+                }
+
+                LogDebug("无法获取本地题型时间限制，使用默认配置");
+                return 0f; // 返回0表示使用默认时间
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"获取本地时间限制失败: {e.Message}");
+                return 0f;
             }
         }
 
         /// <summary>
-        /// 延迟加载网络题目 - 修复版本
+        /// 延迟加载网络题目 - 修复版本，支持动态时间限制
         /// </summary>
         private IEnumerator DelayedLoadNetworkQuestion(NetworkQuestionData networkData)
         {
@@ -441,8 +486,86 @@ namespace Core.Network
                     currentManager.LoadQuestion();
                 }
 
-                StartTimer();
-                LogDebug("网络题目已加载并开始计时");
+                // 关键修改：使用网络题目的时间限制启动计时器
+                StartTimerWithDynamicLimit(networkData.timeLimit);
+                LogDebug($"网络题目已加载并开始计时，时间限制: {networkData.timeLimit}秒");
+            }
+        }
+        /// <summary>
+        /// 使用动态时间限制启动计时器
+        /// </summary>
+        private void StartTimerWithDynamicLimit(float timeLimit)
+        {
+            if (timerManager != null)
+            {
+                // 检查TimerManager是否支持动态时间限制
+                var setTimeLimitMethod = timerManager.GetType().GetMethod("SetTimeLimit");
+                var startTimerWithLimitMethod = timerManager.GetType().GetMethod("StartTimer", new System.Type[] { typeof(float) });
+
+                if (startTimerWithLimitMethod != null)
+                {
+                    // 方案1：直接调用带时间参数的StartTimer方法
+                    LogDebug($"使用动态时间限制启动计时器: {timeLimit}秒");
+                    startTimerWithLimitMethod.Invoke(timerManager, new object[] { timeLimit });
+                }
+                else if (setTimeLimitMethod != null)
+                {
+                    // 方案2：先设置时间限制，再启动计时器
+                    LogDebug($"设置时间限制后启动计时器: {timeLimit}秒");
+                    setTimeLimitMethod.Invoke(timerManager, new object[] { timeLimit });
+                    timerManager.StartTimer();
+                }
+                else
+                {
+                    // 方案3：尝试通过配置管理器设置
+                    TrySetTimerThroughConfig(timeLimit);
+                    timerManager.StartTimer();
+                }
+            }
+            else
+            {
+                Debug.LogError("[NQMC] TimerManager引用为空，无法启动计时器");
+            }
+        }
+        /// <summary>
+        /// 尝试通过TimerConfig设置时间限制
+        /// </summary>
+        private void TrySetTimerThroughConfig(float timeLimit)
+        {
+            try
+            {
+                LogDebug($"尝试通过配置管理器设置时间限制: {timeLimit}秒");
+
+                // 检查是否有运行时配置接口
+                if (TimerConfigManager.Config != null)
+                {
+                    // 创建临时配置或修改当前配置的时间限制
+                    // 这里需要根据TimerConfigManager的具体实现来调整
+
+                    // 方案1：如果TimerConfigManager支持临时时间设置
+                    var setTempTimeMethod = typeof(TimerConfigManager).GetMethod("SetTemporaryTimeLimit");
+                    if (setTempTimeMethod != null)
+                    {
+                        setTempTimeMethod.Invoke(null, new object[] { timeLimit });
+                        LogDebug("通过TimerConfigManager设置临时时间限制成功");
+                        return;
+                    }
+
+                    // 方案2：直接通过配置应用到TimerManager
+                    var applyConfigMethod = timerManager.GetType().GetMethod("ApplyConfig", new System.Type[] { typeof(float) });
+                    if (applyConfigMethod != null)
+                    {
+                        applyConfigMethod.Invoke(timerManager, new object[] { timeLimit });
+                        LogDebug("通过ApplyConfig设置时间限制成功");
+                        return;
+                    }
+                }
+
+                Debug.LogWarning($"[NQMC] 无法设置动态时间限制，将使用默认配置");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[NQMC] 设置时间限制失败: {e.Message}");
             }
         }
 
@@ -605,7 +728,7 @@ namespace Core.Network
             if (!isMultiplayerMode || !isWaitingForNetworkQuestion)
                 return;
 
-            LogDebug($"收到网络题目: {question.questionType}");
+            LogDebug($"收到网络题目: {question.questionType}, 时间限制: {question.timeLimit}秒");
             isWaitingForNetworkQuestion = false;
             LoadNetworkQuestion(question);
         }
@@ -716,15 +839,23 @@ namespace Core.Network
         #region 辅助方法
 
         /// <summary>
-        /// 开始计时器
+        /// 开始计时器（原有方法，保持兼容性）
         /// </summary>
         private void StartTimer()
         {
             if (timerManager != null)
             {
                 timerManager.StartTimer();
-                LogDebug("计时器已开始");
+                LogDebug("计时器已开始（使用默认时间限制）");
             }
+        }
+
+        /// <summary>
+        /// 使用指定时间限制开始计时器
+        /// </summary>
+        private void StartTimer(float timeLimit)
+        {
+            StartTimerWithDynamicLimit(timeLimit);
         }
 
         /// <summary>

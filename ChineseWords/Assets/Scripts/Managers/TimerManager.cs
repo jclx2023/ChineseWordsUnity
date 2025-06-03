@@ -232,21 +232,112 @@ namespace Managers
         /// 开始倒计时（指定时间）
         /// </summary>
         /// <param name="customTime">自定义倒计时时间</param>
+        /// <summary>
+        /// 开始倒计时（指定时间）
+        /// </summary>
+        /// <param name="customTime">自定义倒计时时间</param>
         public void StartTimer(float customTime)
         {
             if (customTime <= 0)
             {
-                Debug.LogWarning($"[TimerManager] 自定义时间无效: {customTime}，使用默认时间");
+                Debug.LogWarning($"[TimerManager] 自定义时间无效: {customTime}，使用当前配置时间{timeLimit}");
                 StartTimer();
                 return;
             }
 
-            float originalTimeLimit = timeLimit;
+            StopTimer(); // 先停止之前的计时器
+
+            // 关键修改：直接使用传入的时间作为本次倒计时时间，同时更新timeLimit
             timeLimit = customTime;
-            StartTimer();
-            timeLimit = originalTimeLimit; // 恢复原始配置
+            currentTime = customTime;
+            isRunning = true;
+            isPaused = false;
+
+            countdownCoroutine = StartCoroutine(Countdown());
 
             LogDebug($"开始自定义倒计时 - 时长: {customTime}秒");
+
+            // 触发启动事件
+            OnTimerStarted?.Invoke();
+        }
+        /// <summary>
+        /// 从TimerConfig应用完整配置
+        /// </summary>
+        public void ApplyTimerConfig(TimerConfig config, QuestionType questionType)
+        {
+            if (config == null)
+            {
+                Debug.LogWarning("[TimerManager] TimerConfig为空，使用默认配置");
+                ApplyConfig(defaultTimeLimit);
+                return;
+            }
+
+            // 获取题目类型对应的时间限制
+            float newTimeLimit = config.GetTimeLimitForQuestionType(questionType);
+
+            // 应用时间限制
+            ApplyConfig(newTimeLimit);
+
+            // 应用颜色设置
+            if (config.normalColor != Color.clear) normalColor = config.normalColor;
+            if (config.warningColor != Color.clear) warningColor = config.warningColor;
+            if (config.criticalColor != Color.clear) criticalColor = config.criticalColor;
+
+            // 应用阈值设置
+            warningThreshold = config.warningThreshold;
+            criticalThreshold = config.criticalThreshold;
+
+            LogDebug($"已应用TimerConfig配置 - 题型: {questionType}, 时间: {newTimeLimit}秒");
+        }
+        /// <summary>
+        /// 应用配置（重载版本，支持不重置当前时间）
+        /// </summary>
+        /// <param name="newTimeLimit">新的时间限制</param>
+        /// <param name="resetCurrentTime">是否重置当前时间</param>
+        public void ApplyConfig(float newTimeLimit, bool resetCurrentTime)
+        {
+            if (newTimeLimit <= 0)
+            {
+                Debug.LogWarning($"[TimerManager] 时间限制不能小于等于0，使用默认值{defaultTimeLimit}。传入值: {newTimeLimit}");
+                newTimeLimit = defaultTimeLimit;
+            }
+
+            timeLimit = newTimeLimit;
+
+            if (resetCurrentTime)
+            {
+                currentTime = timeLimit;
+            }
+
+            LogDebug($"配置应用完成 - 时间限制: {timeLimit}秒, 重置当前时间: {resetCurrentTime}");
+
+            // 更新UI显示
+            UpdateTimerUI();
+        }
+        /// <summary>
+        /// 使用TimerConfig启动计时器
+        /// </summary>
+        /// <param name="config">Timer配置</param>
+        /// <param name="questionType">题目类型</param>
+        public void StartTimerWithConfig(TimerConfig config, QuestionType questionType)
+        {
+            if (config == null)
+            {
+                Debug.LogWarning("[TimerManager] TimerConfig为空，使用默认时间启动");
+                StartTimer();
+                return;
+            }
+
+            float timeLimit = config.GetTimeLimitForQuestionType(questionType);
+
+            // 应用配置（不包括颜色，因为可能在运行时）
+            warningThreshold = config.warningThreshold;
+            criticalThreshold = config.criticalThreshold;
+
+            // 使用指定时间启动
+            StartTimer(timeLimit);
+
+            LogDebug($"使用TimerConfig启动 - 题型: {questionType}, 时间: {timeLimit}秒");
         }
 
         /// <summary>

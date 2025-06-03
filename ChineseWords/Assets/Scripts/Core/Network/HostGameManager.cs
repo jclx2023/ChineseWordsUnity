@@ -31,6 +31,9 @@ namespace Core.Network
         [Header("题目配置")]
         [SerializeField] private QuestionWeightConfig questionWeightConfig;
 
+        [Header("Timer配置")]
+        [SerializeField] private TimerConfig timerConfig;
+
         [Header("成语接龙设置")]
         [SerializeField] private bool enableIdiomChain = true;
 
@@ -785,6 +788,9 @@ namespace Core.Network
         /// <summary>
         /// 从服务获取题目数据
         /// </summary>
+        /// <summary>
+        /// 从服务获取题目数据
+        /// </summary>
         private NetworkQuestionData GetQuestionFromService(QuestionType questionType)
         {
             if (questionDataService == null)
@@ -800,7 +806,11 @@ namespace Core.Network
 
                 if (questionData != null)
                 {
-                    LogDebug($"成功从服务获取题目: {questionData.questionText}");
+                    // 关键修改：设置动态时间限制
+                    float dynamicTimeLimit = GetTimeLimitForQuestionType(questionType);
+                    questionData.timeLimit = dynamicTimeLimit;
+
+                    LogDebug($"成功从服务获取题目: {questionData.questionText}, 时间限制: {dynamicTimeLimit}秒");
                     return questionData;
                 }
                 else
@@ -821,6 +831,9 @@ namespace Core.Network
         /// </summary>
         private NetworkQuestionData CreateFallbackQuestion(QuestionType questionType)
         {
+            // 关键修改：使用动态时间限制而不是固定值
+            float dynamicTimeLimit = GetTimeLimitForQuestionType(questionType);
+
             return NetworkQuestionDataExtensions.CreateFromLocalData(
                 questionType,
                 $"这是一个{questionType}类型的备用题目",
@@ -828,7 +841,7 @@ namespace Core.Network
                 questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
                     ? new string[] { "选项A", "备用答案", "选项C", "选项D" }
                     : null,
-                questionTimeLimit,
+                dynamicTimeLimit, // 使用动态时间限制
                 "{\"source\": \"host_fallback\", \"isDefault\": true}"
             );
         }
@@ -852,6 +865,58 @@ namespace Core.Network
         private Dictionary<QuestionType, float> GetDefaultTypeWeights()
         {
             return QuestionWeightManager.GetWeights();
+        }
+        /// <summary>
+        /// 获取指定题型的时间限制
+        /// </summary>
+        private float GetTimeLimitForQuestionType(QuestionType questionType)
+        {
+            // 优先使用本地配置
+            if (timerConfig != null)
+            {
+                float timeLimit = timerConfig.GetTimeLimitForQuestionType(questionType);
+                LogDebug($"使用本地Timer配置: {questionType} -> {timeLimit}秒");
+                return timeLimit;
+            }
+
+            // 回退到全局配置管理器
+            if (TimerConfigManager.Config != null)
+            {
+                float timeLimit = TimerConfigManager.Config.GetTimeLimitForQuestionType(questionType);
+                LogDebug($"使用TimerConfigManager配置: {questionType} -> {timeLimit}秒");
+                return timeLimit;
+            }
+
+            // 最终回退到默认值
+            float defaultTime = GetDefaultTimeLimitForQuestionType(questionType);
+            LogDebug($"使用默认时间配置: {questionType} -> {defaultTime}秒");
+            return defaultTime;
+        }
+        /// <summary>
+        /// 获取题型的默认时间限制
+        /// </summary>
+        private float GetDefaultTimeLimitForQuestionType(QuestionType questionType)
+        {
+            switch (questionType)
+            {
+                case QuestionType.ExplanationChoice:
+                case QuestionType.SimularWordChoice:
+                    return 20f;
+                case QuestionType.HardFill:
+                    return 30f;
+                case QuestionType.SoftFill:
+                case QuestionType.TextPinyin:
+                    return 25f;
+                case QuestionType.IdiomChain:
+                    return 20f;
+                case QuestionType.SentimentTorF:
+                case QuestionType.UsageTorF:
+                    return 15f;
+                case QuestionType.HandWriting:
+                    return 60f;
+                default:
+                    return questionTimeLimit; // 使用原有的默认值
+            }
         }
 
         /// <summary>
@@ -1083,21 +1148,25 @@ namespace Core.Network
         private NetworkQuestionData GenerateIdiomChainContinuation(string baseIdiom)
         {
             LogDebug($"生成基于 '{baseIdiom}' 的接龙题目");
-    
+
             // 获取成语接龙管理器
             var idiomManager = GetIdiomChainManager();
-    
+
             if (idiomManager != null)
             {
                 var question = idiomManager.CreateContinuationQuestion(baseIdiom, idiomChainCount, currentIdiomChainWord);
-        
+
                 if (question != null)
                 {
-                    LogDebug("生成接龙题成功");
+                    // 关键修改：为接龙题目设置正确的时间限制
+                    float dynamicTimeLimit = GetTimeLimitForQuestionType(QuestionType.IdiomChain);
+                    question.timeLimit = dynamicTimeLimit;
+
+                    LogDebug($"生成接龙题成功，时间限制: {dynamicTimeLimit}秒");
                     return question;
                 }
             }
-    
+
             LogDebug("无法生成接龙题目，重置接龙状态");
             ResetIdiomChainState();
             return null;
@@ -1496,6 +1565,14 @@ namespace Core.Network
                 stats += $"Host客户端就绪: {NetworkManager.Instance.IsHostClientReady}\n";
             }
 
+            // 新增：Timer配置信息
+            stats += $"Timer配置源: {GetTimerConfigSource()}\n";
+            if (currentQuestion != null)
+            {
+                stats += $"当前题目类型: {currentQuestion.questionType}\n";
+                stats += $"当前题目时间限制: {currentQuestion.timeLimit}秒\n";
+            }
+
             if (playerStates != null)
             {
                 stats += "玩家状态:\n";
@@ -1524,6 +1601,24 @@ namespace Core.Network
             {
                 LogDebug("手动同步房间数据");
                 SyncPlayersFromRoomSystem();
+            }
+        }
+        /// <summary>
+        /// 获取Timer配置源信息（用于调试）
+        /// </summary>
+        private string GetTimerConfigSource()
+        {
+            if (timerConfig != null)
+            {
+                return $"本地配置({timerConfig.ConfigName})";
+            }
+            else if (TimerConfigManager.Config != null)
+            {
+                return $"全局管理器({TimerConfigManager.Config.ConfigName})";
+            }
+            else
+            {
+                return "默认值";
             }
         }
 
