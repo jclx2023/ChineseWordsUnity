@@ -349,7 +349,7 @@ MonoBehaviour:
   maxTime: 120
   useIntegerValues: 1
   autoFindComponents: 1
-  enableDebugLogs: 1
+  enableDebugLogs: 0
 --- !u!1 &6950314915633299074
 GameObject:
   m_ObjectHideFlags: 0

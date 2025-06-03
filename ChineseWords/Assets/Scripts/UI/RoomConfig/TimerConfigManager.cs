@@ -1,11 +1,11 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using Core;
 
 namespace Core
 {
     /// <summary>
-    /// TimerÅäÖÃ¹ÜÀíÆ÷ - ĞŞ¸´ÅäÖÃÒıÓÃÎÊÌâ
-    /// È·±£UIĞŞ¸ÄÄÜÕıÈ··´Ó³µ½ÅäÖÃÖĞ
+    /// Timeré…ç½®ç®¡ç†å™¨ - ä¿®å¤é…ç½®å¼•ç”¨é—®é¢˜
+    /// ç¡®ä¿UIä¿®æ”¹èƒ½æ­£ç¡®åæ˜ åˆ°é…ç½®ä¸­
     /// </summary>
     public static class TimerConfigManager
     {
@@ -14,7 +14,7 @@ namespace Core
         private static bool enableDebugLogs = true;
 
         /// <summary>
-        /// µ±Ç°TimerÅäÖÃ
+        /// å½“å‰Timeré…ç½®
         /// </summary>
         public static TimerConfig Config
         {
@@ -29,255 +29,270 @@ namespace Core
             private set
             {
                 config = value;
-                LogDebug($"TimerÅäÖÃÒıÓÃÒÑ¸üĞÂ: {config?.ConfigName ?? "null"} (InstanceID: {config?.GetInstanceID()})");
+                LogDebug($"Timeré…ç½®å¼•ç”¨å·²æ›´æ–°: {config?.ConfigName ?? "null"} (InstanceID: {config?.GetInstanceID()})");
             }
         }
 
         /// <summary>
-        /// ³õÊ¼»¯TimerÅäÖÃ¹ÜÀíÆ÷
+        /// åˆå§‹åŒ–Timeré…ç½®ç®¡ç†å™¨
         /// </summary>
         public static void Initialize()
         {
             if (initialized)
             {
-                LogDebug("TimerConfigManager ÒÑ¾­³õÊ¼»¯");
+                LogDebug("TimerConfigManager å·²ç»åˆå§‹åŒ–");
                 return;
             }
 
-            LogDebug("³õÊ¼»¯ TimerConfigManager");
+            LogDebug("åˆå§‹åŒ– TimerConfigManager");
 
-            // ³¢ÊÔ¼ÓÔØÄ¬ÈÏÅäÖÃ
+            // å°è¯•åŠ è½½é»˜è®¤é…ç½®
             LoadDefaultConfig();
 
             initialized = true;
-            LogDebug($"TimerConfigManager ³õÊ¼»¯Íê³É£¬µ±Ç°ÅäÖÃ: {config?.ConfigName ?? "Î´ÉèÖÃ"} (InstanceID: {config?.GetInstanceID()})");
+            LogDebug($"TimerConfigManager åˆå§‹åŒ–å®Œæˆï¼Œå½“å‰é…ç½®: {config?.ConfigName ?? "æœªè®¾ç½®"} (InstanceID: {config?.GetInstanceID()})");
         }
 
         /// <summary>
-        /// ÉèÖÃTimerÅäÖÃ - ĞŞ¸´°æ±¾£¬È·±£ÒıÓÃÕıÈ·´«µİ
+        /// è®¾ç½®Timeré…ç½® - ä¿®å¤ç‰ˆæœ¬ï¼Œç¡®ä¿å¼•ç”¨æ­£ç¡®ä¼ é€’
         /// </summary>
-        /// <param name="newConfig">ĞÂµÄTimerÅäÖÃ</param>
+        /// <param name="newConfig">æ–°çš„Timeré…ç½®</param>
         public static void SetConfig(TimerConfig newConfig)
         {
-            LogDebug($"³¢ÊÔÉèÖÃTimerÅäÖÃ: {newConfig?.ConfigName ?? "null"} (InstanceID: {newConfig?.GetInstanceID()})");
+            LogDebug($"å°è¯•è®¾ç½®Timeré…ç½®: {newConfig?.ConfigName ?? "null"} (InstanceID: {newConfig?.GetInstanceID()})");
 
             if (newConfig == null)
             {
-                LogDebug("¾¯¸æ£º³¢ÊÔÉèÖÃ¿ÕµÄTimerÅäÖÃ£¬±£³Öµ±Ç°ÅäÖÃ²»±ä");
+                LogDebug("è­¦å‘Šï¼šå°è¯•è®¾ç½®ç©ºçš„Timeré…ç½®ï¼Œä¿æŒå½“å‰é…ç½®ä¸å˜");
                 return;
             }
 
-            // Ö±½ÓÉèÖÃÅäÖÃ£¬²»½øĞĞÑéÖ¤
-            // ÑéÖ¤Ó¦¸ÃÔÚUI²ã»òµ÷ÓÃ·½½øĞĞ£¬¶ø²»ÊÇÔÚÕâÀïÌæ»»ÅäÖÃ
+            // å…³é”®ä¿®å¤ï¼šç¡®ä¿åˆå§‹åŒ–æ ‡è®°æ­£ç¡®ï¼Œé¿å…åç»­è¢«è¦†ç›–
+            initialized = true;
             Config = newConfig;
-            LogDebug($"TimerÅäÖÃÒÑ³É¹¦ÉèÖÃ: {newConfig.ConfigName} (InstanceID: {newConfig.GetInstanceID()})");
 
-            // ¿ÉÑ¡£ºÊä³öÅäÖÃÕªÒªÓÃÓÚµ÷ÊÔ
+            LogDebug($"Timeré…ç½®å·²æˆåŠŸè®¾ç½®: {newConfig.ConfigName} (InstanceID: {newConfig.GetInstanceID()})");
+
+            // éªŒè¯è®¾ç½®æ˜¯å¦æˆåŠŸ
+            var currentConfig = config;  // ç›´æ¥è®¿é—®ç§æœ‰å­—æ®µï¼Œé¿å…è§¦å‘getteré€»è¾‘
+            bool referenceMatch = (newConfig == currentConfig);
+            LogDebug($"è®¾ç½®åå¼•ç”¨éªŒè¯: {(referenceMatch ? "âœ“ æˆåŠŸ" : "âœ— å¤±è´¥")}");
+
+            if (!referenceMatch)
+            {
+                Debug.LogError($"[TimerConfigManager] é…ç½®è®¾ç½®å¤±è´¥ï¼é¢„æœŸID: {newConfig.GetInstanceID()}, å®é™…ID: {currentConfig?.GetInstanceID()}");
+            }
+
+            // å¯é€‰ï¼šè¾“å‡ºé…ç½®æ‘˜è¦ç”¨äºè°ƒè¯•
             if (enableDebugLogs)
             {
-                LogDebug($"ÅäÖÃÕªÒª: {newConfig.GetConfigSummary()}");
+                LogDebug($"é…ç½®æ‘˜è¦: {newConfig.GetConfigSummary()}");
             }
         }
 
         /// <summary>
-        /// Ç¿ÖÆÉèÖÃÅäÖÃ£¨Ìø¹ıËùÓĞ¼ì²é£©
+        /// å¼ºåˆ¶è®¾ç½®é…ç½®ï¼ˆè·³è¿‡æ‰€æœ‰æ£€æŸ¥ï¼‰
         /// </summary>
-        /// <param name="newConfig">ĞÂµÄTimerÅäÖÃ</param>
+        /// <param name="newConfig">æ–°çš„Timeré…ç½®</param>
         public static void ForceSetConfig(TimerConfig newConfig)
         {
-            LogDebug($"Ç¿ÖÆÉèÖÃTimerÅäÖÃ: {newConfig?.ConfigName ?? "null"}");
+            LogDebug($"å¼ºåˆ¶è®¾ç½®Timeré…ç½®: {newConfig?.ConfigName ?? "null"} (ID: {newConfig?.GetInstanceID()})");
+
+            // å…³é”®ä¿®å¤ï¼šå…ˆæ ‡è®°ä¸ºå·²åˆå§‹åŒ–ï¼Œé¿å…åç»­Initializeè¦†ç›–
+            initialized = true;
             config = newConfig;
-            LogDebug($"Ç¿ÖÆÉèÖÃÍê³É£¬µ±Ç°ÅäÖÃÒıÓÃ: {config?.GetInstanceID()}");
+
+            LogDebug($"å¼ºåˆ¶è®¾ç½®å®Œæˆï¼Œå½“å‰é…ç½®å¼•ç”¨: {config?.GetInstanceID()}");
         }
 
         /// <summary>
-        /// ÑéÖ¤µ±Ç°ÅäÖÃµÄÓĞĞ§ĞÔ
+        /// éªŒè¯å½“å‰é…ç½®çš„æœ‰æ•ˆæ€§
         /// </summary>
-        /// <returns>ÅäÖÃÊÇ·ñÓĞĞ§</returns>
+        /// <returns>é…ç½®æ˜¯å¦æœ‰æ•ˆ</returns>
         public static bool ValidateCurrentConfig()
         {
             if (Config == null)
             {
-                LogDebug("ÅäÖÃÑéÖ¤Ê§°Ü£ºÅäÖÃÎª¿Õ");
+                LogDebug("é…ç½®éªŒè¯å¤±è´¥ï¼šé…ç½®ä¸ºç©º");
                 return false;
             }
 
             try
             {
                 bool isValid = Config.ValidateConfig();
-                LogDebug($"ÅäÖÃÑéÖ¤½á¹û: {(isValid ? "ÓĞĞ§" : "ÎŞĞ§")}");
+                LogDebug($"é…ç½®éªŒè¯ç»“æœ: {(isValid ? "æœ‰æ•ˆ" : "æ— æ•ˆ")}");
                 return isValid;
             }
             catch (System.Exception e)
             {
-                LogDebug($"ÅäÖÃÑéÖ¤Òì³£: {e.Message}");
+                LogDebug($"é…ç½®éªŒè¯å¼‚å¸¸: {e.Message}");
                 return false;
             }
         }
 
         /// <summary>
-        /// »ñÈ¡Ö¸¶¨ÌâĞÍµÄ´ğÌâÊ±¼äÏŞÖÆ
+        /// è·å–æŒ‡å®šé¢˜å‹çš„ç­”é¢˜æ—¶é—´é™åˆ¶
         /// </summary>
-        /// <param name="questionType">ÌâÄ¿ÀàĞÍ</param>
-        /// <returns>´ğÌâÊ±¼äÏŞÖÆ£¨Ãë£©</returns>
+        /// <param name="questionType">é¢˜ç›®ç±»å‹</param>
+        /// <returns>ç­”é¢˜æ—¶é—´é™åˆ¶ï¼ˆç§’ï¼‰</returns>
         public static float GetTimeLimitForQuestionType(QuestionType questionType)
         {
             if (Config == null)
             {
-                LogDebug($"TimerÅäÖÃÎ´ÉèÖÃ£¬Ê¹ÓÃÄ¬ÈÏÊ±¼ä: {GetDefaultTimeLimit()}Ãë");
+                LogDebug($"Timeré…ç½®æœªè®¾ç½®ï¼Œä½¿ç”¨é»˜è®¤æ—¶é—´: {GetDefaultTimeLimit()}ç§’");
                 return GetDefaultTimeLimit();
             }
 
             try
             {
                 float timeLimit = Config.GetTimeLimitForQuestionType(questionType);
-                LogDebug($"»ñÈ¡ÌâĞÍ {questionType} µÄÊ±¼äÏŞÖÆ: {timeLimit}Ãë (ÅäÖÃID: {Config.GetInstanceID()})");
+                LogDebug($"è·å–é¢˜å‹ {questionType} çš„æ—¶é—´é™åˆ¶: {timeLimit}ç§’ (é…ç½®ID: {Config.GetInstanceID()})");
                 return timeLimit;
             }
             catch (System.Exception e)
             {
-                LogDebug($"»ñÈ¡ÌâĞÍÊ±¼äÊ§°Ü: {e.Message}£¬Ê¹ÓÃÄ¬ÈÏÊ±¼ä");
+                LogDebug($"è·å–é¢˜å‹æ—¶é—´å¤±è´¥: {e.Message}ï¼Œä½¿ç”¨é»˜è®¤æ—¶é—´");
                 return GetDefaultTimeLimit();
             }
         }
 
         /// <summary>
-        /// »ñÈ¡Ö¸¶¨ÌâĞÍµÄÍêÕûTimerÉèÖÃ
+        /// è·å–æŒ‡å®šé¢˜å‹çš„å®Œæ•´Timerè®¾ç½®
         /// </summary>
-        /// <param name="questionType">ÌâÄ¿ÀàĞÍ</param>
-        /// <returns>TimerÉèÖÃ</returns>
+        /// <param name="questionType">é¢˜ç›®ç±»å‹</param>
+        /// <returns>Timerè®¾ç½®</returns>
         public static TimerConfig.QuestionTypeTimer GetTimerSettingsForQuestionType(QuestionType questionType)
         {
             if (Config == null)
             {
-                LogDebug("TimerÅäÖÃÎ´ÉèÖÃ£¬´´½¨Ä¬ÈÏÉèÖÃ");
+                LogDebug("Timeré…ç½®æœªè®¾ç½®ï¼Œåˆ›å»ºé»˜è®¤è®¾ç½®");
                 return CreateDefaultTimerSettings(questionType);
             }
 
             try
             {
                 var settings = Config.GetTimerForQuestionType(questionType);
-                LogDebug($"»ñÈ¡ÌâĞÍ {questionType} µÄTimerÉèÖÃ: {settings.baseTimeLimit}Ãë (ÅäÖÃID: {Config.GetInstanceID()})");
+                LogDebug($"è·å–é¢˜å‹ {questionType} çš„Timerè®¾ç½®: {settings.baseTimeLimit}ç§’ (é…ç½®ID: {Config.GetInstanceID()})");
                 return settings;
             }
             catch (System.Exception e)
             {
-                LogDebug($"»ñÈ¡ÌâĞÍTimerÉèÖÃÊ§°Ü: {e.Message}£¬Ê¹ÓÃÄ¬ÈÏÉèÖÃ");
+                LogDebug($"è·å–é¢˜å‹Timerè®¾ç½®å¤±è´¥: {e.Message}ï¼Œä½¿ç”¨é»˜è®¤è®¾ç½®");
                 return CreateDefaultTimerSettings(questionType);
             }
         }
 
         /// <summary>
-        /// »ñÈ¡È«¾ÖTimerÉèÖÃ
+        /// è·å–å…¨å±€Timerè®¾ç½®
         /// </summary>
-        /// <returns>È«¾ÖÉèÖÃĞÅÏ¢</returns>
+        /// <returns>å…¨å±€è®¾ç½®ä¿¡æ¯</returns>
         public static (float timeUpDelay, bool showTimeWarning, float warningThreshold, float criticalThreshold, Color normalColor, Color warningColor, Color criticalColor) GetGlobalSettings()
         {
             if (Config == null)
             {
-                LogDebug("TimerÅäÖÃÎ´ÉèÖÃ£¬Ê¹ÓÃÄ¬ÈÏÈ«¾ÖÉèÖÃ");
+                LogDebug("Timeré…ç½®æœªè®¾ç½®ï¼Œä½¿ç”¨é»˜è®¤å…¨å±€è®¾ç½®");
                 return (1f, true, 5f, 3f, Color.white, Color.yellow, Color.red);
             }
 
             var settings = (Config.timeUpDelay, Config.showTimeWarning, Config.warningThreshold, Config.criticalThreshold, Config.normalColor, Config.warningColor, Config.criticalColor);
-            LogDebug($"»ñÈ¡È«¾ÖÉèÖÃ: ¾¯¸æãĞÖµ={settings.warningThreshold}Ãë, Î£ÏÕãĞÖµ={settings.criticalThreshold}Ãë");
+            LogDebug($"è·å–å…¨å±€è®¾ç½®: è­¦å‘Šé˜ˆå€¼={settings.warningThreshold}ç§’, å±é™©é˜ˆå€¼={settings.criticalThreshold}ç§’");
             return settings;
         }
 
         /// <summary>
-        /// ¼ì²éTimerÅäÖÃÊÇ·ñÒÑÉèÖÃ
+        /// æ£€æŸ¥Timeré…ç½®æ˜¯å¦å·²è®¾ç½®
         /// </summary>
-        /// <returns>ÊÇ·ñÒÑÉèÖÃÅäÖÃ</returns>
+        /// <returns>æ˜¯å¦å·²è®¾ç½®é…ç½®</returns>
         public static bool IsConfigured()
         {
             bool configured = initialized && Config != null;
-            LogDebug($"ÅäÖÃ×´Ì¬¼ì²é: ÒÑ³õÊ¼»¯={initialized}, ÅäÖÃ´æÔÚ={Config != null}, ÕûÌå×´Ì¬={configured}");
+            LogDebug($"é…ç½®çŠ¶æ€æ£€æŸ¥: å·²åˆå§‹åŒ–={initialized}, é…ç½®å­˜åœ¨={Config != null}, æ•´ä½“çŠ¶æ€={configured}");
             return configured;
         }
 
         /// <summary>
-        /// »ñÈ¡ÅäÖÃÕªÒªĞÅÏ¢
+        /// è·å–é…ç½®æ‘˜è¦ä¿¡æ¯
         /// </summary>
-        /// <returns>ÅäÖÃÕªÒª×Ö·û´®</returns>
+        /// <returns>é…ç½®æ‘˜è¦å­—ç¬¦ä¸²</returns>
         public static string GetConfigSummary()
         {
             if (Config == null)
             {
-                return "TimerÅäÖÃÎ´ÉèÖÃ";
+                return "Timeré…ç½®æœªè®¾ç½®";
             }
 
             try
             {
                 string summary = Config.GetConfigSummary();
-                LogDebug($"»ñÈ¡ÅäÖÃÕªÒª: {summary} (ÅäÖÃID: {Config.GetInstanceID()})");
+                LogDebug($"è·å–é…ç½®æ‘˜è¦: {summary} (é…ç½®ID: {Config.GetInstanceID()})");
                 return summary;
             }
             catch (System.Exception e)
             {
-                LogDebug($"»ñÈ¡ÅäÖÃÕªÒªÊ§°Ü: {e.Message}");
-                return "ÅäÖÃÕªÒª»ñÈ¡Ê§°Ü";
+                LogDebug($"è·å–é…ç½®æ‘˜è¦å¤±è´¥: {e.Message}");
+                return "é…ç½®æ‘˜è¦è·å–å¤±è´¥";
             }
         }
 
         /// <summary>
-        /// ÖØÖÃÎªÄ¬ÈÏÅäÖÃ
+        /// é‡ç½®ä¸ºé»˜è®¤é…ç½®
         /// </summary>
         public static void ResetToDefault()
         {
-            LogDebug("ÖØÖÃTimerÅäÖÃÎªÄ¬ÈÏÖµ");
+            LogDebug("é‡ç½®Timeré…ç½®ä¸ºé»˜è®¤å€¼");
 
             if (Config != null)
             {
                 try
                 {
-                    // ÓÅÏÈÖØÖÃµ±Ç°ÅäÖÃ£¬±£³ÖÒıÓÃ²»±ä
+                    // ä¼˜å…ˆé‡ç½®å½“å‰é…ç½®ï¼Œä¿æŒå¼•ç”¨ä¸å˜
                     Config.ResetToDefault();
-                    LogDebug($"µ±Ç°ÅäÖÃÒÑÖØÖÃ (ÅäÖÃID: {Config.GetInstanceID()})");
+                    LogDebug($"å½“å‰é…ç½®å·²é‡ç½® (é…ç½®ID: {Config.GetInstanceID()})");
                     return;
                 }
                 catch (System.Exception e)
                 {
-                    LogDebug($"ÖØÖÃµ±Ç°ÅäÖÃÊ§°Ü: {e.Message}£¬½«¼ÓÔØĞÂµÄÄ¬ÈÏÅäÖÃ");
+                    LogDebug($"é‡ç½®å½“å‰é…ç½®å¤±è´¥: {e.Message}ï¼Œå°†åŠ è½½æ–°çš„é»˜è®¤é…ç½®");
                 }
             }
 
-            // Èç¹ûÖØÖÃÊ§°Ü»òÅäÖÃÎª¿Õ£¬¼ÓÔØĞÂµÄÄ¬ÈÏÅäÖÃ
+            // å¦‚æœé‡ç½®å¤±è´¥æˆ–é…ç½®ä¸ºç©ºï¼ŒåŠ è½½æ–°çš„é»˜è®¤é…ç½®
             LoadDefaultConfig();
         }
 
         /// <summary>
-        /// »ñÈ¡ÅäÖÃ×´Ì¬ĞÅÏ¢£¨µ÷ÊÔÓÃ£©
+        /// è·å–é…ç½®çŠ¶æ€ä¿¡æ¯ï¼ˆè°ƒè¯•ç”¨ï¼‰
         /// </summary>
-        /// <returns>ÏêÏ¸µÄÅäÖÃ×´Ì¬ĞÅÏ¢</returns>
+        /// <returns>è¯¦ç»†çš„é…ç½®çŠ¶æ€ä¿¡æ¯</returns>
         public static string GetConfigStatus()
         {
-            var status = "=== TimerConfigManager×´Ì¬ ===\n";
-            status += $"ÒÑ³õÊ¼»¯: {initialized}\n";
-            status += $"ÅäÖÃÊµÀı: {(Config != null ? "´æÔÚ" : "²»´æÔÚ")}\n";
+            var status = "=== TimerConfigManagerçŠ¶æ€ ===\n";
+            status += $"å·²åˆå§‹åŒ–: {initialized}\n";
+            status += $"é…ç½®å®ä¾‹: {(Config != null ? "å­˜åœ¨" : "ä¸å­˜åœ¨")}\n";
 
             if (Config != null)
             {
-                status += $"ÅäÖÃÃû³Æ: {Config.ConfigName}\n";
-                status += $"ÅäÖÃID: {Config.GetInstanceID()}\n";
-                status += $"ÅäÖÃÓĞĞ§ĞÔ: {ValidateCurrentConfig()}\n";
+                status += $"é…ç½®åç§°: {Config.ConfigName}\n";
+                status += $"é…ç½®ID: {Config.GetInstanceID()}\n";
+                status += $"é…ç½®æœ‰æ•ˆæ€§: {ValidateCurrentConfig()}\n";
 
                 try
                 {
                     var timers = Config.GetAllTimers();
-                    status += $"ÅäÖÃµÄÌâĞÍÊıÁ¿: {timers.Length}\n";
+                    status += $"é…ç½®çš„é¢˜å‹æ•°é‡: {timers.Length}\n";
 
                     if (timers.Length > 0)
                     {
-                        status += "ÌâĞÍÊ±¼äÅäÖÃ:\n";
+                        status += "é¢˜å‹æ—¶é—´é…ç½®:\n";
                         foreach (var timer in timers)
                         {
-                            status += $"  {timer.questionType}: {timer.baseTimeLimit}Ãë\n";
+                            status += $"  {timer.questionType}: {timer.baseTimeLimit}ç§’\n";
                         }
                     }
                 }
                 catch (System.Exception e)
                 {
-                    status += $"»ñÈ¡ÅäÖÃÏêÇéÊ§°Ü: {e.Message}\n";
+                    status += $"è·å–é…ç½®è¯¦æƒ…å¤±è´¥: {e.Message}\n";
                 }
             }
 
@@ -285,22 +300,22 @@ namespace Core
         }
 
         /// <summary>
-        /// ¼ÓÔØÄ¬ÈÏÅäÖÃ
+        /// åŠ è½½é»˜è®¤é…ç½®
         /// </summary>
         private static void LoadDefaultConfig()
         {
-            LogDebug("³¢ÊÔ¼ÓÔØÄ¬ÈÏTimerÅäÖÃ");
+            LogDebug("å°è¯•åŠ è½½é»˜è®¤Timeré…ç½®");
 
-            // ·½·¨1£º´ÓResources¼ÓÔØ
+            // æ–¹æ³•1ï¼šä»ResourcesåŠ è½½
             var resourceConfig = Resources.Load<TimerConfig>("TimerConfig");
             if (resourceConfig != null)
             {
                 Config = resourceConfig;
-                LogDebug($"´ÓResources¼ÓÔØTimerÅäÖÃ: {resourceConfig.ConfigName} (ID: {resourceConfig.GetInstanceID()})");
+                LogDebug($"ä»ResourcesåŠ è½½Timeré…ç½®: {resourceConfig.ConfigName} (ID: {resourceConfig.GetInstanceID()})");
                 return;
             }
 
-            // ·½·¨2£º³¢ÊÔÆäËû¿ÉÄÜµÄÂ·¾¶
+            // æ–¹æ³•2ï¼šå°è¯•å…¶ä»–å¯èƒ½çš„è·¯å¾„
             string[] possiblePaths = {
                 "Config/TimerConfig",
                 "Configs/TimerConfig",
@@ -313,37 +328,37 @@ namespace Core
                 if (config != null)
                 {
                     Config = config;
-                    LogDebug($"´ÓResourcesÂ·¾¶ {path} ¼ÓÔØTimerÅäÖÃ: {config.ConfigName} (ID: {config.GetInstanceID()})");
+                    LogDebug($"ä»Resourcesè·¯å¾„ {path} åŠ è½½Timeré…ç½®: {config.ConfigName} (ID: {config.GetInstanceID()})");
                     return;
                 }
             }
 
-            // ·½·¨3£º´´½¨ÔËĞĞÊ±Ä¬ÈÏÅäÖÃ
-            LogDebug("Î´ÕÒµ½TimerÅäÖÃÎÄ¼ş£¬´´½¨ÔËĞĞÊ±Ä¬ÈÏÅäÖÃ");
+            // æ–¹æ³•3ï¼šåˆ›å»ºè¿è¡Œæ—¶é»˜è®¤é…ç½®
+            LogDebug("æœªæ‰¾åˆ°Timeré…ç½®æ–‡ä»¶ï¼Œåˆ›å»ºè¿è¡Œæ—¶é»˜è®¤é…ç½®");
             CreateRuntimeDefaultConfig();
         }
 
         /// <summary>
-        /// ´´½¨ÔËĞĞÊ±Ä¬ÈÏÅäÖÃ
+        /// åˆ›å»ºè¿è¡Œæ—¶é»˜è®¤é…ç½®
         /// </summary>
         private static void CreateRuntimeDefaultConfig()
         {
             var defaultConfig = ScriptableObject.CreateInstance<TimerConfig>();
             defaultConfig.ResetToDefault();
             Config = defaultConfig;
-            LogDebug($"ÔËĞĞÊ±Ä¬ÈÏTimerÅäÖÃ´´½¨Íê³É (ID: {defaultConfig.GetInstanceID()})");
+            LogDebug($"è¿è¡Œæ—¶é»˜è®¤Timeré…ç½®åˆ›å»ºå®Œæˆ (ID: {defaultConfig.GetInstanceID()})");
         }
 
         /// <summary>
-        /// »ñÈ¡Ä¬ÈÏÊ±¼äÏŞÖÆ
+        /// è·å–é»˜è®¤æ—¶é—´é™åˆ¶
         /// </summary>
         private static float GetDefaultTimeLimit()
         {
-            return 30f; // Ä¬ÈÏ30Ãë
+            return 30f; // é»˜è®¤30ç§’
         }
 
         /// <summary>
-        /// ´´½¨Ä¬ÈÏµÄTimerÉèÖÃ
+        /// åˆ›å»ºé»˜è®¤çš„Timerè®¾ç½®
         /// </summary>
         private static TimerConfig.QuestionTypeTimer CreateDefaultTimerSettings(QuestionType questionType)
         {
@@ -353,7 +368,7 @@ namespace Core
                 baseTimeLimit = GetDefaultTimeLimit()
             };
 
-            // ¸ù¾İÌâĞÍµ÷ÕûÄ¬ÈÏÊ±¼ä
+            // æ ¹æ®é¢˜å‹è°ƒæ•´é»˜è®¤æ—¶é—´
             switch (questionType)
             {
                 case QuestionType.ExplanationChoice:
@@ -371,7 +386,7 @@ namespace Core
                     break;
 
                 default:
-                    // Ìî¿ÕÌâµÈÊ¹ÓÃÄ¬ÈÏ30Ãë
+                    // å¡«ç©ºé¢˜ç­‰ä½¿ç”¨é»˜è®¤30ç§’
                     break;
             }
 
@@ -379,7 +394,7 @@ namespace Core
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾Êä³ö
+        /// è°ƒè¯•æ—¥å¿—è¾“å‡º
         /// </summary>
         private static void LogDebug(string message)
         {
@@ -392,17 +407,17 @@ namespace Core
         }
 
         /// <summary>
-        /// ÉèÖÃµ÷ÊÔÈÕÖ¾¿ª¹Ø
+        /// è®¾ç½®è°ƒè¯•æ—¥å¿—å¼€å…³
         /// </summary>
         public static void SetDebugLogs(bool enabled)
         {
             enableDebugLogs = enabled;
-            LogDebug($"µ÷ÊÔÈÕÖ¾ÒÑ{(enabled ? "ÆôÓÃ" : "½ûÓÃ")}");
+            LogDebug($"è°ƒè¯•æ—¥å¿—å·²{(enabled ? "å¯ç”¨" : "ç¦ç”¨")}");
         }
 
 #if UNITY_EDITOR
         /// <summary>
-        /// ±à¼­Æ÷×¨ÓÃ£ºÇ¿ÖÆÖØĞÂ³õÊ¼»¯
+        /// ç¼–è¾‘å™¨ä¸“ç”¨ï¼šå¼ºåˆ¶é‡æ–°åˆå§‹åŒ–
         /// </summary>
         [UnityEditor.MenuItem("Tools/Timer Config/Force Reinitialize")]
         public static void ForceReinitialize()
@@ -410,40 +425,77 @@ namespace Core
             initialized = false;
             config = null;
             Initialize();
-            Debug.Log("[TimerConfigManager] Ç¿ÖÆÖØĞÂ³õÊ¼»¯Íê³É");
+            Debug.Log("[TimerConfigManager] å¼ºåˆ¶é‡æ–°åˆå§‹åŒ–å®Œæˆ");
         }
 
         /// <summary>
-        /// ±à¼­Æ÷×¨ÓÃ£ºÏÔÊ¾µ±Ç°ÅäÖÃ
+        /// ç¼–è¾‘å™¨ä¸“ç”¨ï¼šæ˜¾ç¤ºå½“å‰é…ç½®
         /// </summary>
         [UnityEditor.MenuItem("Tools/Timer Config/Show Current Config")]
         public static void ShowCurrentConfig()
         {
-            Debug.Log($"[TimerConfigManager] µ±Ç°ÅäÖÃ×´Ì¬:\n{GetConfigStatus()}");
+            Debug.Log($"[TimerConfigManager] å½“å‰é…ç½®çŠ¶æ€:\n{GetConfigStatus()}");
         }
 
         /// <summary>
-        /// ±à¼­Æ÷×¨ÓÃ£ºÏÔÊ¾ÅäÖÃÕªÒª
+        /// ç¼–è¾‘å™¨ä¸“ç”¨ï¼šæ˜¾ç¤ºé…ç½®æ‘˜è¦
         /// </summary>
         [UnityEditor.MenuItem("Tools/Timer Config/Show Config Summary")]
         public static void ShowConfigSummary()
         {
-            Debug.Log($"[TimerConfigManager] µ±Ç°ÅäÖÃÕªÒª:\n{GetConfigSummary()}");
+            Debug.Log($"[TimerConfigManager] å½“å‰é…ç½®æ‘˜è¦:\n{GetConfigSummary()}");
         }
 
         /// <summary>
-        /// ±à¼­Æ÷×¨ÓÃ£º²âÊÔ»ñÈ¡¸÷ÌâĞÍÊ±¼ä
+        /// ç¼–è¾‘å™¨ä¸“ç”¨ï¼šæµ‹è¯•è·å–å„é¢˜å‹æ—¶é—´
         /// </summary>
         [UnityEditor.MenuItem("Tools/Timer Config/Test All Question Types")]
         public static void TestAllQuestionTypes()
         {
-            Debug.Log("[TimerConfigManager] ²âÊÔËùÓĞÌâĞÍÊ±¼äÅäÖÃ:");
+            Debug.Log("[TimerConfigManager] æµ‹è¯•æ‰€æœ‰é¢˜å‹æ—¶é—´é…ç½®:");
 
             var questionTypes = System.Enum.GetValues(typeof(QuestionType));
             foreach (QuestionType questionType in questionTypes)
             {
                 float timeLimit = GetTimeLimitForQuestionType(questionType);
-                Debug.Log($"  {questionType}: {timeLimit}Ãë");
+                Debug.Log($"  {questionType}: {timeLimit}ç§’");
+            }
+        }
+
+        /// <summary>
+        /// ç¼–è¾‘å™¨ä¸“ç”¨ï¼šéªŒè¯é…ç½®å¼•ç”¨ä¸€è‡´æ€§
+        /// </summary>
+        [UnityEditor.MenuItem("Tools/Timer Config/Validate Config References")]
+        public static void ValidateConfigReferences()
+        {
+            Debug.Log("[TimerConfigManager] éªŒè¯é…ç½®å¼•ç”¨ä¸€è‡´æ€§:");
+
+            var config1 = Config;
+            var config2 = Config;
+
+            Debug.Log($"ä¸¤æ¬¡è·å–çš„é…ç½®å¼•ç”¨æ˜¯å¦ç›¸åŒ: {config1 == config2}");
+            Debug.Log($"é…ç½®1 ID: {config1?.GetInstanceID()}");
+            Debug.Log($"é…ç½®2 ID: {config2?.GetInstanceID()}");
+
+            if (config1 != null)
+            {
+                var timersBefore = config1.GetAllTimers().Length;
+                Debug.Log($"ä¿®æ”¹å‰é¢˜å‹æ•°é‡: {timersBefore}");
+
+                // æ¨¡æ‹Ÿä¿®æ”¹
+                var testSettings = new TimerConfig.QuestionTypeTimer
+                {
+                    questionType = QuestionType.ExplanationChoice,
+                    baseTimeLimit = 999f
+                };
+                config1.SetTimerForQuestionType(QuestionType.ExplanationChoice, testSettings);
+
+                var timersAfter = Config.GetAllTimers().Length;
+                var modifiedTime = Config.GetTimeLimitForQuestionType(QuestionType.ExplanationChoice);
+
+                Debug.Log($"ä¿®æ”¹åé¢˜å‹æ•°é‡: {timersAfter}");
+                Debug.Log($"ä¿®æ”¹åExplanationChoiceæ—¶é—´: {modifiedTime}ç§’");
+                Debug.Log($"ä¿®æ”¹æ˜¯å¦ç”Ÿæ•ˆ: {modifiedTime == 999f}");
             }
         }
 #endif

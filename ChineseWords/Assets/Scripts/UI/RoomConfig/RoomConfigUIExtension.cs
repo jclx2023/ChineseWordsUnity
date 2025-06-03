@@ -4,13 +4,12 @@ using System.Collections;
 using Core;
 using Core.Network;
 using TMPro;
-using System.Linq;
 
 namespace UI.RoomConfig
 {
     /// <summary>
-    /// 房间配置UI扩展组件 - 支持Timer和Weight两种配置的Footer按钮逻辑
-    /// 修复：Apply按钮现在对Timer配置也有作用
+    /// 房间配置UI扩展组件 - 简化版
+    /// 专注于配置管理，不涉及NQMC更新
     /// </summary>
     public class RoomConfigUIExtension : MonoBehaviour
     {
@@ -34,8 +33,6 @@ namespace UI.RoomConfig
         // 配置状态
         private bool hasUnsavedWeightChanges = false;
         private bool hasUnsavedTimerChanges = false;
-        private QuestionWeightConfig originalWeightConfig;
-        private TimerConfig originalTimerConfig;
 
         // 计算属性
         private bool HasUnsavedChanges => hasUnsavedWeightChanges || hasUnsavedTimerChanges;
@@ -54,84 +51,72 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 设置默认配置
+        /// 设置默认配置 - 确保引用一致性
         /// </summary>
         private void SetupDefaultConfigs()
         {
+            LogDebug("设置默认配置");
+
             // 设置权重配置
             if (defaultWeightConfig != null)
             {
-                originalWeightConfig = ScriptableObject.CreateInstance<QuestionWeightConfig>();
-                CopyWeightConfig(defaultWeightConfig, originalWeightConfig);
                 QuestionWeightManager.SetConfig(defaultWeightConfig);
-                LogDebug("已设置默认权重配置");
+                LogDebug($"权重配置已设置");
             }
 
-            // 设置Timer配置
+            // 设置Timer配置 - 关键修复：多步骤验证
             if (defaultTimerConfig != null)
             {
-                originalTimerConfig = ScriptableObject.CreateInstance<TimerConfig>();
-                CopyTimerConfig(defaultTimerConfig, originalTimerConfig);
-                TimerConfigManager.SetConfig(defaultTimerConfig);
-                LogDebug("已设置默认Timer配置");
-            }
-            else
-            {
-                LogDebug("警告：未设置默认Timer配置，将创建默认配置");
-                var defaultConfig = ScriptableObject.CreateInstance<TimerConfig>();
-                defaultConfig.ResetToDefault();
-                originalTimerConfig = ScriptableObject.CreateInstance<TimerConfig>();
-                CopyTimerConfig(defaultConfig, originalTimerConfig);
-                TimerConfigManager.SetConfig(defaultConfig);
-            }
-        }
+                LogDebug($"开始设置Timer配置: {defaultTimerConfig.ConfigName} (ID: {defaultTimerConfig.GetInstanceID()})");
 
-        /// <summary>
-        /// 复制权重配置
-        /// </summary>
-        private void CopyWeightConfig(QuestionWeightConfig source, QuestionWeightConfig target)
-        {
-            if (source == null || target == null) return;
+                // 步骤1：检查TimerConfigManager初始化状态
+                bool wasInitialized = TimerConfigManager.IsConfigured();
+                LogDebug($"设置前TimerConfigManager初始化状态: {wasInitialized}");
 
-            try
-            {
-                target.CopyFrom(source);
-                LogDebug("权重配置复制完成");
-            }
-            catch (System.Exception e)
-            {
-                LogDebug($"权重配置复制失败: {e.Message}");
-            }
-        }
+                // 步骤2：使用ForceSetConfig
+                TimerConfigManager.ForceSetConfig(defaultTimerConfig);
+                LogDebug("ForceSetConfig 调用完成");
 
-        /// <summary>
-        /// 复制Timer配置
-        /// </summary>
-        private void CopyTimerConfig(TimerConfig source, TimerConfig target)
-        {
-            if (source == null || target == null) return;
+                // 步骤3：立即验证
+                var managerConfig = TimerConfigManager.Config;
+                LogDebug($"设置后管理器配置ID: {managerConfig?.GetInstanceID()}");
+                LogDebug($"设置后管理器配置名称: {managerConfig?.ConfigName}");
 
-            try
-            {
-                // 假设TimerConfig也有CopyFrom方法，或者手动复制
-                if (target.GetType().GetMethod("CopyFrom") != null)
+                bool referenceMatch = (defaultTimerConfig == managerConfig);
+                LogDebug($"Timer配置引用验证: {(referenceMatch ? "✓ 一致" : "✗ 不一致")}");
+
+                if (!referenceMatch)
                 {
-                    target.GetType().GetMethod("CopyFrom").Invoke(target, new object[] { source });
+                    Debug.LogError("[RoomConfigUIExtension] Timer配置引用不一致，这会导致实时更新失败！");
+
+                    // 调试信息：显示详细状态
+                    LogDebug($"详细调试信息:");
+                    LogDebug($"  defaultTimerConfig: {defaultTimerConfig} (ID: {defaultTimerConfig.GetInstanceID()})");
+                    LogDebug($"  managerConfig: {managerConfig} (ID: {managerConfig?.GetInstanceID()})");
+                    LogDebug($"  TimerConfigManager.IsConfigured(): {TimerConfigManager.IsConfigured()}");
+
+                    // 尝试再次强制设置
+                    LogDebug("尝试第二次强制设置...");
+                    TimerConfigManager.ForceSetConfig(defaultTimerConfig);
+
+                    var secondCheck = TimerConfigManager.Config;
+                    bool secondMatch = (defaultTimerConfig == secondCheck);
+                    LogDebug($"第二次设置结果: {(secondMatch ? "✓ 成功" : "✗ 仍然失败")}");
+
+                    if (!secondMatch)
+                    {
+                        Debug.LogError("Timer配置引用问题无法解决，请检查TimerConfigManager.Initialize()逻辑");
+                    }
                 }
                 else
                 {
-                    // 手动复制Timer配置
-                    var sourceTimers = source.GetAllTimers();
-                    foreach (var timer in sourceTimers)
-                    {
-                        target.SetTimerForQuestionType(timer.questionType, timer);
-                    }
+                    LogDebug("Timer配置设置成功");
                 }
-                LogDebug("Timer配置复制完成");
             }
-            catch (System.Exception e)
+            else
             {
-                LogDebug($"Timer配置复制失败: {e.Message}");
+                LogDebug("未设置默认Timer配置，使用系统默认");
+                TimerConfigManager.Initialize();
             }
         }
 
@@ -285,11 +270,6 @@ namespace UI.RoomConfig
                     success &= ApplyWeightConfigChanges();
                     if (success)
                     {
-                        // 更新原始权重配置
-                        if (originalWeightConfig != null && QuestionWeightManager.Config != null)
-                        {
-                            CopyWeightConfig(QuestionWeightManager.Config, originalWeightConfig);
-                        }
                         hasUnsavedWeightChanges = false;
                         LogDebug("权重配置应用成功");
                     }
@@ -301,11 +281,6 @@ namespace UI.RoomConfig
                     success &= ApplyTimerConfigChanges();
                     if (success)
                     {
-                        // 更新原始Timer配置
-                        if (originalTimerConfig != null && TimerConfigManager.Config != null)
-                        {
-                            CopyTimerConfig(TimerConfigManager.Config, originalTimerConfig);
-                        }
                         hasUnsavedTimerChanges = false;
                         LogDebug("Timer配置应用成功");
                     }
@@ -412,7 +387,7 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 应用权重配置变更到游戏系统
+        /// 应用权重配置变更到管理器
         /// </summary>
         private bool ApplyWeightConfigChanges()
         {
@@ -425,16 +400,14 @@ namespace UI.RoomConfig
 
             try
             {
-                // 更新NQMC的权重配置
-                UpdateNQMCWeights(config);
-
-                // 通知RoomConfigManager
+                // 通知RoomConfigManager配置已更新
                 if (RoomConfigManager.Instance != null)
                 {
                     RoomConfigManager.Instance.ApplyConfigChanges();
-                    LogDebug("已通知RoomConfigManager应用权重配置");
+                    LogDebug("已通知RoomConfigManager权重配置变更");
                 }
 
+                LogDebug($"权重配置已确认应用: {config.GetConfigSummary()}");
                 return true;
             }
             catch (System.Exception e)
@@ -445,7 +418,7 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 应用Timer配置变更到游戏系统
+        /// 应用Timer配置变更到管理器
         /// </summary>
         private bool ApplyTimerConfigChanges()
         {
@@ -458,128 +431,20 @@ namespace UI.RoomConfig
 
             try
             {
-                // 更新NQMC的Timer配置
-                UpdateNQMCTimers(config);
-
-                // 通知RoomConfigManager
+                // 通知RoomConfigManager配置已更新
                 if (RoomConfigManager.Instance != null)
                 {
                     RoomConfigManager.Instance.ApplyConfigChanges();
-                    LogDebug("已通知RoomConfigManager应用Timer配置");
+                    LogDebug("已通知RoomConfigManager Timer配置变更");
                 }
 
+                LogDebug($"Timer配置已确认应用: {config.GetConfigSummary()}");
                 return true;
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"应用Timer配置失败: {e.Message}");
                 return false;
-            }
-        }
-
-        /// <summary>
-        /// 更新NQMC的权重配置
-        /// </summary>
-        private void UpdateNQMCWeights(QuestionWeightConfig config)
-        {
-            var nqmc = NetworkQuestionManagerController.Instance;
-            if (nqmc == null)
-            {
-                LogDebug("NQMC实例不存在，跳过权重更新");
-                return;
-            }
-
-            try
-            {
-                // 使用反射更新NQMC的TypeWeights字段
-                var typeWeightsField = typeof(NetworkQuestionManagerController).GetField("TypeWeights",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                if (typeWeightsField != null)
-                {
-                    var typeWeights = typeWeightsField.GetValue(nqmc) as System.Collections.Generic.Dictionary<QuestionType, float>;
-                    if (typeWeights != null)
-                    {
-                        var currentWeights = config.GetWeights();
-                        typeWeights.Clear();
-
-                        foreach (var weight in currentWeights)
-                        {
-                            typeWeights[weight.Key] = weight.Value;
-                        }
-
-                        LogDebug($"NQMC权重配置已更新，包含 {typeWeights.Count} 种题型");
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"更新NQMC权重配置失败: {e.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 更新NQMC的Timer配置
-        /// </summary>
-        private void UpdateNQMCTimers(TimerConfig config)
-        {
-            var nqmc = NetworkQuestionManagerController.Instance;
-            if (nqmc == null)
-            {
-                LogDebug("NQMC实例不存在，跳过Timer更新");
-                return;
-            }
-
-            try
-            {
-                var allTimers = config.GetAllTimers();
-                if (allTimers.Length == 0)
-                {
-                    LogDebug("Timer配置为空，跳过更新");
-                    return;
-                }
-
-                // 方案1：尝试更新全局时间限制字段
-                var questionTimeLimitField = typeof(NetworkQuestionManagerController).GetField("questionTimeLimit",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                if (questionTimeLimitField != null)
-                {
-                    // 使用平均时间作为全局时间限制
-                    float avgTimeLimit = allTimers.Average(t => t.baseTimeLimit);
-                    questionTimeLimitField.SetValue(nqmc, avgTimeLimit);
-                    LogDebug($"NQMC全局时间限制已更新为平均值: {avgTimeLimit:F1}秒");
-                }
-
-                // 方案2：尝试更新题型特定的时间字典
-                var typeTimeLimitsField = typeof(NetworkQuestionManagerController).GetField("typeTimeLimits",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                if (typeTimeLimitsField != null)
-                {
-                    var typeTimeLimits = typeTimeLimitsField.GetValue(nqmc) as System.Collections.Generic.Dictionary<Core.QuestionType, float>;
-                    if (typeTimeLimits != null)
-                    {
-                        typeTimeLimits.Clear();
-                        foreach (var timer in allTimers)
-                        {
-                            typeTimeLimits[timer.questionType] = timer.baseTimeLimit;
-                        }
-                        LogDebug($"NQMC题型时间字典已更新，包含 {typeTimeLimits.Count} 种题型");
-                    }
-                }
-                else
-                {
-                    LogDebug("NQMC没有typeTimeLimits字段，使用全局时间限制");
-                }
-
-                // 方案3：如果有其他Timer相关字段，可以在这里添加
-
-                LogDebug($"NQMC Timer配置更新完成 - 配置了{allTimers.Length}个题型的时间");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"更新NQMC Timer配置失败: {e.Message}");
             }
         }
 
@@ -627,8 +492,6 @@ namespace UI.RoomConfig
             {
                 closeButton.interactable = true;
             }
-
-            LogDebug($"按钮状态已更新 - Apply: {(hasChanges ? "可用(绿)" : "禁用(灰)")}, 权重变更: {hasUnsavedWeightChanges}, Timer变更: {hasUnsavedTimerChanges}");
         }
 
         #region 公共接口
@@ -684,35 +547,8 @@ namespace UI.RoomConfig
         /// </summary>
         public string GetConfigSummary()
         {
-            string weightSummary = "未配置";
-            string timerSummary = "未配置";
-
-            var weightConfig = QuestionWeightManager.Config;
-            if (weightConfig != null)
-            {
-                try
-                {
-                    weightSummary = weightConfig.GetConfigSummary();
-                }
-                catch
-                {
-                    weightSummary = "配置摘要获取失败";
-                }
-            }
-
-            var timerConfig = TimerConfigManager.Config;
-            if (timerConfig != null)
-            {
-                try
-                {
-                    timerSummary = timerConfig.GetConfigSummary();
-                }
-                catch
-                {
-                    timerSummary = "配置摘要获取失败";
-                }
-            }
-
+            string weightSummary = QuestionWeightManager.Config?.GetConfigSummary() ?? "未配置";
+            string timerSummary = TimerConfigManager.Config?.GetConfigSummary() ?? "未配置";
             return $"权重: {weightSummary}, Timer: {timerSummary}";
         }
 
@@ -752,23 +588,6 @@ namespace UI.RoomConfig
             if (closeButton != null)
                 closeButton.onClick.RemoveAllListeners();
 
-            // 清理临时创建的配置对象
-            if (originalWeightConfig != null)
-            {
-                if (Application.isPlaying)
-                    Destroy(originalWeightConfig);
-                else
-                    DestroyImmediate(originalWeightConfig);
-            }
-
-            if (originalTimerConfig != null)
-            {
-                if (Application.isPlaying)
-                    Destroy(originalTimerConfig);
-                else
-                    DestroyImmediate(originalTimerConfig);
-            }
-
             LogDebug("RoomConfigUIExtension资源已清理");
         }
 
@@ -803,39 +622,40 @@ namespace UI.RoomConfig
             LogDebug(status);
         }
 
+        [ContextMenu("验证Timer配置引用")]
+        private void EditorValidateTimerConfigReference()
+        {
+            if (Application.isPlaying)
+            {
+                var defaultConfig = defaultTimerConfig;
+                var managerConfig = TimerConfigManager.Config;
+
+                Debug.Log($"默认配置ID: {defaultConfig?.GetInstanceID()}");
+                Debug.Log($"管理器配置ID: {managerConfig?.GetInstanceID()}");
+                Debug.Log($"引用一致性: {(defaultConfig == managerConfig ? "✓ 一致" : "✗ 不一致")}");
+
+                if (timerConfigPanel != null)
+                {
+                    // 通过反射获取面板配置
+                    var currentConfigField = typeof(TimerConfigPanel).GetField("currentConfig",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (currentConfigField != null)
+                    {
+                        var panelConfig = currentConfigField.GetValue(timerConfigPanel) as TimerConfig;
+                        Debug.Log($"面板配置ID: {panelConfig?.GetInstanceID()}");
+                        Debug.Log($"面板与管理器一致: {(panelConfig == managerConfig ? "✓ 一致" : "✗ 不一致")}");
+                    }
+                }
+            }
+        }
+
         [ContextMenu("测试Apply按钮")]
         private void EditorTestApplyButton()
         {
             if (Application.isPlaying)
             {
                 OnApplyClicked();
-            }
-        }
-
-        [ContextMenu("测试Reset按钮")]
-        private void EditorTestResetButton()
-        {
-            if (Application.isPlaying)
-            {
-                OnResetClicked();
-            }
-        }
-
-        [ContextMenu("测试Close按钮")]
-        private void EditorTestCloseButton()
-        {
-            if (Application.isPlaying)
-            {
-                OnCloseClicked();
-            }
-        }
-
-        [ContextMenu("触发Timer配置变更")]
-        private void EditorTriggerTimerConfigChanged()
-        {
-            if (Application.isPlaying)
-            {
-                OnTimerConfigChanged();
             }
         }
 #endif

@@ -291,7 +291,7 @@ MonoBehaviour:
   nameLabel_Legacy: {fileID: 0}
   percentLabel_Legacy: {fileID: 0}
   autoFindComponents: 1
-  enableDebugLogs: 1
+  enableDebugLogs: 0
 --- !u!1 &6617161596482293670
 GameObject:
   m_ObjectHideFlags: 0
