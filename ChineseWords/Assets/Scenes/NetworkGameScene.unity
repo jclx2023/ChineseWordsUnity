@@ -1851,10 +1851,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 906b73de48141a24aa6d2b510ceacd02, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  questionTimeLimit: 30
-  initialPlayerHealth: 100
-  damagePerWrongAnswer: 20
-  autoStartGame: 1
   isDualLayerArchitecture: 1
   isServerLayerOnly: 0
   enableDebugLogs: 1
@@ -1877,7 +1873,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enableDebugLogs: 1
   cacheProviders: 1
-  timerConfig: {fileID: 0}
+  timerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
 --- !u!1 &1678533145
 GameObject:
   m_ObjectHideFlags: 0
