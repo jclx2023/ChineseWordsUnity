@@ -689,6 +689,85 @@ namespace Core.Network
 
         #region 游戏消息处理器（保持与原NetworkManager兼容）
 
+        /// <summary>
+        /// 处理游戏进度消息
+        /// </summary>
+        [MessageHandler((ushort)NetworkMessageType.GameProgress)]
+        private static void HandleGameProgress(Message message)
+        {
+            int questionNumber = message.GetInt();
+            int alivePlayerCount = message.GetInt();
+            ushort turnPlayerId = message.GetUShort();
+
+            Debug.Log($"[NetworkManager] 收到游戏进度: 第{questionNumber}题, 存活{alivePlayerCount}人, 回合玩家{turnPlayerId}");
+
+            // 转发给NetworkUI
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnGameProgressReceived(questionNumber, alivePlayerCount, turnPlayerId);
+            }
+        }
+
+        /// <summary>
+        /// 处理回合变更消息
+        /// </summary>
+        [MessageHandler((ushort)NetworkMessageType.PlayerTurnChanged)]
+        private static void HandlePlayerTurnChanged(Message message)
+        {
+            ushort newTurnPlayerId = message.GetUShort();
+
+            Debug.Log($"[NetworkManager] 收到回合变更: 玩家{newTurnPlayerId}");
+
+            // 转发给NetworkUI
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnTurnChangedReceived(newTurnPlayerId);
+            }
+        }
+
+        /// <summary>
+        /// 处理血量更新消息（如果还没有的话）
+        /// </summary>
+        [MessageHandler((ushort)NetworkMessageType.HealthUpdate)]
+        private static void HandleHealthUpdate(Message message)
+        {
+            ushort playerId = message.GetUShort();
+            int newHealth = message.GetInt();
+            int maxHealth = message.GetInt();
+
+            Debug.Log($"[NetworkManager] 收到血量更新: 玩家{playerId} {newHealth}/{maxHealth}");
+
+            // 转发给NetworkUI
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnHealthUpdateReceived(playerId, newHealth, maxHealth);
+            }
+        }
+
+        /// <summary>
+        /// 处理玩家答题结果消息（修复版本）
+        /// </summary>
+        [MessageHandler((ushort)NetworkMessageType.PlayerAnswerResult)]
+        private static void HandlePlayerAnswerResult(Message message)
+        {
+            ushort playerId = message.GetUShort();
+            bool isCorrect = message.GetBool();
+            string answer = message.GetString();
+
+            Debug.Log($"[NetworkManager] 收到答题结果: 玩家{playerId} {(isCorrect ? "正确" : "错误")} - {answer}");
+
+            // 转发给NetworkUI（如果NetworkUI需要显示答题结果）
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                // 需要在NetworkUI中添加对应的处理方法
+                networkUI.OnPlayerAnswerResultReceived(playerId, isCorrect, answer);
+            }
+        }
+
         [MessageHandler((ushort)NetworkMessageType.SendQuestion)]
         private static void HandleQuestionReceived(Message message)
         {
@@ -714,31 +793,6 @@ namespace Core.Network
 
             Debug.Log($"答题结果: {(isCorrect ? "正确" : "错误")} - 正确答案: {correctAnswer}");
             OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.HealthUpdate)]
-        private static void HandleHealthUpdate(Message message)
-        {
-            ushort playerId = message.GetUShort();
-            int newHealth = message.GetInt();
-            int maxHealth = message.GetInt();
-
-            Debug.Log($"玩家 {playerId} 血量更新: {newHealth}/{maxHealth}");
-
-            // 触发通用血量更新事件（向后兼容）
-            OnHealthUpdated?.Invoke(playerId, newHealth, maxHealth);
-
-            // 处理本地玩家血量更新
-            ProcessLocalPlayerHealthUpdate(playerId, newHealth, maxHealth);
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.PlayerTurnChanged)]
-        private static void HandlePlayerTurnChanged(Message message)
-        {
-            ushort currentPlayerId = message.GetUShort();
-
-            Debug.Log($"轮到玩家 {currentPlayerId} 答题");
-            OnPlayerTurnChanged?.Invoke(currentPlayerId);
         }
 
         #endregion
@@ -827,7 +881,6 @@ namespace Core.Network
                 RoomManager.Instance.OnNetworkPlayerReadyChanged(playerId, isReady);
             }
         }
-
         [MessageHandler((ushort)NetworkMessageType.GameStartRequest)]
         private static void HandleGameStartRequest(Message message)
         {
@@ -843,7 +896,46 @@ namespace Core.Network
                 Debug.LogError("[NetworkManager] RoomManager实例不存在，无法处理游戏开始请求");
             }
         }
+        /// <summary>
+        /// 处理游戏开始消息
+        /// </summary>
+        [MessageHandler((ushort)NetworkMessageType.GameStart)]
+        private static void HandleGameStart(Message message)
+        {
+            int totalPlayerCount = message.GetInt();
+            int alivePlayerCount = message.GetInt();
+            ushort firstTurnPlayerId = message.GetUShort();
 
+            Debug.Log($"[NetworkManager] 收到游戏开始: 总玩家{totalPlayerCount}, 存活{alivePlayerCount}, 首回合玩家{firstTurnPlayerId}");
+
+            // 转发给NetworkUI
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnGameStartReceived(totalPlayerCount, alivePlayerCount, firstTurnPlayerId);
+            }
+        }
+        /// <summary>
+        /// 处理玩家状态同步消息
+        /// </summary>
+        [MessageHandler((ushort)NetworkMessageType.PlayerStateSync)]
+        private static void HandlePlayerStateSync(Message message)
+        {
+            ushort playerId = message.GetUShort();
+            string playerName = message.GetString();
+            bool isHost = message.GetBool();
+            int currentHealth = message.GetInt();
+            int maxHealth = message.GetInt();
+            bool isAlive = message.GetBool();
+
+            Debug.Log($"[NetworkManager] 收到玩家状态同步: {playerName} (ID:{playerId}) HP:{currentHealth}/{maxHealth}");
+
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnPlayerStateSyncReceived(playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+            }
+        }
         #endregion
 
         #region 公共接口方法（保持兼容）

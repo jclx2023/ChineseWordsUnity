@@ -27,6 +27,9 @@ namespace Core.Network
         GameStart = 30,
         EndGame = 31,
         RestartGame = 32,
+        GameProgress = 33,        // 游戏进度
+        PlayerAnswerResult = 34,  // 个人答题结果
+        PlayerEliminated = 35,      // 玩家淘汰
 
         RoomDataSync = 201,           // Host -> Client: 同步房间完整数据
         PlayerJoinRoom = 202,         // Server -> All: 玩家加入房间通知
@@ -35,6 +38,7 @@ namespace Core.Network
         PlayerReadyUpdate = 205,      // Host -> All: 广播玩家准备状态变化
         GameStartRequest = 206,       // Host -> All: 房主启动游戏
         RoomInfoRequest = 207,        // Client -> Host: 请求房间信息
+        PlayerStateSync = 208,
     }
 
     /// <summary>

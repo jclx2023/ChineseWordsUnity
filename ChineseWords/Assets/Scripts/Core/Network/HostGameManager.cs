@@ -554,49 +554,39 @@ namespace Core.Network
         public void HandlePlayerAnswer(ushort playerId, string answer)
         {
             playerAnswerCache[playerId] = answer;
-
             if (!isInitialized || !gameInProgress || currentQuestion == null)
             {
                 LogDebug($"无效的答案提交状态: initialized={isInitialized}, gameInProgress={gameInProgress}, hasQuestion={currentQuestion != null}");
                 return;
             }
-
-            if (!playerStateManager.ContainsPlayer(playerId))
-            {
-                LogDebug($"未知玩家提交答案: {playerId}");
-                return;
-            }
-
             if (playerId != currentTurnPlayerId)
             {
                 LogDebug($"不是当前玩家的回合: 提交者={playerId}, 当前回合={currentTurnPlayerId}");
                 return;
             }
-
             LogDebug($"处理玩家 {playerId} 的答案: {answer}");
-
-            // 使用答案验证管理器验证答案
             var validationResult = answerValidationManager.ValidateAnswer(answer, currentQuestion);
-
-            // 更新玩家状态
+            //广播信息
             UpdatePlayerState(playerId, validationResult.isCorrect);
-
-            // 广播答题结果
+            BroadcastPlayerAnswerResult(playerId, validationResult.isCorrect, answer);
             BroadcastAnswerResult(validationResult.isCorrect, currentQuestion.correctAnswer);
-
-            // 检查游戏是否结束
             CheckGameEndConditions();
-
             // 如果游戏仍在进行，切换到下一个玩家
             if (gameInProgress)
             {
-                Invoke(nameof(NextPlayerTurn), 2f);
+                Invoke(nameof(NextPlayerTurn), 1f);
             }
         }
+        private void BroadcastPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
+        {
+            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.PlayerAnswerResult);
+            message.AddUShort(playerId);
+            message.AddBool(isCorrect);
+            message.AddString(answer);
+            NetworkManager.Instance.BroadcastMessage(message);
+        }
 
-        /// <summary>
         /// 更新玩家状态
-        /// </summary>
         private void UpdatePlayerState(ushort playerId, bool isCorrect)
         {
             if (!playerStateManager.ContainsPlayer(playerId))
@@ -614,9 +604,7 @@ namespace Core.Network
             }
         }
 
-        /// <summary>
         /// 处理正确答案
-        /// </summary>
         private void HandleCorrectAnswer(ushort playerId)
         {
             // 处理成语接龙逻辑
@@ -638,12 +626,9 @@ namespace Core.Network
             }
         }
 
-        /// <summary>
         /// 处理错误答案
-        /// </summary>
         private void HandleWrongAnswer(ushort playerId)
         {
-            // 使用HP管理器处理伤害
             if (hpManager != null && hpManager.IsPlayerAlive(playerId))
             {
                 bool damageApplied = hpManager.ApplyDamage(playerId, out int newHealth, out bool isDead);
@@ -653,7 +638,6 @@ namespace Core.Network
                     LogDebug($"玩家 {playerId} 答错，HP管理器处理伤害 - 新血量: {newHealth}, 是否死亡: {isDead}");
                 }
             }
-
             // 成语接龙答错时重置
             if (isIdiomChainActive && currentQuestion?.questionType == QuestionType.IdiomChain)
             {
@@ -661,38 +645,27 @@ namespace Core.Network
                 ResetIdiomChainState();
             }
         }
-
-        /// <summary>
         /// 答案验证事件处理
-        /// </summary>
         private void OnAnswerValidated(QuestionType questionType, string answer, bool isCorrect)
         {
             LogDebug($"答案验证完成: {questionType} - {answer} -> {(isCorrect ? "正确" : "错误")}");
         }
-
-        /// <summary>
         /// 验证错误事件处理
-        /// </summary>
         private void OnValidationError(string errorMessage)
         {
             Debug.LogError($"[HostGameManager] 答案验证错误: {errorMessage}");
         }
-
         #endregion
 
         #region 题目生成
-
-        /// <summary>
+        private int currentQuestionNumber = 0;
         /// 生成并发送题目
-        /// </summary>
         private void GenerateAndSendQuestion()
         {
             if (!gameInProgress || !isInitialized)
                 return;
-
             LogDebug("开始生成新题目");
             NetworkQuestionData question = null;
-
             if (isIdiomChainActive && !string.IsNullOrEmpty(currentIdiomChainWord))
             {
                 question = GenerateIdiomChainContinuation(currentIdiomChainWord);
@@ -700,10 +673,8 @@ namespace Core.Network
             }
             else
             {
-                // 使用配置管理器选择题目类型
                 var questionType = gameConfigManager.SelectRandomQuestionType();
                 question = GetQuestionFromService(questionType);
-
                 if (questionType == QuestionType.IdiomChain && enableIdiomChain)
                 {
                     isIdiomChainActive = true;
@@ -712,12 +683,13 @@ namespace Core.Network
                     LogDebug("激活成语接龙模式");
                 }
             }
-
             if (question != null)
             {
+                currentQuestionNumber++;
                 currentQuestion = question;
                 BroadcastQuestion(question);
-                LogDebug($"题目已发送: {question.questionType} - {question.questionText}");
+                BroadcastGameProgress();
+                LogDebug($"题目已发送: 第{currentQuestionNumber}题 - {question.questionType} - {question.questionText}");
             }
             else
             {
@@ -726,9 +698,31 @@ namespace Core.Network
             }
         }
 
-        /// <summary>
+        /// 广播游戏进度信息
+        private void BroadcastGameProgress()
+        {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.GameProgress);
+            message.AddInt(currentQuestionNumber); // 当前题目编号
+            message.AddInt(playerStateManager.GetAlivePlayerCount()); // 当前存活玩家数
+            message.AddUShort(currentTurnPlayerId); // 当前回合玩家
+            // 添加题目类型信息
+            if (currentQuestion != null)
+            {
+                message.AddInt((int)currentQuestion.questionType); // 题目类型
+                message.AddFloat(currentQuestion.timeLimit); // 时间限制
+            }
+            else
+            {
+                message.AddInt(-1); // 无题目
+                message.AddFloat(0f);
+            }
+            NetworkManager.Instance.BroadcastMessage(message);
+            LogDebug($"广播游戏进度: 第{currentQuestionNumber}题, 存活{playerStateManager.GetAlivePlayerCount()}人, 回合玩家{currentTurnPlayerId}");
+        }
         /// 从服务获取题目数据
-        /// </summary>
         private NetworkQuestionData GetQuestionFromService(QuestionType questionType)
         {
             if (questionDataService == null)
@@ -736,7 +730,6 @@ namespace Core.Network
                 Debug.LogError("[HostGameManager] QuestionDataService 未初始化");
                 return CreateFallbackQuestion(questionType);
             }
-
             try
             {
                 LogDebug($"使用 QuestionDataService 获取题目: {questionType}");
@@ -744,7 +737,6 @@ namespace Core.Network
 
                 if (questionData != null)
                 {
-                    // 使用配置管理器设置动态时间限制
                     float dynamicTimeLimit = gameConfigManager.GetTimeLimitForQuestionType(questionType);
                     questionData.timeLimit = dynamicTimeLimit;
 
@@ -763,10 +755,7 @@ namespace Core.Network
                 return CreateFallbackQuestion(questionType);
             }
         }
-
-        /// <summary>
         /// 创建备用题目
-        /// </summary>
         private NetworkQuestionData CreateFallbackQuestion(QuestionType questionType)
         {
             float dynamicTimeLimit = gameConfigManager.GetTimeLimitForQuestionType(questionType);
@@ -782,7 +771,6 @@ namespace Core.Network
                 "{\"source\": \"host_fallback\", \"isDefault\": true}"
             );
         }
-
         #endregion
 
         #region 成语接龙逻辑
@@ -798,7 +786,6 @@ namespace Core.Network
             if (idiomManager != null)
             {
                 var question = idiomManager.CreateContinuationQuestion(baseIdiom, idiomChainCount, currentIdiomChainWord);
-
                 if (question != null)
                 {
                     float dynamicTimeLimit = gameConfigManager.GetTimeLimitForQuestionType(QuestionType.IdiomChain);
@@ -820,7 +807,6 @@ namespace Core.Network
             idiomChainCount = 0;
             LogDebug("成语接龙状态已重置");
         }
-
         private string GetLastPlayerAnswer(ushort playerId)
         {
             return playerAnswerCache.ContainsKey(playerId) ? playerAnswerCache[playerId] : null;
@@ -955,6 +941,7 @@ namespace Core.Network
             }
 
             gameInProgress = true;
+            currentQuestionNumber = 0; // 重置题目编号
 
             // 启动NQMC多人游戏模式
             if (NetworkQuestionManagerController.Instance != null)
@@ -975,7 +962,13 @@ namespace Core.Network
                 var playerState = playerStateManager.GetPlayerState(currentTurnPlayerId);
                 LogDebug($"选择玩家 {currentTurnPlayerId} ({playerState.playerName}) 开始游戏");
 
+                // 广播游戏开始
+                BroadcastGameStarted();
+                BroadcastAllPlayerStates();
+                // 广播回合变更
                 BroadcastPlayerTurnChanged(currentTurnPlayerId);
+
+                // 生成第一题
                 Invoke(nameof(GenerateAndSendQuestion), 1f);
             }
             else
@@ -983,6 +976,47 @@ namespace Core.Network
                 Debug.LogError("没有存活的玩家可以开始游戏");
                 gameInProgress = false;
             }
+        }
+        /// <summary>
+        /// 向所有客户端同步完整玩家状态
+        /// </summary>
+        private void BroadcastAllPlayerStates()
+        {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
+            var allPlayerStates = playerStateManager.GetAllPlayerStates();
+
+            foreach (var playerState in allPlayerStates.Values)
+            {
+                Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.PlayerStateSync);
+                message.AddUShort(playerState.playerId);
+                message.AddString(playerState.playerName);
+                message.AddBool(IsHostPlayer(playerState.playerId)); // 是否为Host
+                message.AddInt(playerState.health);
+                message.AddInt(playerState.maxHealth);
+                message.AddBool(playerState.isAlive);
+
+                NetworkManager.Instance.BroadcastMessage(message);
+            }
+
+            LogDebug($"广播了 {allPlayerStates.Count} 个玩家的状态数据");
+        }
+        /// <summary>
+        /// 广播游戏开始消息
+        /// </summary>
+        private void BroadcastGameStarted()
+        {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.GameStart);
+            message.AddInt(playerStateManager.GetPlayerCount()); // 初始玩家数
+            message.AddInt(playerStateManager.GetAlivePlayerCount()); // 存活玩家数
+            message.AddUShort(currentTurnPlayerId); // 首个回合玩家
+            NetworkManager.Instance.BroadcastMessage(message);
+
+            LogDebug($"广播游戏开始: 总玩家{playerStateManager.GetPlayerCount()}, 存活{playerStateManager.GetAlivePlayerCount()}, 首回合玩家{currentTurnPlayerId}");
         }
 
         /// <summary>
@@ -1071,11 +1105,46 @@ namespace Core.Network
                 return;
 
             LogDebug($"结束游戏: {reason}");
+
+            // 确定获胜者
+            ushort winnerId = 0;
+            var alivePlayerIds = playerStateManager.GetAlivePlayerIds();
+            if (alivePlayerIds.Count == 1)
+            {
+                winnerId = alivePlayerIds[0];
+                var winnerState = playerStateManager.GetPlayerState(winnerId);
+                LogDebug($"获胜者: {winnerState.playerName} (ID: {winnerId})");
+            }
+
+            // 广播游戏结束
+            BroadcastGameEnded(reason, winnerId);
+
+            // 重置游戏状态
             gameInProgress = false;
             currentQuestion = null;
+            currentQuestionNumber = 0;
             ResetIdiomChainState();
             playerAnswerCache.Clear();
-            // BroadcastGameEnd(reason);
+
+            LogDebug("游戏状态已重置");
+        }
+
+        /// <summary>
+        /// 广播游戏结束消息
+        /// </summary>
+        private void BroadcastGameEnded(string reason, ushort winnerId = 0)
+        {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.EndGame);
+            message.AddString(reason); // 结束原因
+            message.AddUShort(winnerId); // 获胜者ID (0表示无获胜者)
+            message.AddInt(currentQuestionNumber); // 总题目数
+            message.AddInt(playerStateManager.GetAlivePlayerCount()); // 最终存活数
+            NetworkManager.Instance.BroadcastMessage(message);
+
+            LogDebug($"广播游戏结束: {reason}, 获胜者ID: {winnerId}, 总题数: {currentQuestionNumber}");
         }
 
         /// <summary>
@@ -1285,9 +1354,7 @@ namespace Core.Network
             }
         }
 
-        /// <summary>
         /// 传统架构的题目广播
-        /// </summary>
         private void BroadcastQuestionTraditional(NetworkQuestionData question)
         {
             LogDebug("传统架构：直接广播题目");
@@ -1302,10 +1369,7 @@ namespace Core.Network
                 TriggerHostQuestionReceive(NetworkQuestionManagerController.Instance, question);
             }
         }
-
-        /// <summary>
         /// 触发Host的题目接收
-        /// </summary>
         private void TriggerHostQuestionReceive(NetworkQuestionManagerController nqmc, NetworkQuestionData question)
         {
             try
@@ -1327,8 +1391,6 @@ namespace Core.Network
                 }
                 else
                 {
-                    Debug.LogError("无法找到合适的方法来触发Host题目接收");
-
                     if (!nqmc.IsGameStarted)
                     {
                         LogDebug("NQMC未启动，尝试启动多人游戏");
@@ -1511,6 +1573,10 @@ namespace Core.Network
             {
                 Debug.Log($"[HostGameManager] {message}");
             }
+        }
+        private bool IsHostPlayer(ushort playerId)
+        {
+            return NetworkManager.Instance?.IsHostPlayer(playerId) ?? false;
         }
         #endregion
     }
