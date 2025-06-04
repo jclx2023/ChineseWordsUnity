@@ -65,6 +65,20 @@ namespace Core.Network
         // **新增：Host玩家准备就绪事件**
         public static event Action OnHostPlayerReady;  // Host作为玩家准备就绪
 
+
+        private ushort lastTurnPlayerId = 0;  // 上一次的回合玩家ID
+        private int gameProgressSequence = 0;  // 游戏进度序列号
+        private bool gameStartReceived = false;  // 是否已收到游戏开始消息
+
+        // 消息缓冲区（防止消息乱序）
+        private struct PendingQuestionMessage
+        {
+            public NetworkQuestionData question;
+            public float receivedTime;
+        }
+        private PendingQuestionMessage? pendingQuestion = null;
+        private const float QUESTION_BUFFER_TIMEOUT = 2f;  // 缓冲超时时间
+
         private void Awake()
         {
             Application.runInBackground = true;
@@ -128,12 +142,15 @@ namespace Core.Network
 
         private void Update()
         {
-            // 更新网络组件
+            // 更新网络组件（原有逻辑）
             if (server != null && server.IsRunning)
                 server.Update();
 
             if (client != null)
                 client.Update();
+
+            // 新增：检查待处理消息
+            CheckPendingMessages();
         }
 
         private void OnApplicationQuit()
@@ -375,7 +392,7 @@ namespace Core.Network
                     client.Disconnect();
                 }
 
-                // 清理事件订阅
+                // 清理事件订阅（原有逻辑）
                 client.Connected -= OnSelfClientConnected;
                 client.Connected -= OnClientConnectedToHost;
                 client.Disconnected -= OnSelfClientDisconnected;
@@ -385,6 +402,13 @@ namespace Core.Network
 
                 client = null;
             }
+
+            // 新增：清理消息状态
+            gameStartReceived = false;
+            lastTurnPlayerId = 0;
+            gameProgressSequence = 0;
+            pendingQuestion = null;
+            LogDebug("网络消息状态已清理");
         }
 
         /// <summary>
@@ -624,18 +648,20 @@ namespace Core.Network
 
         #region 客户端事件处理（Host模式下的自连接）
 
+        /// <summary>
+        /// 修改Host启动事件处理 - 重置消息状态
+        /// </summary>
         private void OnSelfClientConnected(object sender, EventArgs e)
         {
             LogDebug($"Host客户端连接成功! 玩家ID: {ClientId}");
 
-            // **关键修复：确保hostPlayerId与ClientId一致**
+            // 原有逻辑...
             if (hostPlayerId == 0 || hostPlayerId != ClientId)
             {
                 hostPlayerId = ClientId;
                 LogDebug($"Host玩家ID更新为: {hostPlayerId}");
             }
 
-            // 标记Host客户端准备就绪
             isHostClientReady = true;
 
             if (!isHostInitialized)
@@ -644,11 +670,15 @@ namespace Core.Network
                 LogDebug("Host完全初始化完成");
             }
 
-            // **新增：触发Host玩家准备就绪事件**
-            LogDebug("触发 OnHostPlayerReady 事件");
-            OnHostPlayerReady?.Invoke();
+            // 新增：重置消息状态
+            gameStartReceived = false;
+            lastTurnPlayerId = 0;
+            gameProgressSequence = 0;
+            pendingQuestion = null;
+            LogDebug("Host消息状态已重置");
 
-            OnConnected?.Invoke(); // 触发兼容事件
+            OnHostPlayerReady?.Invoke();
+            OnConnected?.Invoke();
         }
 
         private void OnSelfClientDisconnected(object sender, EventArgs e)
@@ -671,7 +701,15 @@ namespace Core.Network
         private void OnClientConnectedToHost(object sender, EventArgs e)
         {
             LogDebug($"成功连接到主机! ID: {ClientId}");
-            OnConnected?.Invoke(); // 触发兼容事件
+
+            // 新增：重置消息状态
+            gameStartReceived = false;
+            lastTurnPlayerId = 0;
+            gameProgressSequence = 0;
+            pendingQuestion = null;
+            LogDebug("Client消息状态已重置");
+
+            OnConnected?.Invoke();
         }
 
         private void OnClientDisconnectedFromHost(object sender, EventArgs e)
@@ -690,7 +728,7 @@ namespace Core.Network
         #region 游戏消息处理器（保持与原NetworkManager兼容）
 
         /// <summary>
-        /// 处理游戏进度消息
+        /// 处理游戏进度消息 - 修复版本：添加序列验证
         /// </summary>
         [MessageHandler((ushort)NetworkMessageType.GameProgress)]
         private static void HandleGameProgress(Message message)
@@ -699,7 +737,33 @@ namespace Core.Network
             int alivePlayerCount = message.GetInt();
             ushort turnPlayerId = message.GetUShort();
 
+            // 可选：读取额外的进度信息
+            int questionTypeInt = -1;
+            float timeLimit = 0f;
+            try
+            {
+                questionTypeInt = message.GetInt();
+                timeLimit = message.GetFloat();
+            }
+            catch
+            {
+                // 兼容旧版本消息格式
+            }
+
             Debug.Log($"[NetworkManager] 收到游戏进度: 第{questionNumber}题, 存活{alivePlayerCount}人, 回合玩家{turnPlayerId}");
+
+            if (Instance != null)
+            {
+                // 验证进度序列（防止乱序）
+                if (questionNumber < Instance.gameProgressSequence)
+                {
+                    Debug.LogWarning($"[NetworkManager] 收到过期的游戏进度消息: {questionNumber} < {Instance.gameProgressSequence}");
+                    return;
+                }
+
+                Instance.gameProgressSequence = questionNumber;
+                Debug.Log($"[NetworkManager] 游戏进度序列已更新: {questionNumber}");
+            }
 
             // 转发给NetworkUI
             var networkUI = FindObjectOfType<NetworkUI>();
@@ -710,7 +774,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 处理回合变更消息
+        /// 处理回合变更消息 - 修复版本：添加状态验证和缓冲处理
         /// </summary>
         [MessageHandler((ushort)NetworkMessageType.PlayerTurnChanged)]
         private static void HandlePlayerTurnChanged(Message message)
@@ -719,11 +783,35 @@ namespace Core.Network
 
             Debug.Log($"[NetworkManager] 收到回合变更: 玩家{newTurnPlayerId}");
 
-            // 转发给NetworkUI
+            if (Instance != null)
+            {
+                // 验证回合变更的合理性
+                if (Instance.lastTurnPlayerId == newTurnPlayerId)
+                {
+                    Debug.LogWarning($"[NetworkManager] 重复的回合变更消息: {newTurnPlayerId}");
+                    return;
+                }
+
+                Instance.lastTurnPlayerId = newTurnPlayerId;
+                Debug.Log($"[NetworkManager] 回合状态已更新: {newTurnPlayerId}");
+
+                // 检查是否有待处理的题目
+                Instance.ProcessPendingQuestion();
+            }
+
+            // 先更新UI中的回合状态
             var networkUI = FindObjectOfType<NetworkUI>();
             if (networkUI != null)
             {
                 networkUI.OnTurnChangedReceived(newTurnPlayerId);
+            }
+
+            // 再通知NQMC（确保UI状态先更新）
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                NetworkQuestionManagerController.Instance.GetType()
+                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(NetworkQuestionManagerController.Instance, new object[] { newTurnPlayerId });
             }
         }
 
@@ -776,12 +864,41 @@ namespace Core.Network
 
             if (question != null)
             {
-                Debug.Log($"收到题目: {question.questionType} - {question.questionText}");
-                OnQuestionReceived?.Invoke(question);
+                Debug.Log($"[NetworkManager] 收到题目: {question.questionType} - {question.questionText}");
+
+                if (Instance != null)
+                {
+                    // 验证接收时机
+                    if (!Instance.gameStartReceived)
+                    {
+                        Debug.LogWarning("[NetworkManager] 收到题目但游戏尚未开始，忽略");
+                        return;
+                    }
+
+                    // 检查是否应该缓冲题目（等待回合状态更新）
+                    if (Instance.ShouldBufferQuestion())
+                    {
+                        Debug.Log("[NetworkManager] 缓冲题目，等待回合状态更新");
+                        Instance.pendingQuestion = new PendingQuestionMessage
+                        {
+                            question = question,
+                            receivedTime = Time.time
+                        };
+                        return;
+                    }
+
+                    // 立即处理题目
+                    Instance.ProcessQuestionImmediate(question);
+                }
+                else
+                {
+                    // 备用处理（无Instance时）
+                    ProcessQuestionFallback(question);
+                }
             }
             else
             {
-                Debug.LogError("题目数据解析失败");
+                Debug.LogError("[NetworkManager] 题目数据解析失败");
             }
         }
 
@@ -897,7 +1014,7 @@ namespace Core.Network
             }
         }
         /// <summary>
-        /// 处理游戏开始消息
+        /// 处理游戏开始消息 - 修复版本：重置状态
         /// </summary>
         [MessageHandler((ushort)NetworkMessageType.GameStart)]
         private static void HandleGameStart(Message message)
@@ -907,6 +1024,17 @@ namespace Core.Network
             ushort firstTurnPlayerId = message.GetUShort();
 
             Debug.Log($"[NetworkManager] 收到游戏开始: 总玩家{totalPlayerCount}, 存活{alivePlayerCount}, 首回合玩家{firstTurnPlayerId}");
+
+            // 重置状态
+            if (Instance != null)
+            {
+                Instance.gameStartReceived = true;
+                Instance.lastTurnPlayerId = 0;
+                Instance.gameProgressSequence = 0;
+                Instance.pendingQuestion = null;
+
+                Debug.Log("[NetworkManager] 游戏状态已重置");
+            }
 
             // 转发给NetworkUI
             var networkUI = FindObjectOfType<NetworkUI>();
@@ -1001,6 +1129,109 @@ namespace Core.Network
                    $"IsConnected: {IsConnected}, ClientId: {ClientId}, " +
                    $"HostPlayerId: {hostPlayerId}, HostClientReady: {isHostClientReady}, " +
                    $"HostInitialized: {isHostInitialized}";
+        }
+
+        #endregion
+        #region 新增辅助方法
+
+        /// <summary>
+        /// 判断是否应该缓冲题目
+        /// </summary>
+        private bool ShouldBufferQuestion()
+        {
+            // 如果是Host，不需要缓冲
+            if (IsHost)
+            {
+                return false;
+            }
+
+            // 如果还没有收到任何回合变更，需要缓冲
+            if (lastTurnPlayerId == 0)
+            {
+                Debug.Log("[NetworkManager] 尚未收到回合变更，缓冲题目");
+                return true;
+            }
+
+            // 检查当前是否为Client模式且回合状态明确
+            return false;
+        }
+
+        /// <summary>
+        /// 处理待处理的题目
+        /// </summary>
+        private void ProcessPendingQuestion()
+        {
+            if (pendingQuestion.HasValue)
+            {
+                var pending = pendingQuestion.Value;
+
+                // 检查是否超时
+                if (Time.time - pending.receivedTime > QUESTION_BUFFER_TIMEOUT)
+                {
+                    Debug.LogWarning("[NetworkManager] 待处理题目超时，丢弃");
+                    pendingQuestion = null;
+                    return;
+                }
+
+                Debug.Log("[NetworkManager] 处理待处理的题目");
+                ProcessQuestionImmediate(pending.question);
+                pendingQuestion = null;
+            }
+        }
+
+        /// <summary>
+        /// 立即处理题目
+        /// </summary>
+        private void ProcessQuestionImmediate(NetworkQuestionData question)
+        {
+            Debug.Log($"[NetworkManager] 立即处理题目: {question.questionType}");
+
+            // 触发题目接收事件
+            OnQuestionReceived?.Invoke(question);
+
+            // 直接通知NQMC
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                var onQuestionMethod = NetworkQuestionManagerController.Instance.GetType()
+                    .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (onQuestionMethod != null)
+                {
+                    onQuestionMethod.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
+                }
+                else
+                {
+                    Debug.LogWarning("[NetworkManager] 无法找到NQMC的题目接收方法");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 备用题目处理（无Instance时）
+        /// </summary>
+        private static void ProcessQuestionFallback(NetworkQuestionData question)
+        {
+            Debug.Log($"[NetworkManager] 备用处理题目: {question.questionType}");
+            OnQuestionReceived?.Invoke(question);
+        }
+
+        /// <summary>
+        /// 定期检查待处理消息（在Update中调用）
+        /// </summary>
+        private void CheckPendingMessages()
+        {
+            if (pendingQuestion.HasValue)
+            {
+                var pending = pendingQuestion.Value;
+
+                // 超时检查
+                if (Time.time - pending.receivedTime > QUESTION_BUFFER_TIMEOUT)
+                {
+                    Debug.LogWarning("[NetworkManager] 待处理题目超时，强制处理");
+                    ProcessQuestionImmediate(pending.question);
+                    pendingQuestion = null;
+                }
+            }
         }
 
         #endregion

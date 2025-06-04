@@ -549,7 +549,7 @@ namespace Core.Network
         #region 答案处理
 
         /// <summary>
-        /// 处理玩家答案
+        /// 处理玩家答案（优化延迟）
         /// </summary>
         public void HandlePlayerAnswer(ushort playerId, string answer)
         {
@@ -565,16 +565,24 @@ namespace Core.Network
                 return;
             }
             LogDebug($"处理玩家 {playerId} 的答案: {answer}");
+
             var validationResult = answerValidationManager.ValidateAnswer(answer, currentQuestion);
-            //广播信息
-            UpdatePlayerState(playerId, validationResult.isCorrect);
+
+            // 立即广播答题结果
             BroadcastPlayerAnswerResult(playerId, validationResult.isCorrect, answer);
             BroadcastAnswerResult(validationResult.isCorrect, currentQuestion.correctAnswer);
+
+            // 更新玩家状态
+            UpdatePlayerState(playerId, validationResult.isCorrect);
+
+            // 检查游戏结束条件
             CheckGameEndConditions();
-            // 如果游戏仍在进行，切换到下一个玩家
+
+            // 优化：减少延迟时间，如果游戏仍在进行，快速切换到下一个玩家
             if (gameInProgress)
             {
-                Invoke(nameof(NextPlayerTurn), 1f);
+                // 从1秒减少到0.8秒，给玩家短暂时间查看答题结果
+                Invoke(nameof(NextPlayerTurn), 0.8f);
             }
         }
         private void BroadcastPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
@@ -659,13 +667,27 @@ namespace Core.Network
 
         #region 题目生成
         private int currentQuestionNumber = 0;
-        /// 生成并发送题目
+        /// <summary>
+        /// 生成并发送题目（添加状态验证）
+        /// </summary>
         private void GenerateAndSendQuestion()
         {
             if (!gameInProgress || !isInitialized)
+            {
+                LogDebug("游戏未进行或未初始化，跳过发题");
                 return;
-            LogDebug("开始生成新题目");
+            }
+
+            // 验证当前回合玩家是否有效
+            if (currentTurnPlayerId == 0 || !playerStateManager.ContainsPlayer(currentTurnPlayerId))
+            {
+                Debug.LogError($"当前回合玩家ID无效: {currentTurnPlayerId}");
+                return;
+            }
+
+            LogDebug($"开始生成新题目 - 当前回合玩家: {currentTurnPlayerId}");
             NetworkQuestionData question = null;
+
             if (isIdiomChainActive && !string.IsNullOrEmpty(currentIdiomChainWord))
             {
                 question = GenerateIdiomChainContinuation(currentIdiomChainWord);
@@ -683,13 +705,19 @@ namespace Core.Network
                     LogDebug("激活成语接龙模式");
                 }
             }
+
             if (question != null)
             {
                 currentQuestionNumber++;
                 currentQuestion = question;
-                BroadcastQuestion(question);
+
+                // 先广播游戏进度，再广播题目
                 BroadcastGameProgress();
-                LogDebug($"题目已发送: 第{currentQuestionNumber}题 - {question.questionType} - {question.questionText}");
+
+                // 稍微延迟确保进度信息先到达
+                StartCoroutine(DelayedQuestionBroadcast(question));
+
+                LogDebug($"题目已准备发送: 第{currentQuestionNumber}题 - {question.questionType} - {question.questionText}");
             }
             else
             {
@@ -697,7 +725,17 @@ namespace Core.Network
                 Invoke(nameof(GenerateAndSendQuestion), 1f);
             }
         }
+        /// <summary>
+        /// 延迟的题目广播：确保进度信息先到达
+        /// </summary>
+        private IEnumerator DelayedQuestionBroadcast(NetworkQuestionData question)
+        {
+            // 短暂延迟确保进度信息先到达客户端
+            yield return new WaitForSeconds(0.1f);
 
+            BroadcastQuestion(question);
+            LogDebug($"题目已发送: 第{currentQuestionNumber}题 - {question.questionType}");
+        }
         /// 广播游戏进度信息
         private void BroadcastGameProgress()
         {
@@ -846,7 +884,7 @@ namespace Core.Network
         #region 回合管理
 
         /// <summary>
-        /// 切换到下一个玩家
+        /// 切换到下一个玩家（优化延迟机制）
         /// </summary>
         private void NextPlayerTurn()
         {
@@ -879,8 +917,21 @@ namespace Core.Network
                 currentTurnPlayerId = alivePlayerIds[nextIndex];
             }
 
+            LogDebug($"回合切换到玩家: {currentTurnPlayerId}");
+
+            // 优化：使用协程控制时序，避免双重延迟
+            StartCoroutine(DelayedTurnChangeSequence());
+        }
+        private IEnumerator DelayedTurnChangeSequence()
+        {
+            // 先广播回合变更
             BroadcastPlayerTurnChanged(currentTurnPlayerId);
-            Invoke(nameof(GenerateAndSendQuestion), 1f);
+
+            // 短暂延迟确保回合信息到达
+            yield return new WaitForSeconds(0.3f);
+
+            // 再发送新题目
+            GenerateAndSendQuestion();
         }
 
         /// <summary>
@@ -916,7 +967,7 @@ namespace Core.Network
         #region 游戏流程控制
 
         /// <summary>
-        /// 开始主机游戏
+        /// 开始主机游戏（修复版：分离游戏开始和发题逻辑）
         /// </summary>
         public void StartHostGame()
         {
@@ -962,20 +1013,53 @@ namespace Core.Network
                 var playerState = playerStateManager.GetPlayerState(currentTurnPlayerId);
                 LogDebug($"选择玩家 {currentTurnPlayerId} ({playerState.playerName}) 开始游戏");
 
-                // 广播游戏开始
-                BroadcastGameStarted();
+                // 分步骤广播：先广播游戏开始，再广播状态，最后发题
+                BroadcastGameStartedOnly();
                 BroadcastAllPlayerStates();
-                // 广播回合变更
-                BroadcastPlayerTurnChanged(currentTurnPlayerId);
 
-                // 生成第一题
-                Invoke(nameof(GenerateAndSendQuestion), 1f);
+                // 关键修改：延迟广播回合信息和发送第一题
+                StartCoroutine(DelayedGameStartSequence());
             }
             else
             {
                 Debug.LogError("没有存活的玩家可以开始游戏");
                 gameInProgress = false;
             }
+        }
+        /// <summary>
+        /// 仅广播游戏开始消息（不包含回合信息）
+        /// </summary>
+        private void BroadcastGameStartedOnly()
+        {
+            if (!isInitialized || NetworkManager.Instance == null)
+                return;
+
+            Message message = Message.Create(MessageSendMode.Reliable, NetworkMessageType.GameStart);
+            message.AddInt(playerStateManager.GetPlayerCount()); // 初始玩家数
+            message.AddInt(playerStateManager.GetAlivePlayerCount()); // 存活玩家数
+            message.AddUShort(0); // 暂时不指定首回合玩家，后续单独发送
+            NetworkManager.Instance.BroadcastMessage(message);
+
+            LogDebug($"广播游戏开始（仅开始信息）: 总玩家{playerStateManager.GetPlayerCount()}, 存活{playerStateManager.GetAlivePlayerCount()}");
+        }
+        /// <summary>
+        /// 延迟的游戏开始序列：确保状态同步后再发题
+        /// </summary>
+        private IEnumerator DelayedGameStartSequence()
+        {
+            LogDebug("开始延迟游戏启动序列");
+
+            yield return new WaitForSeconds(1f);
+
+            // 广播回合变更（第一次）
+            LogDebug($"广播首个回合: 玩家 {currentTurnPlayerId}");
+            BroadcastPlayerTurnChanged(currentTurnPlayerId);
+
+            yield return new WaitForSeconds(0.5f);
+
+            // 发送第一题
+            LogDebug("发送第一题");
+            GenerateAndSendQuestion();
         }
         /// <summary>
         /// 向所有客户端同步完整玩家状态

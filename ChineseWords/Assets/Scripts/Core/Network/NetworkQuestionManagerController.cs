@@ -35,6 +35,8 @@ namespace Core.Network
         private bool isWaitingForNetworkQuestion = false;
         private bool gameStarted = false;
         private bool isInitialized = false;
+        private ushort currentTurnPlayerId = 0;  // 当前回合玩家ID
+        private bool hasReceivedTurnChange = false;  // 是否收到回合变更信息
 
         // 题目类型权重（重置用于供Host使用）
         public Dictionary<QuestionType, float> TypeWeights = new Dictionary<QuestionType, float>()
@@ -183,7 +185,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 停止游戏（用于外部系统调用）
+        /// 修改：停止游戏 - 重置状态
         /// </summary>
         public void StopGame()
         {
@@ -191,6 +193,10 @@ namespace Core.Network
             gameStarted = false;
             isMyTurn = false;
             isWaitingForNetworkQuestion = false;
+
+            currentDisplayState = QuestionDisplayState.GameEnded;
+            hasReceivedTurnChange = false;
+            currentTurnPlayerId = 0;
 
             StopTimer();
             CleanupCurrentManager();
@@ -253,14 +259,17 @@ namespace Core.Network
         #region 游戏模式处理
 
         /// <summary>
-        /// 开始多人游戏
+        /// 开始多人游戏 - 修复版本：不立即等待题目
         /// </summary>
         private void StartMultiplayerGame()
         {
             if (NetworkManager.Instance?.IsConnected == true)
             {
-                LogDebug("多人模式：等待服务器分配回合");
-                isWaitingForNetworkQuestion = true;
+                LogDebug("多人模式：等待游戏开始和回合分配");
+                currentDisplayState = QuestionDisplayState.WaitingForGame;
+                // 修复：不立即设置等待题目状态
+                isWaitingForNetworkQuestion = false;
+                hasReceivedTurnChange = false;
             }
             else
             {
@@ -675,13 +684,21 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 处理网络答案提交（多人模式）
+        /// 修改：处理网络答案提交
         /// </summary>
         private void HandleNetworkAnswerSubmission(bool isCorrect)
         {
             LogDebug("多人模式本地答题，等待服务器确认");
-            // 多人模式下，本地答题结果不立即处理，等待服务器结果
-            StopTimer();
+
+            // 只有在我的回合才处理答案提交
+            if (currentDisplayState == QuestionDisplayState.MyTurn)
+            {
+                StopTimer();
+            }
+            else
+            {
+                LogDebug("不是我的回合，忽略答案提交处理");
+            }
         }
 
         /// <summary>
@@ -721,16 +738,63 @@ namespace Core.Network
         #region 网络事件处理
 
         /// <summary>
-        /// 接收到网络题目
+        /// 接收到网络题目 - 修复版本：添加状态验证
         /// </summary>
         private void OnNetworkQuestionReceived(NetworkQuestionData question)
         {
-            if (!isMultiplayerMode || !isWaitingForNetworkQuestion)
+            if (!isMultiplayerMode)
+            {
+                LogDebug("非多人模式，忽略网络题目");
                 return;
+            }
 
             LogDebug($"收到网络题目: {question.questionType}, 时间限制: {question.timeLimit}秒");
-            isWaitingForNetworkQuestion = false;
-            LoadNetworkQuestion(question);
+            LogDebug($"当前状态: 我的回合={isMyTurn}, 等待题目={isWaitingForNetworkQuestion}, 回合ID={currentTurnPlayerId}");
+
+            // 关键修改：根据当前状态决定如何处理题目
+            switch (currentDisplayState)
+            {
+                case QuestionDisplayState.MyTurn:
+                    // 轮到我答题：完整加载题目
+                    LogDebug("轮到我答题，完整加载题目");
+                    isWaitingForNetworkQuestion = false;
+                    LoadNetworkQuestion(question);
+                    break;
+
+                case QuestionDisplayState.OtherPlayerTurn:
+                    // 其他玩家回合：显示题目但不启用交互
+                    LogDebug($"其他玩家回合，显示题目但不可交互 (当前回合玩家: {currentTurnPlayerId})");
+                    LoadNetworkQuestionAsObserver(question);
+                    break;
+
+                case QuestionDisplayState.WaitingForGame:
+                    // 还在等待游戏开始，可能是时序问题
+                    LogDebug("收到题目但游戏状态为等待中，检查回合状态");
+                    if (hasReceivedTurnChange && isMyTurn)
+                    {
+                        LogDebug("回合状态确认为我的回合，加载题目");
+                        currentDisplayState = QuestionDisplayState.MyTurn;
+                        isWaitingForNetworkQuestion = false;
+                        LoadNetworkQuestion(question);
+                    }
+                    else if (hasReceivedTurnChange && !isMyTurn)
+                    {
+                        LogDebug("回合状态确认为其他玩家回合，观察模式加载题目");
+                        currentDisplayState = QuestionDisplayState.OtherPlayerTurn;
+                        LoadNetworkQuestionAsObserver(question);
+                    }
+                    else
+                    {
+                        LogDebug("尚未收到回合变更信息，缓存题目");
+                        // 可以选择缓存题目或忽略
+                        currentNetworkQuestion = question;
+                    }
+                    break;
+
+                default:
+                    LogDebug($"未知状态 {currentDisplayState}，忽略题目");
+                    break;
+            }
         }
 
         /// <summary>
@@ -762,8 +826,9 @@ namespace Core.Network
             OnAnswerCompleted?.Invoke(isCorrect);
         }
 
+
         /// <summary>
-        /// 玩家回合变更
+        /// 玩家回合变更 - 修复版本：添加状态管理
         /// </summary>
         private void OnNetworkPlayerTurnChanged(ushort playerId)
         {
@@ -771,20 +836,36 @@ namespace Core.Network
                 return;
 
             bool wasMyTurn = isMyTurn;
+            currentTurnPlayerId = playerId;
             isMyTurn = (playerId == NetworkManager.Instance?.ClientId);
+            hasReceivedTurnChange = true;
 
             LogDebug($"回合变更: {(isMyTurn ? "轮到我了" : $"轮到玩家{playerId}")}");
 
-            if (isMyTurn && !wasMyTurn)
+            // 更新显示状态
+            if (isMyTurn)
             {
-                // 轮到我答题
-                RequestNetworkQuestion();
+                currentDisplayState = QuestionDisplayState.MyTurn;
+                LogDebug("状态变更为：MyTurn");
+
+                // 轮到我答题 - 但不立即请求题目，等待服务器发送
+                if (!wasMyTurn)
+                {
+                    LogDebug("轮到我答题，等待服务器发送题目");
+                    isWaitingForNetworkQuestion = true;
+                }
             }
-            else if (!isMyTurn && wasMyTurn)
+            else
             {
-                // 不再是我的回合，停止当前题目
-                StopTimer();
-                // 可以选择清理当前管理器或保持显示状态
+                currentDisplayState = QuestionDisplayState.OtherPlayerTurn;
+                LogDebug($"状态变更为：OtherPlayerTurn (玩家{playerId})");
+
+                // 不再是我的回合
+                if (wasMyTurn)
+                {
+                    StopTimer();
+                    isWaitingForNetworkQuestion = false;
+                }
             }
         }
 
@@ -806,14 +887,34 @@ namespace Core.Network
         #region 题目管理器接口
 
         /// <summary>
-        /// 提交答案（供题目管理器调用）
+        /// 修改：提交答案 - 添加状态验证
         /// </summary>
         public void SubmitAnswer(string answer)
         {
-            if (isMultiplayerMode && isMyTurn && NetworkManager.Instance?.IsConnected == true)
+            // 添加状态验证
+            if (isMultiplayerMode)
             {
-                NetworkManager.Instance.SubmitAnswer(answer);
-                LogDebug($"提交网络答案: {answer}");
+                if (currentDisplayState != QuestionDisplayState.MyTurn)
+                {
+                    LogDebug($"不是我的回合，无法提交答案。当前状态: {currentDisplayState}");
+                    return;
+                }
+
+                if (!isMyTurn)
+                {
+                    LogDebug("回合状态不匹配，无法提交答案");
+                    return;
+                }
+
+                if (NetworkManager.Instance?.IsConnected == true)
+                {
+                    NetworkManager.Instance.SubmitAnswer(answer);
+                    LogDebug($"提交网络答案: {answer}");
+                }
+                else
+                {
+                    LogDebug("网络未连接，无法提交答案");
+                }
             }
             else if (!isMultiplayerMode && currentManager != null)
             {
@@ -825,7 +926,6 @@ namespace Core.Network
                 LogDebug("无法提交答案：模式不匹配或状态异常");
             }
         }
-
         /// <summary>
         /// 获取当前题目的网络数据（供题目管理器使用）
         /// </summary>
@@ -900,11 +1000,119 @@ namespace Core.Network
 
         #endregion
 
-        #region 调试方法
+        #region 状态管理 - 新增字段
+
+
+        // 在现有字段后添加状态枚举
+        private enum QuestionDisplayState
+        {
+            WaitingForGame,     // 等待游戏开始
+            MyTurn,            // 轮到我答题
+            OtherPlayerTurn,   // 其他玩家回合
+            GameEnded          // 游戏结束
+        }
+
+        private QuestionDisplayState currentDisplayState = QuestionDisplayState.WaitingForGame;
+        #endregion
+        /// <summary>
+        /// 新增：以观察者模式加载网络题目
+        /// </summary>
+        private void LoadNetworkQuestionAsObserver(NetworkQuestionData networkQuestion)
+        {
+            if (networkQuestion == null)
+            {
+                Debug.LogError("[NQMC] 网络题目数据为空");
+                return;
+            }
+
+            LogDebug($"以观察者模式加载网络题目: {networkQuestion.questionType}");
+
+            // 清理当前管理器
+            CleanupCurrentManager();
+
+            // 保存网络题目数据
+            currentNetworkQuestion = networkQuestion;
+
+            // 创建对应的管理器（观察模式）
+            currentManager = CreateQuestionManager(networkQuestion.questionType, true);
+
+            if (currentManager != null)
+            {
+                // 不绑定答案提交事件，只显示题目
+                LogDebug("观察者模式：不绑定答案提交事件");
+
+                // 延迟加载题目（观察模式）
+                StartCoroutine(DelayedLoadNetworkQuestionAsObserver(networkQuestion));
+
+                LogDebug($"观察者模式题目管理器创建成功: {networkQuestion.questionType}");
+            }
+            else
+            {
+                Debug.LogError("[NQMC] 无法为观察者模式创建管理器");
+            }
+        }
 
         /// <summary>
-        /// 获取当前状态信息（调试用）
+        /// 新增：延迟加载网络题目（观察者模式）
         /// </summary>
+        private IEnumerator DelayedLoadNetworkQuestionAsObserver(NetworkQuestionData networkData)
+        {
+            yield return null;
+            if (currentManager != null)
+            {
+                // 加载题目但不启动计时器
+                if (currentManager is NetworkQuestionManagerBase networkManager)
+                {
+                    var loadMethod = networkManager.GetType().GetMethod("LoadNetworkQuestion",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (loadMethod != null)
+                    {
+                        LogDebug($"观察者模式：通过反射调用网络题目加载方法: {networkData.questionType}");
+                        loadMethod.Invoke(networkManager, new object[] { networkData });
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[NQMC] 观察者模式：未找到LoadNetworkQuestion方法，使用普通加载");
+                        currentManager.LoadQuestion();
+                    }
+                }
+                else
+                {
+                    LogDebug("观察者模式：使用普通加载方法");
+                    currentManager.LoadQuestion();
+                }
+
+                // 关键：观察者模式下不启动计时器，或者启动只读计时器
+                LogDebug($"观察者模式：题目已加载，不启动交互计时器");
+
+                // 可选：启动只读计时器用于显示倒计时
+                StartObserverTimer(networkData.timeLimit);
+            }
+        }
+
+        /// <summary>
+        /// 新增：启动观察者计时器（只读模式）
+        /// </summary>
+        private void StartObserverTimer(float timeLimit)
+        {
+            if (timerManager != null)
+            {
+                // 检查TimerManager是否支持只读模式
+                var startReadOnlyMethod = timerManager.GetType().GetMethod("StartReadOnlyTimer");
+                if (startReadOnlyMethod != null)
+                {
+                    LogDebug($"启动只读计时器: {timeLimit}秒");
+                    startReadOnlyMethod.Invoke(timerManager, new object[] { timeLimit });
+                }
+                else
+                {
+                    // 如果不支持只读模式，可以选择不启动计时器
+                    LogDebug("TimerManager不支持只读模式，跳过计时器启动");
+                }
+            }
+        }
+
         public string GetStatusInfo()
         {
             var info = "=== NQMC 状态 ===\n";
@@ -913,6 +1121,9 @@ namespace Core.Network
             info += $"多人模式: {isMultiplayerMode}\n";
             info += $"我的回合: {isMyTurn}\n";
             info += $"等待网络题目: {isWaitingForNetworkQuestion}\n";
+            info += $"显示状态: {currentDisplayState}\n";  // 新增
+            info += $"当前回合玩家ID: {currentTurnPlayerId}\n";  // 新增
+            info += $"已收到回合变更: {hasReceivedTurnChange}\n";  // 新增
             info += $"当前管理器: {(currentManager != null ? currentManager.GetType().Name : "无")}\n";
 
             if (hpManager != null)
@@ -939,7 +1150,5 @@ namespace Core.Network
                 isWaitingForNetworkQuestion = false;
             }
         }
-
-        #endregion
     }
 }
