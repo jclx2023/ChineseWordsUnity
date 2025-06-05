@@ -12,7 +12,7 @@ namespace Core.Network
     {
         [Header("房间配置")]
         [SerializeField] private int maxPlayersPerRoom = 4;
-        [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool enableDebugLogs = false;
 
         [Header("游戏开始控制")]
         [SerializeField] private bool hasGameStarted = false; // 防止重复开始
