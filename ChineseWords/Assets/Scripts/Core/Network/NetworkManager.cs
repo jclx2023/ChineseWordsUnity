@@ -5,6 +5,7 @@ using Core.Network;
 using System;
 using System.Collections;
 using UI;
+using Riptide.Transports.Tcp;
 
 namespace Core.Network
 {
