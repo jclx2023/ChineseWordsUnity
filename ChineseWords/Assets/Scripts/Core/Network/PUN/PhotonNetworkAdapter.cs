@@ -106,11 +106,6 @@ namespace Core.Network
                 PhotonNetwork.AutomaticallySyncScene = false;
                 PhotonNetwork.GameVersion = gameVersion;
 
-                // 设置唯一的用户ID，避免连接冲突
-                string uniqueUserId = GenerateUniqueUserId();
-                PhotonNetwork.AuthValues = new Photon.Realtime.AuthenticationValues(uniqueUserId);
-                LogDebug($"设置用户ID: {uniqueUserId}");
-
                 isInitialized = true;
                 LogDebug("Photon适配器初始化完成");
             }
@@ -118,24 +113,6 @@ namespace Core.Network
             {
                 Debug.LogError($"Photon适配器初始化失败: {e.Message}");
             }
-        }
-
-        /// <summary>
-        /// 生成唯一的用户ID
-        /// </summary>
-        private string GenerateUniqueUserId()
-        {
-            // 方法1：使用时间戳 + 随机数
-            string timestamp = System.DateTime.Now.Ticks.ToString();
-            string random = UnityEngine.Random.Range(1000, 9999).ToString();
-
-            // 方法2：区分编辑器和构建版本
-            string prefix = Application.isEditor ? "Editor" : "Build";
-
-            // 方法3：添加进程ID（如果可用）
-            string processId = System.Diagnostics.Process.GetCurrentProcess().Id.ToString();
-
-            return $"{prefix}_{processId}_{timestamp}_{random}";
         }
 
         /// <summary>
@@ -155,36 +132,24 @@ namespace Core.Network
         #region 公共接口方法
 
         /// <summary>
-        /// 连接到Photon并创建房间（Host模式）- 改进版
+        /// 连接到Photon并创建房间（Host模式）
         /// </summary>
         public void CreatePhotonRoom(string roomName, int maxPlayers)
         {
-            LogDebug($"请求创建Photon房间: {roomName}, 最大玩家: {maxPlayers}");
+            LogDebug($"创建Photon房间: {roomName}, 最大玩家: {maxPlayers}");
 
             pendingRoomName = roomName;
             pendingMaxPlayers = maxPlayers;
             isPendingClient = false;
 
-            // 检查当前连接状态
             if (!PhotonNetwork.IsConnected)
             {
-                LogDebug("Photon未连接，开始连接流程...");
+                LogDebug("连接到Photon服务器...");
                 PhotonNetwork.ConnectUsingSettings();
-            }
-            else if (!PhotonNetwork.InLobby && !PhotonNetwork.InRoom)
-            {
-                LogDebug("已连接Photon但未在大厅，等待连接到主服务器...");
-                // 等待 OnConnectedToMaster 回调
-            }
-            else if (PhotonNetwork.InRoom)
-            {
-                LogDebug("已在房间中，先离开当前房间");
-                PhotonNetwork.LeaveRoom();
-                // 房间离开后会触发 OnLeftRoom，在那里重新创建
             }
             else
             {
-                LogDebug("连接状态良好，直接创建房间");
+                LogDebug("已连接，直接创建房间");
                 CreateRoom();
             }
         }
@@ -388,16 +353,7 @@ namespace Core.Network
         {
             LogDebug("离开Photon房间");
             OnPhotonRoomLeft?.Invoke();
-
-            if (!string.IsNullOrEmpty(pendingRoomName) && !isPendingClient)
-            {
-                LogDebug($"离开房间后，创建待处理的房间: {pendingRoomName}");
-                CreateRoom();
-            }
-            else
-            {
-                OnPhotonDisconnected?.Invoke();
-            }
+            OnPhotonDisconnected?.Invoke();
         }
 
         #endregion

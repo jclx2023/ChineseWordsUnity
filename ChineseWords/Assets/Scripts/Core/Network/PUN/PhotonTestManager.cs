@@ -264,41 +264,6 @@ namespace Core.Network
 
         #endregion
 
-        #region 演示NetworkManager替换
-
-        /// <summary>
-        /// 演示如何用PhotonNetworkAdapter替换NetworkManager功能
-        /// </summary>
-        [ContextMenu("演示NetworkManager替换")]
-        public void DemonstrateNetworkManagerReplacement()
-        {
-            Debug.Log("=== NetworkManager替换演示 ===");
-
-            // 原有的NetworkManager调用方式
-            Debug.Log("原有方式:");
-            Debug.Log("NetworkManager.Instance.StartAsHost(port, roomName, maxPlayers);");
-            Debug.Log("NetworkManager.Instance.ConnectAsClient(ip, port);");
-
-            // 新的PhotonNetworkAdapter调用方式
-            Debug.Log("\n新方式:");
-            Debug.Log("PhotonNetworkAdapter.Instance.CreatePhotonRoom(roomName, maxPlayers);");
-            Debug.Log("PhotonNetworkAdapter.Instance.JoinPhotonRoom();");
-
-            // 状态检查对比
-            Debug.Log("\n状态检查对比:");
-            if (NetworkManager.Instance != null)
-            {
-                Debug.Log($"NetworkManager - IsHost: {NetworkManager.Instance.IsHost}, IsConnected: {NetworkManager.Instance.IsConnected}");
-            }
-
-            if (PhotonNetworkAdapter.Instance != null)
-            {
-                Debug.Log($"PhotonNetworkAdapter - IsMasterClient: {PhotonNetworkAdapter.Instance.IsPhotonMasterClient}, IsConnected: {PhotonNetworkAdapter.Instance.IsPhotonConnected}");
-            }
-        }
-
-        #endregion
-
         #region Unity事件
 
         private void OnDestroy()
