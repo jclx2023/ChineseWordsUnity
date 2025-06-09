@@ -2,439 +2,519 @@
 using Core.Network;
 using UI;
 using System.Collections;
+using Photon.Pun;
+using Photon.Realtime;
+using System.Collections.Generic;
 
 namespace Core
 {
     /// <summary>
-    /// 修复后的场景模式控制器
-    /// 核心修复：Client端只禁用HostGameManager组件，保留其他题目处理组件
+    /// 场景模式控制器 - Photon精简版
+    /// 专注于多人游戏的组件管理，移除单机模式和复杂架构
+    /// 基于Photon状态进行简单的组件激活/禁用控制
     /// </summary>
-    public class SceneModeController : MonoBehaviour
+    public class SceneModeController : MonoBehaviourPun, IConnectionCallbacks, IMatchmakingCallbacks
     {
-        [Header("组件引用")]
-        [SerializeField] private GameObject networkManager;
-        [SerializeField] private GameObject gameControllers;           // 整个GameControllers GameObject
-        [SerializeField] private GameObject networkCanvas;
+        [Header("核心组件引用")]
         [SerializeField] private GameObject gameCanvas;
         [SerializeField] private NetworkUI networkUI;
 
-        [Header("引用查找设置")]
-        [SerializeField] private bool autoFindReferences = true;
-        [SerializeField] private bool searchInDontDestroy = true;
-        [SerializeField] private float referenceSearchTimeout = 5f;
-        [SerializeField] private string[] networkManagerNames = { "NetworkManager", "Network", "NetworkSystem" };
-        [SerializeField] private string[] gameCanvasNames = { "GameCanvas", "Canvas", "MainCanvas" };
+        [Header("可选组件引用")]
+        [SerializeField] private GameObject networkCanvas;
+        [SerializeField] private RoomConfigManager roomConfigManager;
+
+        [Header("自动查找设置")]
+        [SerializeField] private bool autoFindComponents = true;
+        [SerializeField] private float initializationDelay = 0.5f;
 
         [Header("调试设置")]
-        [SerializeField] private bool showDebugLogs = true;
+        [SerializeField] private bool enableDebugLogs = true;
 
-        // 运行时找到的组件引用
-        private HostGameManager hostGameManagerComponent;
-
-        // 引用查找状态
-        private bool referencesFound = false;
+        // 组件状态
+        private bool isInitialized = false;
         private bool configurationCompleted = false;
+
+        // 当前状态
+        private bool isInRoom = false;
+        private bool isMasterClient = false;
 
         private void Start()
         {
-            if (autoFindReferences)
+            StartCoroutine(InitializeSceneController());
+        }
+
+        private void OnEnable()
+        {
+            // 注册Photon回调
+            PhotonNetwork.AddCallbackTarget(this);
+        }
+
+        private void OnDisable()
+        {
+            // 取消注册Photon回调
+            PhotonNetwork.RemoveCallbackTarget(this);
+        }
+
+        #region 初始化
+
+        /// <summary>
+        /// 初始化场景控制器
+        /// </summary>
+        private IEnumerator InitializeSceneController()
+        {
+            LogDebug("开始初始化SceneModeController");
+
+            // 等待一下确保其他组件就绪
+            yield return new WaitForSeconds(initializationDelay);
+
+            // 自动查找组件
+            if (autoFindComponents)
             {
-                StartCoroutine(FindReferencesAndConfigureCoroutine());
+                FindEssentialComponents();
+            }
+
+            // 验证必要组件
+            if (!ValidateEssentialComponents())
+            {
+                Debug.LogError("[SceneModeController] 缺少必要组件，初始化失败");
+                yield break;
+            }
+
+            isInitialized = true;
+            LogDebug("SceneModeController初始化完成");
+
+            // 配置场景
+            ConfigureSceneForPhoton();
+
+            // 启动组件协调
+            StartCoroutine(EnsureComponentsStarted());
+
+            configurationCompleted = true;
+            LogDebug("场景配置完成");
+        }
+
+        /// <summary>
+        /// 查找必要组件
+        /// </summary>
+        private void FindEssentialComponents()
+        {
+            LogDebug("自动查找必要组件");
+
+            // 查找GameCanvas
+            if (gameCanvas == null)
+            {
+                gameCanvas = FindGameCanvasByNames();
+                LogDebug($"找到GameCanvas: {gameCanvas?.name ?? "未找到"}");
+            }
+
+            // 查找NetworkUI
+            if (networkUI == null)
+            {
+                networkUI = FindObjectOfType<NetworkUI>();
+                LogDebug($"找到NetworkUI: {networkUI?.name ?? "未找到"}");
+            }
+
+            // 查找NetworkCanvas（可选）
+            if (networkCanvas == null)
+            {
+                networkCanvas = GameObject.Find("NetworkCanvas");
+                if (networkCanvas == null)
+                {
+                    networkCanvas = GameObject.Find("NetworkUI");
+                }
+                LogDebug($"找到NetworkCanvas: {networkCanvas?.name ?? "未找到"}");
+            }
+
+            // 查找RoomConfigManager（可选）
+            if (roomConfigManager == null)
+            {
+                roomConfigManager = RoomConfigManager.Instance;
+                LogDebug($"找到RoomConfigManager: {roomConfigManager?.name ?? "未找到"}");
+            }
+        }
+
+        /// <summary>
+        /// 按常见名称查找GameCanvas
+        /// </summary>
+        private GameObject FindGameCanvasByNames()
+        {
+            string[] possibleNames = { "GameCanvas", "Canvas", "MainCanvas", "UICanvas" };
+
+            foreach (string name in possibleNames)
+            {
+                GameObject canvas = GameObject.Find(name);
+                if (canvas != null)
+                {
+                    return canvas;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 验证必要组件
+        /// </summary>
+        private bool ValidateEssentialComponents()
+        {
+            bool isValid = true;
+
+            if (gameCanvas == null)
+            {
+                Debug.LogWarning("[SceneModeController] GameCanvas未找到");
+                isValid = false;
+            }
+
+            if (networkUI == null)
+            {
+                Debug.LogWarning("[SceneModeController] NetworkUI未找到");
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        #endregion
+
+        #region 场景配置 - 基于Photon状态
+
+        /// <summary>
+        /// 基于Photon状态配置场景
+        /// </summary>
+        private void ConfigureSceneForPhoton()
+        {
+            LogDebug("基于Photon状态配置场景");
+
+            // 获取当前Photon状态
+            UpdatePhotonStatus();
+
+            if (isInRoom)
+            {
+                ConfigureMultiplayerMode();
             }
             else
             {
-                ConfigureSceneBasedOnGameMode();
+                ConfigureOfflineMode();
             }
         }
 
         /// <summary>
-        /// 查找引用并配置场景的协程（修复引用失效问题）
+        /// 更新Photon状态
         /// </summary>
-        private IEnumerator FindReferencesAndConfigureCoroutine()
+        private void UpdatePhotonStatus()
         {
-            yield return new WaitForSeconds(0.5f);
-            LogDebug("开始查找组件引用...");
-            float startTime = Time.time;
+            bool wasInRoom = isInRoom;
+            bool wasMasterClient = isMasterClient;
 
-            while (Time.time - startTime < referenceSearchTimeout)
+            isInRoom = PhotonNetwork.InRoom;
+            isMasterClient = PhotonNetwork.IsMasterClient;
+
+            if (wasInRoom != isInRoom || wasMasterClient != isMasterClient)
             {
-                if (TryFindAllReferences())
-                {
-                    LogDebug("所有引用查找成功");
-                    referencesFound = true;
-                    break;
-                }
-                yield return new WaitForSeconds(0.1f);
+                LogDebug($"Photon状态变化: 房间={isInRoom}, MasterClient={isMasterClient}");
             }
-
-            if (!referencesFound)
-            {
-                LogDebug("引用查找超时，使用找到的部分引用");
-                ShowMissingReferences();
-            }
-
-            // 关键修复：等待组件可能的DontDestroyOnLoad移动完成
-            LogDebug("等待组件DontDestroyOnLoad移动完成...");
-            yield return new WaitForSeconds(0.5f);
-
-            // 验证引用是否仍然有效
-            bool needRefresh = ValidateReferences();
-            if (needRefresh)
-            {
-                LogDebug("检测到引用失效，重新查找...");
-                yield return StartCoroutine(RefreshInvalidReferences());
-            }
-
-            // 配置场景
-            ConfigureSceneBasedOnGameMode();
-            configurationCompleted = true;
-
-            // 启动定期验证（防止后续失效）
-            StartCoroutine(PeriodicReferenceValidation());
         }
 
         /// <summary>
-        /// 尝试查找所有必要的引用
+        /// 配置多人游戏模式
         /// </summary>
-        private bool TryFindAllReferences()
+        private void ConfigureMultiplayerMode()
         {
-            bool foundAll = true;
+            LogDebug($"配置多人模式 - MasterClient: {isMasterClient}");
 
-            // 查找 NetworkManager（优先从DontDestroyOnLoad查找）
-            if (networkManager == null)
-            {
-                networkManager = FindGameObjectInDontDestroy("NetworkManager");
-                if (networkManager == null)
-                {
-                    networkManager = FindGameObjectByNames(networkManagerNames);
-                }
-
-                if (networkManager != null)
-                    LogDebug($"找到 NetworkManager: {networkManager.name} (在DontDestroy: {IsInDontDestroyOnLoad(networkManager)})");
-                else
-                    foundAll = false;
-            }
-
-            // 查找 GameControllers
-            if (gameControllers == null)
-            {
-                gameControllers = SafeFindGameObject("GameControllers");
-                if (gameControllers != null)
-                    LogDebug($"找到 GameControllers: {gameControllers.name}");
-                else
-                    foundAll = false;
-            }
-
-            // 运行时查找 HostGameManager 组件（从GameControllers中获取）
-            if (hostGameManagerComponent == null && gameControllers != null)
-            {
-                hostGameManagerComponent = gameControllers.GetComponent<HostGameManager>();
-                if (hostGameManagerComponent != null)
-                    LogDebug($"从GameControllers找到 HostGameManager组件");
-                else
-                {
-                    // 如果GameControllers上没有，尝试在子对象中查找
-                    hostGameManagerComponent = gameControllers.GetComponentInChildren<HostGameManager>();
-                    if (hostGameManagerComponent != null)
-                        LogDebug($"从GameControllers子对象找到 HostGameManager组件");
-                }
-            }
-
-            // 如果还没找到，全局查找
-            if (hostGameManagerComponent == null)
-            {
-                hostGameManagerComponent = SafeFindComponent<HostGameManager>();
-                if (hostGameManagerComponent != null)
-                    LogDebug($"全局找到 HostGameManager组件: {hostGameManagerComponent.name}");
-                else
-                    foundAll = false;
-            }
-
-            // 查找 GameCanvas
-            if (gameCanvas == null)
-            {
-                gameCanvas = FindGameObjectByNames(gameCanvasNames);
-                if (gameCanvas != null)
-                    LogDebug($"找到 GameCanvas: {gameCanvas.name}");
-                else
-                    foundAll = false;
-            }
-
-            // 查找 NetworkCanvas
-            if (networkCanvas == null)
-            {
-                networkCanvas = FindGameObjectInDontDestroy("NetworkCanvas");
-                if (networkCanvas == null)
-                    networkCanvas = FindGameObjectInDontDestroy("NetworkUI");
-                if (networkCanvas == null)
-                    networkCanvas = SafeFindGameObject("NetworkCanvas");
-
-                if (networkCanvas != null)
-                    LogDebug($"找到 NetworkCanvas: {networkCanvas.name}");
-                else
-                    foundAll = false;
-            }
-
-            // 查找 NetworkUI 组件
-            if (networkUI == null)
-            {
-                networkUI = SafeFindComponent<NetworkUI>();
-                if (networkUI != null)
-                    LogDebug($"找到 NetworkUI: {networkUI.name}");
-                else
-                    foundAll = false;
-            }
-
-            return foundAll;
-        }
-
-        /// <summary>
-        /// 根据游戏模式配置场景
-        /// </summary>
-        private void ConfigureSceneBasedOnGameMode()
-        {
-            var gameMode = MainMenuManager.SelectedGameMode;
-            LogDebug($"配置场景模式: {gameMode}");
-
-            switch (gameMode)
-            {
-                case MainMenuManager.GameMode.SinglePlayer:
-                    ConfigureSinglePlayerMode();
-                    break;
-
-                case MainMenuManager.GameMode.Host:
-                    ConfigureHostMode();
-                    break;
-
-                case MainMenuManager.GameMode.Client:
-                    ConfigureClientMode();
-                    break;
-
-                default:
-                    Debug.LogWarning($"未知游戏模式: {gameMode}，使用单机模式配置");
-                    ConfigureSinglePlayerMode();
-                    break;
-            }
-
-            LogDebug("场景配置完成");
-
-            // 配置完成后，确保NQMC正确启动
-            StartCoroutine(EnsureNQMCStarted());
-        }
-
-        /// <summary>
-        /// 配置单机模式
-        /// </summary>
-        private void ConfigureSinglePlayerMode()
-        {
-            LogDebug("配置单机模式");
-
-            // 网络组件
-            SetGameObjectActive(networkManager, false);
-            SetComponentEnabled(hostGameManagerComponent, false);
-
-            // UI组件
-            SetGameObjectActive(networkCanvas, false);
+            // UI组件配置
             SetGameObjectActive(gameCanvas, true);
+            SetGameObjectActive(networkCanvas, true);
 
-            // 确保GameControllers保持活跃（单机也需要题目管理器）
-            SetGameObjectActive(gameControllers, true);
+            // NetworkUI配置
+            if (networkUI != null)
+            {
+                networkUI.ShowNetworkPanel();
+                LogDebug("显示网络UI");
+            }
 
-            // 隐藏网络UI
+            // HostGameManager配置
+            ConfigureHostGameManager();
+
+            // RoomConfigManager配置
+            ConfigureRoomConfigManager();
+        }
+
+        /// <summary>
+        /// 配置离线模式（未在房间中）
+        /// </summary>
+        private void ConfigureOfflineMode()
+        {
+            LogDebug("配置离线模式");
+
+            // UI组件配置
+            SetGameObjectActive(gameCanvas, true);
+            SetGameObjectActive(networkCanvas, false);
+
+            // NetworkUI配置
             if (networkUI != null)
             {
                 networkUI.HideNetworkPanel();
-                LogDebug("网络UI已隐藏");
+                LogDebug("隐藏网络UI");
+            }
+
+            // 禁用游戏管理器
+            ConfigureHostGameManager(false);
+        }
+
+        /// <summary>
+        /// 配置HostGameManager
+        /// </summary>
+        private void ConfigureHostGameManager(bool? forceState = null)
+        {
+            var hostManager = HostGameManager.Instance;
+            if (hostManager != null)
+            {
+                bool shouldEnable = forceState ?? (isInRoom && isMasterClient);
+                hostManager.enabled = shouldEnable;
+
+                LogDebug($"HostGameManager 启用状态: {shouldEnable}");
             }
         }
 
         /// <summary>
-        /// 配置主机模式（双层架构适配）
+        /// 配置RoomConfigManager
         /// </summary>
-        private void ConfigureHostMode()
+        private void ConfigureRoomConfigManager()
         {
-            LogDebug("配置主机模式");
-
-            // 检查是否为双层架构
-            var allNetworkManagers = FindObjectsOfType<NetworkManager>();
-            bool isDualLayer = allNetworkManagers.Length == 2;
-
-            if (isDualLayer)
+            if (roomConfigManager != null)
             {
-                LogDebug("检测到双层架构，分别配置服务器层和玩家层");
-                ConfigureDualLayerHostMode();
-            }
-            else
-            {
-                LogDebug("使用传统单层架构配置");
-                ConfigureTraditionalHostMode();
+                // RoomConfigManager会自己检查权限，这里不需要额外配置
+                LogDebug("RoomConfigManager已配置");
             }
         }
 
-        /// <summary>
-        /// 配置双层架构的Host模式
-        /// </summary>
-        private void ConfigureDualLayerHostMode()
-        {
-            // 找到并配置服务器层
-            var serverLayer = FindObjectOfType<ServerLayerMarker>();
-            if (serverLayer != null)
-            {
-                var serverHostManager = serverLayer.GetComponent<HostGameManager>();
-                if (serverHostManager != null)
-                {
-                    serverHostManager.enabled = true;
-                    LogDebug("启用服务器层HostGameManager");
-                }
-            }
+        #endregion
 
-            // 找到并配置玩家Host层
-            var playerHostLayer = FindObjectOfType<PlayerHostLayerMarker>();
-            if (playerHostLayer != null)
-            {
-                // 玩家Host层不需要HostGameManager，只需要NQMC等
-                var playerHostManager = playerHostLayer.GetComponent<HostGameManager>();
-                if (playerHostManager != null)
-                {
-                    playerHostManager.enabled = false;
-                    LogDebug("禁用玩家Host层HostGameManager（由服务器层处理）");
-                }
-            }
-
-            // UI和其他组件配置
-            ConfigureUIForDualLayer();
-        }
+        #region 组件启动协调
 
         /// <summary>
-        /// 配置传统Host模式
+        /// 确保组件正确启动
         /// </summary>
-        private void ConfigureTraditionalHostMode()
+        private IEnumerator EnsureComponentsStarted()
         {
-            // 网络组件
-            SetGameObjectActive(networkManager, true);
-            SetComponentEnabled(hostGameManagerComponent, true);
+            LogDebug("协调组件启动");
 
-            // 确保GameControllers保持活跃
-            SetGameObjectActive(gameControllers, true);
-
-            // UI组件
-            SetGameObjectActive(networkCanvas, true);
-            SetGameObjectActive(gameCanvas, true);
-
-            // 显示网络UI
-            if (networkUI != null)
-            {
-                networkUI.ShowNetworkPanel();
-                LogDebug("网络UI已显示");
-            }
-        }
-
-        /// <summary>
-        /// 为双层架构配置UI
-        /// </summary>
-        private void ConfigureUIForDualLayer()
-        {
-            // 确保GameControllers保持活跃（两层都需要）
-            SetGameObjectActive(gameControllers, true);
-
-            // UI组件
-            SetGameObjectActive(networkCanvas, true);
-            SetGameObjectActive(gameCanvas, true);
-
-            // 显示网络UI
-            if (networkUI != null)
-            {
-                networkUI.ShowNetworkPanel();
-                LogDebug("双层架构：网络UI已显示");
-            }
-        }
-
-        /// <summary>
-        /// 配置客户端模式（关键修复）
-        /// </summary>
-        private void ConfigureClientMode()
-        {
-            LogDebug("配置客户端模式");
-
-            // 网络组件 - 保持NetworkManager活跃
-            SetGameObjectActive(networkManager, true);
-
-            // 关键修复：只禁用HostGameManager组件，不禁用GameControllers
-            SetComponentEnabled(hostGameManagerComponent, false);
-            LogDebug("禁用HostGameManager组件");
-
-            // 确保GameControllers保持活跃（客户端需要NQMC等组件）
-            SetGameObjectActive(gameControllers, true);
-            LogDebug("保持GameControllers活跃以支持题目接收和显示");
-
-            // UI组件
-            SetGameObjectActive(networkCanvas, true);
-            SetGameObjectActive(gameCanvas, true);
-
-            // 显示网络UI
-            if (networkUI != null)
-            {
-                networkUI.ShowNetworkPanel();
-                LogDebug("网络UI已显示");
-            }
-
-            LogDebug("客户端模式配置完成 - 保留题目管理功能");
-        }
-
-        /// <summary>
-        /// 确保NQMC正确启动
-        /// </summary>
-        private IEnumerator EnsureNQMCStarted()
-        {
-            // 等待组件初始化
+            // 等待一下确保配置生效
             yield return new WaitForSeconds(0.5f);
 
+            // 启动NQMC
+            StartNetworkQuestionController();
+
+            // 通知HostGameManager
+            NotifyHostGameManager();
+        }
+
+        /// <summary>
+        /// 启动网络题目控制器
+        /// </summary>
+        private void StartNetworkQuestionController()
+        {
             var nqmc = NetworkQuestionManagerController.Instance;
             if (nqmc != null)
             {
-                var gameMode = MainMenuManager.SelectedGameMode;
-
                 if (!nqmc.IsGameStarted)
                 {
-                    switch (gameMode)
+                    if (isInRoom)
                     {
-                        case MainMenuManager.GameMode.SinglePlayer:
-                            LogDebug("启动NQMC单机模式");
-                            nqmc.StartGame(false);
-                            break;
-
-                        case MainMenuManager.GameMode.Host:
-                        case MainMenuManager.GameMode.Client:
-                            LogDebug("启动NQMC多人模式");
-                            nqmc.StartGame(true);
-
-                            // **新增：通知HostGameManager场景已加载**
-                            if (gameMode == MainMenuManager.GameMode.Host && HostGameManager.Instance != null)
-                            {
-                                LogDebug("通知HostGameManager场景加载完成");
-                                HostGameManager.Instance.OnGameSceneLoaded();
-                            }
-                            break;
+                        LogDebug("启动NQMC多人模式");
+                        nqmc.StartGame(true);
+                    }
+                    else
+                    {
+                        LogDebug("Photon未连接，跳过NQMC启动");
                     }
                 }
                 else
                 {
-                    LogDebug($"NQMC已启动 - 模式: {(nqmc.IsMultiplayerMode ? "多人" : "单机")}");
-
-                    // **新增：如果NQMC已启动但HostGameManager未启动游戏，则通知它**
-                    if (gameMode == MainMenuManager.GameMode.Host && HostGameManager.Instance != null)
-                    {
-                        if (!HostGameManager.Instance.IsGameInProgress)
-                        {
-                            LogDebug("NQMC已启动但Host游戏未开始，通知HostGameManager");
-                            HostGameManager.Instance.OnGameSceneLoaded();
-                        }
-                    }
+                    LogDebug($"NQMC已启动 - 多人模式: {nqmc.IsMultiplayerMode}");
                 }
             }
             else
             {
-                Debug.LogError("找不到NetworkQuestionManagerController实例");
+                Debug.LogWarning("[SceneModeController] 找不到NetworkQuestionManagerController");
+            }
+        }
+
+        /// <summary>
+        /// 通知HostGameManager场景已就绪
+        /// </summary>
+        private void NotifyHostGameManager()
+        {
+            if (!isInRoom || !isMasterClient) return;
+
+            var hostManager = HostGameManager.Instance;
+            if (hostManager != null && hostManager.enabled)
+            {
+                // 检查HostGameManager是否有场景加载完成的方法
+                var method = hostManager.GetType().GetMethod("OnGameSceneLoaded");
+                if (method != null)
+                {
+                    LogDebug("通知HostGameManager场景加载完成");
+                    method.Invoke(hostManager, null);
+                }
+            }
+        }
+
+        #endregion
+
+        #region IConnectionCallbacks 实现
+
+        public void OnConnected()
+        {
+            LogDebug("Photon: 已连接到服务器");
+        }
+
+        public void OnConnectedToMaster()
+        {
+            LogDebug("Photon: 已连接到主服务器");
+        }
+
+        public void OnDisconnected(DisconnectCause cause)
+        {
+            LogDebug($"Photon: 断开连接 - 原因: {cause}");
+
+            if (isInitialized)
+            {
+                StartCoroutine(DelayedReconfigure());
+            }
+        }
+
+        public void OnRegionListReceived(RegionHandler regionHandler)
+        {
+            // 可选实现
+        }
+
+        public void OnCustomAuthenticationResponse(Dictionary<string, object> data)
+        {
+            // 可选实现
+        }
+
+        public void OnCustomAuthenticationFailed(string debugMessage)
+        {
+            LogDebug($"Photon: 自定义认证失败 - {debugMessage}");
+        }
+
+        #endregion
+
+        #region IMatchmakingCallbacks 实现
+
+        public void OnFriendListUpdate(List<FriendInfo> friendList)
+        {
+            // 可选实现
+        }
+
+        public void OnCreatedRoom()
+        {
+            LogDebug("Photon: 房间创建成功");
+        }
+
+        public void OnCreateRoomFailed(short returnCode, string message)
+        {
+            LogDebug($"Photon: 房间创建失败 - {returnCode}: {message}");
+        }
+
+        public void OnJoinedRoom()
+        {
+            LogDebug("Photon: 加入房间");
+
+            if (isInitialized)
+            {
+                StartCoroutine(DelayedReconfigure());
+            }
+        }
+
+        public void OnJoinRoomFailed(short returnCode, string message)
+        {
+            LogDebug($"Photon: 加入房间失败 - {returnCode}: {message}");
+        }
+
+        public void OnJoinRandomFailed(short returnCode, string message)
+        {
+            LogDebug($"Photon: 随机加入房间失败 - {returnCode}: {message}");
+        }
+
+        public void OnLeftRoom()
+        {
+            LogDebug("Photon: 离开房间");
+
+            if (isInitialized)
+            {
+                StartCoroutine(DelayedReconfigure());
+            }
+        }
+
+        public void OnRoomListUpdate(List<RoomInfo> roomList)
+        {
+            // 可选实现
+        }
+
+        public void OnLobbyStatisticsUpdate(List<TypedLobbyInfo> lobbyStatistics)
+        {
+            // 可选实现
+        }
+
+        public void OnJoinedLobby()
+        {
+            LogDebug("Photon: 加入大厅");
+        }
+
+        public void OnLeftLobby()
+        {
+            LogDebug("Photon: 离开大厅");
+        }
+
+        #endregion
+
+        #region Photon事件处理 - 使用IPunObservable替代
+
+        /// <summary>
+        /// 监听MasterClient变化（通过Update检查）
+        /// </summary>
+        private void Update()
+        {
+            if (!isInitialized) return;
+
+            // 每秒检查一次MasterClient状态
+            if (Time.frameCount % 60 == 0)
+            {
+                bool currentIsMasterClient = PhotonNetwork.IsMasterClient;
+                if (currentIsMasterClient != isMasterClient)
+                {
+                    LogDebug($"Photon: MasterClient状态变化 - 当前: {currentIsMasterClient}");
+                    isMasterClient = currentIsMasterClient;
+                    StartCoroutine(DelayedReconfigure());
+                }
+            }
+        }
+
+        /// <summary>
+        /// 延迟重新配置
+        /// </summary>
+        private IEnumerator DelayedReconfigure()
+        {
+            yield return new WaitForSeconds(0.2f);
+            ConfigureSceneForPhoton();
+        }
+
+        #endregion
+
+        #region 辅助方法
+
+        /// <summary>
+        /// 安全设置GameObject激活状态
+        /// </summary>
+        private void SetGameObjectActive(GameObject obj, bool active)
+        {
+            if (obj != null)
+            {
+                bool wasActive = obj.activeSelf;
+                obj.SetActive(active);
+                LogDebug($"设置 {obj.name} 激活状态: {wasActive} → {active}");
             }
         }
 
@@ -449,271 +529,6 @@ namespace Core
                 component.enabled = enabled;
                 LogDebug($"设置 {component.GetType().Name} 启用状态: {wasEnabled} → {enabled}");
             }
-            else
-            {
-                LogDebug($"组件引用为空，无法设置启用状态");
-            }
-        }
-
-        /// <summary>
-        /// 安全设置GameObject激活状态
-        /// </summary>
-        private void SetGameObjectActive(GameObject obj, bool active)
-        {
-            if (obj != null)
-            {
-                bool wasActive = obj.activeSelf;
-                obj.SetActive(active);
-                LogDebug($"设置 {obj.name} 激活状态: {wasActive} → {active}");
-            }
-            else
-            {
-                LogDebug($"GameObject引用为空，无法设置激活状态");
-            }
-        }
-
-        // 以下方法保持不变...
-
-        /// <summary>
-        /// 验证当前引用是否仍然有效
-        /// </summary>
-        private bool ValidateReferences()
-        {
-            bool anyInvalid = false;
-
-            if (networkManager != null && networkManager.gameObject == null)
-            {
-                LogDebug("NetworkManager引用失效");
-                networkManager = null;
-                anyInvalid = true;
-            }
-
-            if (gameControllers != null && gameControllers.gameObject == null)
-            {
-                LogDebug("GameControllers引用失效");
-                gameControllers = null;
-                anyInvalid = true;
-            }
-
-            if (hostGameManagerComponent != null && hostGameManagerComponent.gameObject == null)
-            {
-                LogDebug("HostGameManager组件引用失效");
-                hostGameManagerComponent = null;
-                anyInvalid = true;
-            }
-
-            if (networkCanvas != null && networkCanvas.gameObject == null)
-            {
-                LogDebug("NetworkCanvas引用失效");
-                networkCanvas = null;
-                anyInvalid = true;
-            }
-
-            if (gameCanvas != null && gameCanvas.gameObject == null)
-            {
-                LogDebug("GameCanvas引用失效");
-                gameCanvas = null;
-                anyInvalid = true;
-            }
-
-            if (networkUI != null && networkUI.gameObject == null)
-            {
-                LogDebug("NetworkUI引用失效");
-                networkUI = null;
-                anyInvalid = true;
-            }
-
-            return anyInvalid;
-        }
-
-        /// <summary>
-        /// 刷新失效的引用
-        /// </summary>
-        private IEnumerator RefreshInvalidReferences()
-        {
-            LogDebug("开始刷新失效的引用...");
-
-            float refreshStartTime = Time.time;
-            const float refreshTimeout = 3f;
-
-            while (Time.time - refreshStartTime < refreshTimeout)
-            {
-                bool allFound = TryFindAllReferences();
-
-                if (allFound)
-                {
-                    LogDebug("引用刷新成功");
-                    referencesFound = true;
-                    break;
-                }
-
-                yield return new WaitForSeconds(0.2f);
-            }
-
-            if (!referencesFound)
-            {
-                LogDebug("引用刷新超时");
-                ShowMissingReferences();
-            }
-        }
-
-        /// <summary>
-        /// 定期验证引用有效性
-        /// </summary>
-        private IEnumerator PeriodicReferenceValidation()
-        {
-            while (this != null && gameObject.activeInHierarchy)
-            {
-                yield return new WaitForSeconds(2f);
-
-                if (configurationCompleted && ValidateReferences())
-                {
-                    LogDebug("定期检查发现引用失效，尝试修复...");
-                    yield return StartCoroutine(RefreshInvalidReferences());
-
-                    if (referencesFound)
-                    {
-                        ConfigureSceneBasedOnGameMode();
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// 按多个可能的名称查找GameObject
-        /// </summary>
-        private GameObject FindGameObjectByNames(string[] possibleNames)
-        {
-            foreach (string name in possibleNames)
-            {
-                GameObject obj = SafeFindGameObject(name);
-                if (obj != null)
-                    return obj;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// 强化的安全查找GameObject方法
-        /// </summary>
-        private GameObject SafeFindGameObject(string name)
-        {
-            GameObject obj = FindGameObjectInDontDestroy(name);
-            if (obj != null)
-                return obj;
-
-            obj = GameObject.Find(name);
-            if (obj != null)
-                return obj;
-
-            return null;
-        }
-
-        /// <summary>
-        /// 安全查找组件（包括DontDestroyOnLoad）
-        /// </summary>
-        private T SafeFindComponent<T>() where T : Component
-        {
-            T component = FindComponentInDontDestroy<T>();
-            if (component != null)
-                return component;
-
-            component = FindObjectOfType<T>();
-            if (component != null)
-                return component;
-
-            return null;
-        }
-
-        /// <summary>
-        /// 在DontDestroyOnLoad中查找GameObject
-        /// </summary>
-        private GameObject FindGameObjectInDontDestroy(string name)
-        {
-            GameObject[] rootObjects = GetDontDestroyOnLoadObjects();
-
-            foreach (var rootObj in rootObjects)
-            {
-                if (rootObj.name == name)
-                    return rootObj;
-
-                Transform found = rootObj.transform.Find(name);
-                if (found != null)
-                    return found.gameObject;
-
-                Transform deepFound = FindChildRecursive(rootObj.transform, name);
-                if (deepFound != null)
-                    return deepFound.gameObject;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// 在DontDestroyOnLoad中查找组件
-        /// </summary>
-        private T FindComponentInDontDestroy<T>() where T : Component
-        {
-            GameObject[] rootObjects = GetDontDestroyOnLoadObjects();
-
-            foreach (var rootObj in rootObjects)
-            {
-                T component = rootObj.GetComponentInChildren<T>(true);
-                if (component != null)
-                    return component;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// 获取DontDestroyOnLoad场景中的所有根对象
-        /// </summary>
-        private GameObject[] GetDontDestroyOnLoadObjects()
-        {
-            GameObject temp = new GameObject("TempFinder");
-            DontDestroyOnLoad(temp);
-            UnityEngine.SceneManagement.Scene dontDestroyScene = temp.scene;
-            GameObject[] rootObjects = dontDestroyScene.GetRootGameObjects();
-            DestroyImmediate(temp);
-            return rootObjects;
-        }
-
-        /// <summary>
-        /// 递归查找子对象
-        /// </summary>
-        private Transform FindChildRecursive(Transform parent, string name)
-        {
-            foreach (Transform child in parent)
-            {
-                if (child.name == name)
-                    return child;
-
-                Transform found = FindChildRecursive(child, name);
-                if (found != null)
-                    return found;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// 显示缺失的引用
-        /// </summary>
-        private void ShowMissingReferences()
-        {
-            LogDebug("=== 缺失的引用 ===");
-            if (networkManager == null)
-                LogDebug("- 缺少 NetworkManager");
-            if (gameControllers == null)
-                LogDebug("- 缺少 GameControllers");
-            if (hostGameManagerComponent == null)
-                LogDebug("- 缺少 HostGameManager组件");
-            if (networkCanvas == null)
-                LogDebug("- 缺少 NetworkCanvas");
-            if (gameCanvas == null)
-                LogDebug("- 缺少 GameCanvas");
-            if (networkUI == null)
-                LogDebug("- 缺少 NetworkUI");
         }
 
         /// <summary>
@@ -721,54 +536,111 @@ namespace Core
         /// </summary>
         private void LogDebug(string message)
         {
-            if (showDebugLogs)
+            if (enableDebugLogs)
             {
                 Debug.Log($"[SceneModeController] {message}");
             }
         }
 
+        #endregion
+
+        #region 公共接口
+
         /// <summary>
-        /// 验证组件是否在DontDestroyOnLoad中
+        /// 手动重新配置场景
         /// </summary>
-        private bool IsInDontDestroyOnLoad(GameObject obj)
-        {
-            if (obj == null) return false;
-
-            GameObject temp = new GameObject("TempChecker");
-            DontDestroyOnLoad(temp);
-            bool isInDontDestroy = obj.scene == temp.scene;
-            DestroyImmediate(temp);
-
-            return isInDontDestroy;
-        }
-
-        // 调试方法
-        [ContextMenu("重新配置场景")]
         public void ReconfigureScene()
         {
-            ConfigureSceneBasedOnGameMode();
+            if (!isInitialized)
+            {
+                LogDebug("尚未初始化，无法重新配置");
+                return;
+            }
+
+            LogDebug("手动重新配置场景");
+            ConfigureSceneForPhoton();
         }
 
-        [ContextMenu("强制重新查找引用")]
-        public void RefreshReferences()
+        /// <summary>
+        /// 强制刷新组件引用
+        /// </summary>
+        public void RefreshComponentReferences()
         {
-            referencesFound = false;
-            configurationCompleted = false;
-            StartCoroutine(FindReferencesAndConfigureCoroutine());
+            LogDebug("刷新组件引用");
+            FindEssentialComponents();
+
+            if (ValidateEssentialComponents())
+            {
+                ConfigureSceneForPhoton();
+            }
         }
 
-        [ContextMenu("显示引用状态")]
-        public void ShowReferenceStatus()
+        /// <summary>
+        /// 获取当前状态信息
+        /// </summary>
+        public string GetStatusInfo()
         {
-            LogDebug("=== 当前引用状态 ===");
-            LogDebug($"NetworkManager: {(networkManager != null ? "✓ " + networkManager.name : "✗")}");
-            LogDebug($"GameControllers: {(gameControllers != null ? "✓ " + gameControllers.name : "✗")}");
-            LogDebug($"HostGameManager组件: {(hostGameManagerComponent != null ? "✓ " + hostGameManagerComponent.name : "✗")}");
-            LogDebug($"NetworkCanvas: {(networkCanvas != null ? "✓ " + networkCanvas.name : "✗")}");
-            LogDebug($"GameCanvas: {(gameCanvas != null ? "✓ " + gameCanvas.name : "✗")}");
-            LogDebug($"NetworkUI: {(networkUI != null ? "✓ " + networkUI.name : "✗")}");
-            LogDebug($"引用查找完成: {(referencesFound ? "✓" : "✗")}");
-            LogDebug($"配置完成: {(configurationCompleted ? "✓" : "✗")}");
+            return $"初始化: {isInitialized}, " +
+                   $"配置完成: {configurationCompleted}, " +
+                   $"在房间中: {isInRoom}, " +
+                   $"MasterClient: {isMasterClient}, " +
+                   $"Photon连接: {PhotonNetwork.IsConnected}";
         }
+
+        /// <summary>
+        /// 获取组件状态信息
+        /// </summary>
+        public string GetComponentStatus()
+        {
+            return $"GameCanvas: {(gameCanvas != null ? "✓" : "✗")}, " +
+                   $"NetworkUI: {(networkUI != null ? "✓" : "✗")}, " +
+                   $"NetworkCanvas: {(networkCanvas != null ? "✓" : "✗")}, " +
+                   $"RoomConfigManager: {(roomConfigManager != null ? "✓" : "✗")}, " +
+                   $"HostGameManager: {(HostGameManager.Instance != null ? "✓" : "✗")}";
+        }
+
+        #endregion
+
+        #region 调试方法
+
+        [ContextMenu("重新配置场景")]
+        public void DebugReconfigureScene()
+        {
+            if (Application.isPlaying)
+            {
+                ReconfigureScene();
+            }
+        }
+
+        [ContextMenu("刷新组件引用")]
+        public void DebugRefreshReferences()
+        {
+            if (Application.isPlaying)
+            {
+                RefreshComponentReferences();
+            }
+        }
+
+        [ContextMenu("显示状态信息")]
+        public void DebugShowStatus()
+        {
+            if (Application.isPlaying)
+            {
+                Debug.Log($"=== SceneModeController状态 ===\n{GetStatusInfo()}");
+                Debug.Log($"=== 组件状态 ===\n{GetComponentStatus()}");
+            }
+        }
+
+        [ContextMenu("测试模式切换")]
+        public void DebugTestModeSwitch()
+        {
+            if (Application.isPlaying)
+            {
+                LogDebug("测试模式切换");
+                ConfigureSceneForPhoton();
+            }
+        }
+
+        #endregion
     }
 }
