@@ -80,6 +80,10 @@ namespace Lobby.UI
             }
 
             roomData = data;
+
+            // 确保房间数据已正确初始化
+            roomData.Initialize();
+
             onRoomClicked = clickCallback;
 
             // 绑定按钮事件
