@@ -4558,6 +4558,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   autoConnectOnStart: 1
   roomListRefreshInterval: 5
+  connectionTimeout: 10
   enableDebugLogs: 1
 --- !u!114 &1705679475
 MonoBehaviour:
@@ -4601,7 +4602,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3b5aafc696ea0cd4386f443ee29d3ca2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gameVersion: 1.0
+  gameVersion: 0.4.2.1
   enableDebugLogs: 1
 --- !u!1 &1728284884
 GameObject:

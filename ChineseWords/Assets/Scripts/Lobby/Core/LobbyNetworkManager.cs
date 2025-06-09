@@ -1,57 +1,61 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using Photon.Realtime;
 using Core.Network;
 using Lobby.Data;
 using Lobby.Network;
+using Photon.Pun;
 
 namespace Lobby.Core
 {
     /// <summary>
-    /// LobbyÍøÂç¹ÜÀíÆ÷ - PhotonÕæÊµÊµÏÖ°æ±¾
-    /// ×¨ÃÅ´¦ÀíLobbyÏà¹ØµÄPhotonÍøÂç²Ù×÷
+    /// ä¿®å¤åçš„ Lobbyç½‘ç»œç®¡ç†å™¨
+    /// ä¸»è¦ä¿®å¤ï¼šçŠ¶æ€åŒæ­¥é—®é¢˜ã€äº‹ä»¶è®¢é˜…æ—¶æœºã€çŠ¶æ€æ£€æŸ¥é€»è¾‘
     /// </summary>
     public class LobbyNetworkManager : MonoBehaviour
     {
-        [Header("ÍøÂçÅäÖÃ")]
+        [Header("ç½‘ç»œé…ç½®")]
         [SerializeField] private bool autoConnectOnStart = true;
         [SerializeField] private float roomListRefreshInterval = 5f;
         [SerializeField] private float connectionTimeout = 10f;
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static LobbyNetworkManager Instance { get; private set; }
 
-        // ÍøÂç×´Ì¬
+        // ç½‘ç»œçŠ¶æ€ - ä¿®å¤ï¼šå¢åŠ çŠ¶æ€éªŒè¯æ–¹æ³•
         private bool isConnected = false;
         private bool isConnecting = false;
         private bool isInLobby = false;
 
-        // ·¿¼äÊı¾İ
+        // æˆ¿é—´æ•°æ®
         private List<LobbyRoomData> cachedRoomList = new List<LobbyRoomData>();
         private Coroutine connectionTimeoutCoroutine;
 
-        // ÊÂ¼ş
+        // äº‹ä»¶
         public System.Action<bool> OnConnectionStatusChanged;
         public System.Action<List<LobbyRoomData>> OnRoomListUpdated;
         public System.Action<string, bool> OnRoomCreated; // roomName, success
         public System.Action<string, bool> OnRoomJoined; // roomName, success
         public System.Action<bool> OnLobbyStatusChanged; // inLobby
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
             if (Instance == null)
             {
                 Instance = this;
-                LogDebug("LobbyNetworkManager ÊµÀıÒÑ´´½¨");
+                LogDebug("LobbyNetworkManager å®ä¾‹å·²åˆ›å»º");
+
+                // ä¿®å¤1ï¼šåœ¨ Awake ä¸­å°±è®¢é˜…äº‹ä»¶ï¼Œç¡®ä¿ä¸ä¼šé”™è¿‡æ—©æœŸäº‹ä»¶
+                SubscribeToPhotonEvents();
             }
             else
             {
-                LogDebug("Ïú»ÙÖØ¸´µÄLobbyNetworkManagerÊµÀı");
+                LogDebug("é”€æ¯é‡å¤çš„LobbyNetworkManagerå®ä¾‹");
                 Destroy(gameObject);
                 return;
             }
@@ -59,10 +63,15 @@ namespace Lobby.Core
 
         private void Start()
         {
-            if (autoConnectOnStart)
+            // ä¿®å¤2ï¼šå…ˆæ£€æŸ¥å½“å‰çŠ¶æ€ï¼Œå†å†³å®šæ˜¯å¦éœ€è¦è¿æ¥
+            CheckAndSyncCurrentState();
+
+            if (autoConnectOnStart && !GetRealConnectionStatus())
             {
                 StartCoroutine(ConnectToPhotonCoroutine());
             }
+
+            StartCoroutine(MonitorPhotonStatus());
         }
 
         private void OnDestroy()
@@ -78,69 +87,263 @@ namespace Lobby.Core
 
         #endregion
 
-        #region Á¬½Ó¹ÜÀí
+        #region ä¿®å¤ï¼šçŠ¶æ€æ£€æŸ¥å’ŒåŒæ­¥æ–¹æ³•
 
         /// <summary>
-        /// Á¬½Óµ½PhotonµÄĞ­³Ì
+        /// æ£€æŸ¥å¹¶åŒæ­¥å½“å‰çœŸå®çŠ¶æ€
+        /// </summary>
+        private void CheckAndSyncCurrentState()
+        {
+            LogDebug("æ£€æŸ¥å¹¶åŒæ­¥å½“å‰PhotonçŠ¶æ€...");
+
+            // è·å–çœŸå®çš„PhotonçŠ¶æ€
+            bool realConnected = GetRealConnectionStatus();
+            bool realInLobby = GetRealLobbyStatus();
+
+            LogDebug($"çœŸå®çŠ¶æ€æ£€æŸ¥ - è¿æ¥: {realConnected}, å¤§å…: {realInLobby}");
+            LogDebug($"å†…éƒ¨çŠ¶æ€ - è¿æ¥: {isConnected}, å¤§å…: {isInLobby}");
+
+            // åŒæ­¥çŠ¶æ€
+            if (realConnected != isConnected)
+            {
+                LogDebug($"åŒæ­¥è¿æ¥çŠ¶æ€: {isConnected} -> {realConnected}");
+                isConnected = realConnected;
+                OnConnectionStatusChanged?.Invoke(isConnected);
+            }
+
+            if (realInLobby != isInLobby)
+            {
+                LogDebug($"åŒæ­¥å¤§å…çŠ¶æ€: {isInLobby} -> {realInLobby}");
+                isInLobby = realInLobby;
+                OnLobbyStatusChanged?.Invoke(isInLobby);
+
+                // å¦‚æœå·²ç»åœ¨å¤§å…ä¸­ï¼Œç«‹å³åˆ·æ–°æˆ¿é—´åˆ—è¡¨
+                if (isInLobby)
+                {
+                    LogDebug("æ£€æµ‹åˆ°å·²åœ¨å¤§å…ä¸­ï¼Œç«‹å³åˆ·æ–°æˆ¿é—´åˆ—è¡¨");
+                    RefreshRoomList();
+                }
+            }
+        }
+
+        /// <summary>
+        /// è·å–çœŸå®çš„è¿æ¥çŠ¶æ€ï¼ˆç›´æ¥æŸ¥è¯¢Photonï¼‰
+        /// </summary>
+        private bool GetRealConnectionStatus()
+        {
+            return PhotonNetworkAdapter.Instance != null && PhotonNetworkAdapter.Instance.IsPhotonConnected;
+        }
+
+        /// <summary>
+        /// è·å–çœŸå®çš„å¤§å…çŠ¶æ€ï¼ˆç›´æ¥æŸ¥è¯¢Photonï¼‰
+        /// </summary>
+        private bool GetRealLobbyStatus()
+        {
+            return PhotonNetworkAdapter.Instance != null && PhotonNetworkAdapter.Instance.IsInPhotonLobby;
+        }
+
+        /// <summary>
+        /// ä¿®å¤çš„ç½‘ç»œçŠ¶æ€æ£€æŸ¥æ–¹æ³•
+        /// </summary>
+        private bool CheckNetworkStatus(string operation)
+        {
+            // ä¿®å¤3ï¼šä½¿ç”¨çœŸå®çŠ¶æ€è¿›è¡Œæ£€æŸ¥ï¼Œè€Œä¸æ˜¯å†…éƒ¨ç¼“å­˜çŠ¶æ€
+            bool realConnected = GetRealConnectionStatus();
+            bool realInLobby = GetRealLobbyStatus();
+
+            LogDebug($"æ£€æŸ¥ç½‘ç»œçŠ¶æ€ç”¨äº {operation}:");
+            LogDebug($"  çœŸå®è¿æ¥çŠ¶æ€: {realConnected}");
+            LogDebug($"  çœŸå®å¤§å…çŠ¶æ€: {realInLobby}");
+            LogDebug($"  å†…éƒ¨è¿æ¥çŠ¶æ€: {isConnected}");
+            LogDebug($"  å†…éƒ¨å¤§å…çŠ¶æ€: {isInLobby}");
+
+            if (!realConnected)
+            {
+                LogDebug($"æ— æ³•æ‰§è¡Œ {operation}ï¼šæœªè¿æ¥åˆ°ç½‘ç»œï¼ˆçœŸå®çŠ¶æ€æ£€æŸ¥ï¼‰");
+                return false;
+            }
+
+            if (!realInLobby)
+            {
+                LogDebug($"æ— æ³•æ‰§è¡Œ {operation}ï¼šæœªåœ¨å¤§å…ä¸­ï¼ˆçœŸå®çŠ¶æ€æ£€æŸ¥ï¼‰");
+                return false;
+            }
+
+            // åŒæ­¥å†…éƒ¨çŠ¶æ€
+            if (isConnected != realConnected)
+            {
+                LogDebug("åŒæ­¥å†…éƒ¨è¿æ¥çŠ¶æ€");
+                isConnected = realConnected;
+                OnConnectionStatusChanged?.Invoke(isConnected);
+            }
+
+            if (isInLobby != realInLobby)
+            {
+                LogDebug("åŒæ­¥å†…éƒ¨å¤§å…çŠ¶æ€");
+                isInLobby = realInLobby;
+                OnLobbyStatusChanged?.Invoke(isInLobby);
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region è¿æ¥ç®¡ç†ï¼ˆä¿æŒåŸæœ‰é€»è¾‘ï¼Œä½†å¢åŠ çŠ¶æ€åŒæ­¥ï¼‰
+
+        /// <summary>
+        /// è¿æ¥åˆ°Photonçš„åç¨‹
         /// </summary>
         private IEnumerator ConnectToPhotonCoroutine()
         {
-            LogDebug("¿ªÊ¼Á¬½Óµ½Photon");
+            LogDebug("=== å¼€å§‹Photonè¿æ¥æµç¨‹ ===");
 
+            // 1. æ£€æŸ¥PhotonNetworkAdapter
             if (PhotonNetworkAdapter.Instance == null)
             {
-                Debug.LogError("[LobbyNetworkManager] PhotonNetworkAdapter.Instance Îª¿Õ");
+                Debug.LogError("[LobbyNetworkManager] PhotonNetworkAdapter.Instance ä¸ºç©ºï¼");
+                Debug.LogError("è¯·æ£€æŸ¥åœºæ™¯ä¸­æ˜¯å¦æœ‰PhotonNetworkAdapterç»„ä»¶");
                 yield break;
             }
 
+            LogDebug("âœ“ PhotonNetworkAdapter.Instance å­˜åœ¨");
+
+            // 2. æ£€æŸ¥å½“å‰çœŸå®çŠ¶æ€
+            if (GetRealConnectionStatus())
+            {
+                LogDebug("æ£€æµ‹åˆ°å·²è¿æ¥åˆ°Photonï¼ŒåŒæ­¥çŠ¶æ€å¹¶å°è¯•åŠ å…¥å¤§å…");
+                isConnected = true;
+                OnConnectionStatusChanged?.Invoke(true);
+
+                if (!GetRealLobbyStatus())
+                {
+                    JoinPhotonLobby();
+                }
+                else
+                {
+                    LogDebug("å·²åœ¨å¤§å…ä¸­ï¼Œåˆ·æ–°æˆ¿é—´åˆ—è¡¨");
+                    isInLobby = true;
+                    OnLobbyStatusChanged?.Invoke(true);
+                    RefreshRoomList();
+                }
+                yield break;
+            }
+
+            // 3. å¼€å§‹è¿æ¥æµç¨‹
             isConnecting = true;
             OnConnectionStatusChanged?.Invoke(false);
 
-            // ¶©ÔÄPhotonÊÂ¼ş
-            SubscribeToPhotonEvents();
+            // 4. å°è¯•è¿æ¥
+            LogDebug("å¼€å§‹è¿æ¥åˆ°PhotonæœåŠ¡å™¨...");
 
-            // ¼ì²éÊÇ·ñÒÑ¾­Á¬½Ó
-            if (PhotonNetworkAdapter.Instance.IsPhotonConnected)
+            try
             {
-                LogDebug("ÒÑÁ¬½Óµ½Photon£¬Ö±½Ó¼ÓÈë´óÌü");
-                JoinPhotonLobby();
+                if (!PhotonNetwork.IsConnected && PhotonNetwork.NetworkClientState == ClientState.PeerCreated)
+                {
+                    LogDebug("Photonæœªåˆå§‹åŒ–ï¼Œè°ƒç”¨ConnectUsingSettings...");
+                    bool connectResult = PhotonNetwork.ConnectUsingSettings();
+                    LogDebug($"ConnectUsingSettings è¿”å›ç»“æœ: {connectResult}");
+
+                    if (!connectResult)
+                    {
+                        Debug.LogError("[LobbyNetworkManager] PhotonNetwork.ConnectUsingSettings() è¿”å›false");
+                        isConnecting = false;
+                        OnConnectionStatusChanged?.Invoke(false);
+                        yield break;
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[LobbyNetworkManager] Photonè¿æ¥å¼‚å¸¸: {e.Message}");
+                isConnecting = false;
+                OnConnectionStatusChanged?.Invoke(false);
                 yield break;
             }
 
-            // ¿ªÊ¼Á¬½Ó³¬Ê±¼ÆÊ±
+            // 5. å¼€å§‹è¿æ¥è¶…æ—¶è®¡æ—¶
             connectionTimeoutCoroutine = StartCoroutine(ConnectionTimeoutCoroutine());
 
-            // µÈ´ıÁ¬½ÓÍê³É
-            while (isConnecting && !isConnected)
+            // 6. ç­‰å¾…è¿æ¥å®Œæˆ
+            float waitTime = 0f;
+            while (isConnecting && !GetRealConnectionStatus() && waitTime < connectionTimeout)
             {
-                yield return new WaitForSeconds(0.1f);
+                LogDebug($"ç­‰å¾…è¿æ¥... çŠ¶æ€: {PhotonNetwork.NetworkClientState}, ç­‰å¾…æ—¶é—´: {waitTime:F1}s");
+                yield return new WaitForSeconds(1f);
+                waitTime += 1f;
             }
 
-            // Í£Ö¹³¬Ê±¼ÆÊ±
+            // 7. åœæ­¢è¶…æ—¶è®¡æ—¶
             if (connectionTimeoutCoroutine != null)
             {
                 StopCoroutine(connectionTimeoutCoroutine);
                 connectionTimeoutCoroutine = null;
             }
-        }
 
-        /// <summary>
-        /// Á¬½Ó³¬Ê±Ğ­³Ì
-        /// </summary>
-        private IEnumerator ConnectionTimeoutCoroutine()
-        {
-            yield return new WaitForSeconds(connectionTimeout);
-
-            if (isConnecting)
+            // 8. è¿æ¥ç»“æœ
+            bool finalConnected = GetRealConnectionStatus();
+            if (finalConnected)
             {
-                LogDebug("Á¬½Ó³¬Ê±");
+                LogDebug("âœ“ Photonè¿æ¥æˆåŠŸï¼");
+                isConnected = true;
+                isConnecting = false;
+                OnConnectionStatusChanged?.Invoke(true);
+            }
+            else
+            {
+                Debug.LogError($"âœ— Photonè¿æ¥å¤±è´¥ï¼æœ€ç»ˆçŠ¶æ€: {PhotonNetwork.NetworkClientState}");
                 isConnecting = false;
                 OnConnectionStatusChanged?.Invoke(false);
             }
         }
 
         /// <summary>
-        /// ¼ÓÈëPhoton´óÌü
+        /// ç›‘æ§PhotonçŠ¶æ€çš„åç¨‹ï¼ˆå¢å¼ºç‰ˆï¼‰
+        /// </summary>
+        private IEnumerator MonitorPhotonStatus()
+        {
+            while (true)
+            {
+                yield return new WaitForSeconds(5f);
+
+                if (enableDebugLogs)
+                {
+                    LogDebug($"[çŠ¶æ€ç›‘æ§] PhotonçŠ¶æ€: {PhotonNetwork.NetworkClientState}, " +
+                            $"è¿æ¥: {PhotonNetwork.IsConnected}, " +
+                            $"å¤§å…: {PhotonNetwork.InLobby}");
+
+                    // ä¿®å¤4ï¼šå®šæœŸæ£€æŸ¥çŠ¶æ€ä¸€è‡´æ€§
+                    bool realConnected = GetRealConnectionStatus();
+                    bool realInLobby = GetRealLobbyStatus();
+
+                    if (realConnected != isConnected || realInLobby != isInLobby)
+                    {
+                        LogDebug($"[çŠ¶æ€ç›‘æ§] æ£€æµ‹åˆ°çŠ¶æ€ä¸ä¸€è‡´ï¼Œè¿›è¡ŒåŒæ­¥");
+                        LogDebug($"  å†…éƒ¨çŠ¶æ€: è¿æ¥={isConnected}, å¤§å…={isInLobby}");
+                        LogDebug($"  çœŸå®çŠ¶æ€: è¿æ¥={realConnected}, å¤§å…={realInLobby}");
+                        CheckAndSyncCurrentState();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// è¿æ¥è¶…æ—¶åç¨‹
+        /// </summary>
+        private IEnumerator ConnectionTimeoutCoroutine()
+        {
+            yield return new WaitForSeconds(connectionTimeout);
+
+            if (isConnecting && !GetRealConnectionStatus())
+            {
+                LogDebug("è¿æ¥è¶…æ—¶");
+                isConnecting = false;
+                OnConnectionStatusChanged?.Invoke(false);
+            }
+        }
+
+        /// <summary>
+        /// åŠ å…¥Photonå¤§å…
         /// </summary>
         private void JoinPhotonLobby()
         {
@@ -151,7 +354,7 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// ¶©ÔÄPhotonÊÂ¼ş
+        /// è®¢é˜…Photonäº‹ä»¶
         /// </summary>
         private void SubscribeToPhotonEvents()
         {
@@ -165,12 +368,16 @@ namespace Lobby.Core
                 PhotonNetworkAdapter.OnPhotonRoomJoined += OnPhotonRoomJoined;
                 PhotonNetworkAdapter.OnPhotonRoomLeft += OnPhotonRoomLeft;
 
-                LogDebug("ÒÑ¶©ÔÄPhotonÊÂ¼ş");
+                LogDebug("å·²è®¢é˜…Photonäº‹ä»¶");
+            }
+            else
+            {
+                LogDebug("PhotonNetworkAdapter.Instance ä¸ºç©ºï¼Œæ— æ³•è®¢é˜…äº‹ä»¶");
             }
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄPhotonÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…Photonäº‹ä»¶
         /// </summary>
         private void UnsubscribeFromPhotonEvents()
         {
@@ -184,34 +391,36 @@ namespace Lobby.Core
                 PhotonNetworkAdapter.OnPhotonRoomJoined -= OnPhotonRoomJoined;
                 PhotonNetworkAdapter.OnPhotonRoomLeft -= OnPhotonRoomLeft;
 
-                LogDebug("ÒÑÈ¡Ïû¶©ÔÄPhotonÊÂ¼ş");
+                LogDebug("å·²å–æ¶ˆè®¢é˜…Photonäº‹ä»¶");
             }
         }
 
         #endregion
 
-        #region ·¿¼ä¹ÜÀí
+        #region æˆ¿é—´ç®¡ç†ï¼ˆä¿®å¤çŠ¶æ€æ£€æŸ¥ï¼‰
 
         public void CreateRoom(string roomName, int maxPlayers, string password = "")
         {
-            if (!isConnected || !isInLobby)
+            LogDebug($"å°è¯•åˆ›å»ºæˆ¿é—´: {roomName}, æœ€å¤§äººæ•°: {maxPlayers}");
+
+            // ä¿®å¤5ï¼šä½¿ç”¨ä¿®å¤åçš„çŠ¶æ€æ£€æŸ¥æ–¹æ³•
+            if (!CheckNetworkStatus("åˆ›å»ºæˆ¿é—´"))
             {
-                LogDebug("Î´Á¬½Óµ½ÍøÂç»òÎ´ÔÚ´óÌüÖĞ£¬ÎŞ·¨´´½¨·¿¼ä");
                 OnRoomCreated?.Invoke(roomName, false);
                 return;
             }
 
             if (string.IsNullOrEmpty(roomName) || maxPlayers < 2)
             {
-                LogDebug("ÎŞĞ§µÄ·¿¼ä²ÎÊı");
+                LogDebug("æ— æ•ˆçš„æˆ¿é—´å‚æ•°");
                 OnRoomCreated?.Invoke(roomName, false);
                 return;
             }
 
-            // ÇåÀí·¿¼äÃû³Æ
+            // æ¸…ç†æˆ¿é—´åç§°
             roomName = PhotonLobbyDataConverter.CleanRoomNameForPhoton(roomName);
 
-            LogDebug($"´´½¨·¿¼ä: {roomName}, ×î´óÈËÊı: {maxPlayers}");
+            LogDebug($"åˆ›å»ºæˆ¿é—´: {roomName}, æœ€å¤§äººæ•°: {maxPlayers}");
 
             var lobbyRoomData = LobbyRoomData.CreateNew(roomName, maxPlayers, GetCurrentPlayerName());
             lobbyRoomData.hasPassword = !string.IsNullOrEmpty(password);
@@ -221,15 +430,15 @@ namespace Lobby.Core
 
             if (roomOptions == null)
             {
-                LogDebug("·¿¼äÑ¡Ïî×ª»»Ê§°Ü");
+                LogDebug("æˆ¿é—´é€‰é¡¹è½¬æ¢å¤±è´¥");
                 OnRoomCreated?.Invoke(roomName, false);
                 return;
             }
 
-            // ÉèÖÃÍæ¼ÒÊôĞÔ
+            // è®¾ç½®ç©å®¶å±æ€§
             SetPlayerProperties();
 
-            // µ÷ÓÃPhotonNetworkAdapter´´½¨·¿¼ä
+            // è°ƒç”¨PhotonNetworkAdapteråˆ›å»ºæˆ¿é—´
             if (PhotonNetworkAdapter.Instance != null)
             {
                 PhotonNetworkAdapter.Instance.CreatePhotonRoom(roomName, maxPlayers);
@@ -237,62 +446,63 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// ¼ÓÈë·¿¼ä
+        /// åŠ å…¥æˆ¿é—´
         /// </summary>
         public void JoinRoom(LobbyRoomData roomData)
         {
-            if (!isConnected || !isInLobby)
+            LogDebug($"å°è¯•åŠ å…¥æˆ¿é—´: {roomData?.roomName}");
+
+            if (!CheckNetworkStatus("åŠ å…¥æˆ¿é—´"))
             {
-                LogDebug("Î´Á¬½Óµ½ÍøÂç»òÎ´ÔÚ´óÌüÖĞ£¬ÎŞ·¨¼ÓÈë·¿¼ä");
-                OnRoomJoined?.Invoke(roomData.roomName, false);
+                OnRoomJoined?.Invoke(roomData?.roomName ?? "Unknown", false);
                 return;
             }
 
             if (roomData == null || !roomData.CanJoin())
             {
-                LogDebug("·¿¼äÊı¾İÎŞĞ§»òÎŞ·¨¼ÓÈë");
+                LogDebug("æˆ¿é—´æ•°æ®æ— æ•ˆæˆ–æ— æ³•åŠ å…¥");
                 OnRoomJoined?.Invoke(roomData?.roomName ?? "Unknown", false);
                 return;
             }
 
-            LogDebug($"¼ÓÈë·¿¼ä: {roomData.roomName}");
+            LogDebug($"åŠ å…¥æˆ¿é—´: {roomData.roomName}");
 
-            // ÉèÖÃÍæ¼ÒÊôĞÔ
+            // è®¾ç½®ç©å®¶å±æ€§
             SetPlayerProperties();
 
-            // TODO: Èç¹û·¿¼äÓĞÃÜÂë£¬ÕâÀïĞèÒª´¦ÀíÃÜÂëÑéÖ¤
+            // TODO: å¦‚æœæˆ¿é—´æœ‰å¯†ç ï¼Œè¿™é‡Œéœ€è¦å¤„ç†å¯†ç éªŒè¯
             if (roomData.hasPassword)
             {
-                LogDebug("·¿¼äĞèÒªÃÜÂë£¬µ«ÔİÎ´ÊµÏÖÃÜÂëÑéÖ¤");
-                // ÔÚ½×¶Î3¿ÉÒÔÀ©Õ¹ÃÜÂëÊäÈë¹¦ÄÜ
+                LogDebug("æˆ¿é—´éœ€è¦å¯†ç ï¼Œä½†æš‚æœªå®ç°å¯†ç éªŒè¯");
+                // åœ¨é˜¶æ®µ3å¯ä»¥æ‰©å±•å¯†ç è¾“å…¥åŠŸèƒ½
             }
 
-            // µ÷ÓÃPhotonNetworkAdapter¼ÓÈë·¿¼ä
+            // è°ƒç”¨PhotonNetworkAdapteråŠ å…¥æˆ¿é—´
             if (PhotonNetworkAdapter.Instance != null)
             {
-                // ×¢Òâ£ºÕâÀïĞèÒªĞŞ¸ÄPhotonNetworkAdapterÌí¼Ó°´Ãû³Æ¼ÓÈë·¿¼äµÄ·½·¨
                 PhotonNetworkAdapter.Instance.JoinPhotonRoomByName(roomData.roomName);
             }
         }
 
         /// <summary>
-        /// ¼ÓÈëËæ»ú·¿¼ä
+        /// åŠ å…¥éšæœºæˆ¿é—´
         /// </summary>
         public void JoinRandomRoom()
         {
-            if (!isConnected || !isInLobby)
+            LogDebug("å°è¯•åŠ å…¥éšæœºæˆ¿é—´");
+
+            if (!CheckNetworkStatus("åŠ å…¥éšæœºæˆ¿é—´"))
             {
-                LogDebug("Î´Á¬½Óµ½ÍøÂç»òÎ´ÔÚ´óÌüÖĞ£¬ÎŞ·¨¼ÓÈëËæ»ú·¿¼ä");
                 return;
             }
 
             if (cachedRoomList.Count == 0)
             {
-                LogDebug("Ã»ÓĞ¿ÉÓÃµÄ·¿¼ä");
+                LogDebug("æ²¡æœ‰å¯ç”¨çš„æˆ¿é—´");
                 return;
             }
 
-            // ÕÒµ½µÚÒ»¸ö¿É¼ÓÈëµÄ·¿¼ä
+            // æ‰¾åˆ°ç¬¬ä¸€ä¸ªå¯åŠ å…¥çš„æˆ¿é—´
             foreach (var room in cachedRoomList)
             {
                 if (room.CanJoin())
@@ -302,46 +512,59 @@ namespace Lobby.Core
                 }
             }
 
-            LogDebug("Ã»ÓĞ¿É¼ÓÈëµÄ·¿¼ä");
+            LogDebug("æ²¡æœ‰å¯åŠ å…¥çš„æˆ¿é—´");
 
-            // Ê¹ÓÃPhotonNetworkµÄËæ»ú¼ÓÈë¹¦ÄÜ
+            // ä½¿ç”¨PhotonNetworkçš„éšæœºåŠ å…¥åŠŸèƒ½
             if (PhotonNetworkAdapter.Instance != null)
             {
-                PhotonNetworkAdapter.Instance.JoinPhotonRoom(); // Õâ»á³¢ÊÔËæ»ú¼ÓÈë
+                PhotonNetworkAdapter.Instance.JoinPhotonRoom();
             }
         }
 
         /// <summary>
-        /// Ë¢ĞÂ·¿¼äÁĞ±í
+        /// åˆ·æ–°æˆ¿é—´åˆ—è¡¨ï¼ˆä¿®å¤ç‰ˆï¼‰
         /// </summary>
         public void RefreshRoomList()
         {
-            if (!isConnected || !isInLobby)
+            LogDebug("å°è¯•åˆ·æ–°æˆ¿é—´åˆ—è¡¨");
+
+            // ä¿®å¤6ï¼šä½¿ç”¨ä¿®å¤åçš„çŠ¶æ€æ£€æŸ¥ï¼Œå¹¶å¢åŠ è¯¦ç»†æ—¥å¿—
+            LogDebug($"åˆ·æ–°æˆ¿é—´åˆ—è¡¨çŠ¶æ€æ£€æŸ¥:");
+            LogDebug($"  GetRealConnectionStatus(): {GetRealConnectionStatus()}");
+            LogDebug($"  GetRealLobbyStatus(): {GetRealLobbyStatus()}");
+            LogDebug($"  å†…éƒ¨ isConnected: {isConnected}");
+            LogDebug($"  å†…éƒ¨ isInLobby: {isInLobby}");
+
+            if (!CheckNetworkStatus("åˆ·æ–°æˆ¿é—´åˆ—è¡¨"))
             {
-                LogDebug("Î´Á¬½Óµ½ÍøÂç»òÎ´ÔÚ´óÌüÖĞ£¬ÎŞ·¨Ë¢ĞÂ·¿¼äÁĞ±í");
                 return;
             }
 
-            LogDebug("Ë¢ĞÂ·¿¼äÁĞ±í");
+            LogDebug($"æˆ¿é—´åˆ—è¡¨åˆ·æ–° - çŠ¶æ€æ£€æŸ¥é€šè¿‡");
 
-            // Photon»á×Ô¶¯Î¬»¤·¿¼äÁĞ±í£¬ÕâÀïÖ÷ÒªÊÇ´¥·¢¸üĞÂ
+            // Photonä¼šè‡ªåŠ¨ç»´æŠ¤æˆ¿é—´åˆ—è¡¨ï¼Œè¿™é‡Œä¸»è¦æ˜¯è§¦å‘æ›´æ–°
             if (PhotonNetworkAdapter.Instance != null)
             {
                 var photonRooms = PhotonNetworkAdapter.Instance.GetPhotonRoomList();
+                LogDebug($"ä»PhotonNetworkAdapterè·å–åˆ° {photonRooms.Count} ä¸ªæˆ¿é—´");
                 OnPhotonRoomListUpdate(photonRooms);
+            }
+            else
+            {
+                LogDebug("PhotonNetworkAdapter.Instance ä¸ºç©ºï¼Œæ— æ³•åˆ·æ–°æˆ¿é—´åˆ—è¡¨");
             }
         }
 
         /// <summary>
-        /// ¶Ï¿ªÁ¬½Ó
+        /// æ–­å¼€è¿æ¥
         /// </summary>
         public void Disconnect()
         {
-            LogDebug("¶Ï¿ªÍøÂçÁ¬½Ó");
+            LogDebug("æ–­å¼€ç½‘ç»œè¿æ¥");
 
             if (PhotonNetworkAdapter.Instance != null)
             {
-                if (isInLobby)
+                if (GetRealLobbyStatus())
                 {
                     PhotonNetworkAdapter.Instance.LeavePhotonLobby();
                 }
@@ -351,22 +574,22 @@ namespace Lobby.Core
 
         #endregion
 
-        #region PhotonÊÂ¼ş´¦Àí
+        #region Photonäº‹ä»¶å¤„ç†ï¼ˆä¿æŒåŸæœ‰é€»è¾‘ï¼‰
 
         private void OnPhotonConnected()
         {
-            LogDebug("PhotonÁ¬½Ó³É¹¦£¬×¼±¸¼ÓÈë´óÌü");
+            LogDebug("Photonè¿æ¥æˆåŠŸï¼Œå‡†å¤‡åŠ å…¥å¤§å…");
             isConnecting = false;
             isConnected = true;
             OnConnectionStatusChanged?.Invoke(true);
 
-            // Á¬½Ó³É¹¦ºó×Ô¶¯¼ÓÈë´óÌü
+            // è¿æ¥æˆåŠŸåè‡ªåŠ¨åŠ å…¥å¤§å…
             JoinPhotonLobby();
         }
 
         private void OnPhotonDisconnected()
         {
-            LogDebug("PhotonÁ¬½Ó¶Ï¿ª");
+            LogDebug("Photonè¿æ¥æ–­å¼€");
             isConnecting = false;
             isConnected = false;
             isInLobby = false;
@@ -374,61 +597,62 @@ namespace Lobby.Core
             OnConnectionStatusChanged?.Invoke(false);
             OnLobbyStatusChanged?.Invoke(false);
 
-            // Çå¿Õ·¿¼äÁĞ±í
+            // æ¸…ç©ºæˆ¿é—´åˆ—è¡¨
             cachedRoomList.Clear();
             OnRoomListUpdated?.Invoke(new List<LobbyRoomData>());
         }
 
         private void OnPhotonJoinedLobby()
         {
-            LogDebug("³É¹¦¼ÓÈëPhoton´óÌü");
+            LogDebug("æˆåŠŸåŠ å…¥Photonå¤§å…");
+            isConnecting = false;
             isInLobby = true;
             OnLobbyStatusChanged?.Invoke(true);
 
-            // ´óÌü¼ÓÈë³É¹¦ºó×Ô¶¯Ë¢ĞÂ·¿¼äÁĞ±í
+            // å¤§å…åŠ å…¥æˆåŠŸåè‡ªåŠ¨åˆ·æ–°æˆ¿é—´åˆ—è¡¨
             RefreshRoomList();
         }
 
         private void OnPhotonLeftLobby()
         {
-            LogDebug("Àë¿ªPhoton´óÌü");
+            LogDebug("ç¦»å¼€Photonå¤§å…");
             isInLobby = false;
             OnLobbyStatusChanged?.Invoke(false);
 
-            // Çå¿Õ·¿¼äÁĞ±í
+            // æ¸…ç©ºæˆ¿é—´åˆ—è¡¨
             cachedRoomList.Clear();
             OnRoomListUpdated?.Invoke(new List<LobbyRoomData>());
         }
 
         private void OnPhotonRoomListUpdate(List<RoomInfo> photonRooms)
         {
-            LogDebug($"Photon·¿¼äÁĞ±í¸üĞÂ£¬¹² {photonRooms.Count} ¸ö·¿¼ä");
+            LogDebug($"Photonæˆ¿é—´åˆ—è¡¨æ›´æ–°ï¼Œå…± {photonRooms.Count} ä¸ªæˆ¿é—´");
 
-            // ×ª»»Photon·¿¼äÊı¾İÎªLobby·¿¼äÊı¾İ
+            // è½¬æ¢Photonæˆ¿é—´æ•°æ®ä¸ºLobbyæˆ¿é—´æ•°æ®
             cachedRoomList = PhotonLobbyDataConverter.FromPhotonRoomList(photonRooms);
 
             OnRoomListUpdated?.Invoke(new List<LobbyRoomData>(cachedRoomList));
-            LogDebug($"×ª»»ºóµÄ·¿¼äÁĞ±í£º{cachedRoomList.Count} ¸ö¿ÉÓÃ·¿¼ä");
+            LogDebug($"è½¬æ¢åçš„æˆ¿é—´åˆ—è¡¨ï¼š{cachedRoomList.Count} ä¸ªå¯ç”¨æˆ¿é—´");
         }
 
         private void OnPhotonRoomJoined()
         {
-            LogDebug("³É¹¦¼ÓÈëPhoton·¿¼ä");
+            LogDebug("æˆåŠŸåŠ å…¥Photonæˆ¿é—´");
 
-            // »ñÈ¡µ±Ç°·¿¼äĞÅÏ¢
+            // è·å–å½“å‰æˆ¿é—´ä¿¡æ¯
             if (PhotonNetworkAdapter.Instance.IsInPhotonRoom)
             {
                 string roomName = PhotonNetworkAdapter.Instance.CurrentRoomName;
                 OnRoomJoined?.Invoke(roomName, true);
-                LogDebug($"·¿¼ä¼ÓÈë³É¹¦: {roomName}");
+                LogDebug($"æˆ¿é—´åŠ å…¥æˆåŠŸ: {roomName}");
             }
         }
 
         private void OnPhotonRoomLeft()
         {
-            LogDebug("Àë¿ªPhoton·¿¼ä");
-            // ÖØĞÂ¼ÓÈë´óÌüÒÔ¼ÌĞøä¯ÀÀ·¿¼ä
-            if (isConnected && !isInLobby)
+            LogDebug("ç¦»å¼€Photonæˆ¿é—´");
+            // é‡æ–°åŠ å…¥å¤§å…ä»¥ç»§ç»­æµè§ˆæˆ¿é—´
+            if (GetRealConnectionStatus() && !GetRealLobbyStatus())
             {
                 JoinPhotonLobby();
             }
@@ -436,10 +660,10 @@ namespace Lobby.Core
 
         #endregion
 
-        #region ¸¨Öú·½·¨
+        #region è¾…åŠ©æ–¹æ³•ï¼ˆä¿æŒä¸å˜ï¼‰
 
         /// <summary>
-        /// ÉèÖÃÍæ¼ÒÊôĞÔ
+        /// è®¾ç½®ç©å®¶å±æ€§
         /// </summary>
         private void SetPlayerProperties()
         {
@@ -450,19 +674,18 @@ namespace Lobby.Core
             if (playerData == null)
                 return;
 
-            // ´´½¨Íæ¼Ò×Ô¶¨ÒåÊôĞÔ
+            // åˆ›å»ºç©å®¶è‡ªå®šä¹‰å±æ€§
             var playerProps = PhotonLobbyDataConverter.CreatePlayerProperties(playerData);
 
-            // ÉèÖÃµ½Photon
+            // è®¾ç½®åˆ°Photon
             if (PhotonNetworkAdapter.Instance != null)
             {
-                // ÕâÀïĞèÒªÔÚPhotonNetworkAdapterÖĞÌí¼ÓÉèÖÃÍæ¼ÒÊôĞÔµÄ·½·¨
                 PhotonNetworkAdapter.Instance.SetPlayerProperties(playerProps);
             }
         }
 
         /// <summary>
-        /// »ñÈ¡µ±Ç°Íæ¼ÒÃû³Æ
+        /// è·å–å½“å‰ç©å®¶åç§°
         /// </summary>
         private string GetCurrentPlayerName()
         {
@@ -477,40 +700,26 @@ namespace Lobby.Core
             return "Unknown Player";
         }
 
-        /// <summary>
-        /// ¼ì²éÍøÂç×´Ì¬
-        /// </summary>
-        private bool CheckNetworkStatus(string operation)
-        {
-            if (!isConnected)
-            {
-                LogDebug($"ÎŞ·¨Ö´ĞĞ {operation}£ºÎ´Á¬½Óµ½ÍøÂç");
-                return false;
-            }
-
-            if (!isInLobby)
-            {
-                LogDebug($"ÎŞ·¨Ö´ĞĞ {operation}£ºÎ´ÔÚ´óÌüÖĞ");
-                return false;
-            }
-
-            return true;
-        }
-
         #endregion
 
-        #region ¹«¹²½Ó¿Ú
+        #region å…¬å…±æ¥å£ï¼ˆå¢å¼ºç‰ˆï¼‰
 
         /// <summary>
-        /// »ñÈ¡Á¬½Ó×´Ì¬
+        /// è·å–è¿æ¥çŠ¶æ€ï¼ˆä½¿ç”¨çœŸå®çŠ¶æ€ï¼‰
         /// </summary>
         public bool IsConnected()
         {
-            return isConnected;
+            bool realStatus = GetRealConnectionStatus();
+            if (realStatus != isConnected)
+            {
+                LogDebug($"è¿æ¥çŠ¶æ€ä¸ä¸€è‡´ï¼ŒåŒæ­¥: {isConnected} -> {realStatus}");
+                isConnected = realStatus;
+            }
+            return realStatus;
         }
 
         /// <summary>
-        /// »ñÈ¡Á¬½ÓÖĞ×´Ì¬
+        /// è·å–è¿æ¥ä¸­çŠ¶æ€
         /// </summary>
         public bool IsConnecting()
         {
@@ -518,15 +727,21 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// »ñÈ¡´óÌü×´Ì¬
+        /// è·å–å¤§å…çŠ¶æ€ï¼ˆä½¿ç”¨çœŸå®çŠ¶æ€ï¼‰
         /// </summary>
         public bool IsInLobby()
         {
-            return isInLobby;
+            bool realStatus = GetRealLobbyStatus();
+            if (realStatus != isInLobby)
+            {
+                LogDebug($"å¤§å…çŠ¶æ€ä¸ä¸€è‡´ï¼ŒåŒæ­¥: {isInLobby} -> {realStatus}");
+                isInLobby = realStatus;
+            }
+            return realStatus;
         }
 
         /// <summary>
-        /// »ñÈ¡»º´æµÄ·¿¼äÁĞ±í
+        /// è·å–ç¼“å­˜çš„æˆ¿é—´åˆ—è¡¨
         /// </summary>
         public List<LobbyRoomData> GetCachedRoomList()
         {
@@ -534,21 +749,21 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// Ç¿ÖÆÖØĞÂÁ¬½Ó
+        /// å¼ºåˆ¶é‡æ–°è¿æ¥
         /// </summary>
         public void ForceReconnect()
         {
-            LogDebug("Ç¿ÖÆÖØĞÂÁ¬½Ó");
+            LogDebug("å¼ºåˆ¶é‡æ–°è¿æ¥");
 
-            // ÏÈ¶Ï¿ªÁ¬½Ó
+            // å…ˆæ–­å¼€è¿æ¥
             Disconnect();
 
-            // µÈ´ıÒ»Ö¡ºóÖØĞÂÁ¬½Ó
+            // ç­‰å¾…ä¸€å¸§åé‡æ–°è¿æ¥
             StartCoroutine(ReconnectCoroutine());
         }
 
         /// <summary>
-        /// ÖØÁ¬Ğ­³Ì
+        /// é‡è¿åç¨‹
         /// </summary>
         private System.Collections.IEnumerator ReconnectCoroutine()
         {
@@ -557,33 +772,44 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// »ñÈ¡ÍøÂçÍ³¼ÆĞÅÏ¢
+        /// è·å–ç½‘ç»œç»Ÿè®¡ä¿¡æ¯ï¼ˆå¢å¼ºç‰ˆï¼‰
         /// </summary>
         public string GetNetworkStats()
         {
             if (PhotonNetworkAdapter.Instance == null)
-                return "PhotonNetworkAdapter ²»¿ÉÓÃ";
+                return "PhotonNetworkAdapter ä¸å¯ç”¨";
 
-            string stats = "=== ÍøÂçÍ³¼Æ ===\n";
-            stats += $"Á¬½Ó×´Ì¬: {isConnected}\n";
-            stats += $"´óÌü×´Ì¬: {isInLobby}\n";
-            stats += $"·¿¼äÊıÁ¿: {cachedRoomList.Count}\n";
+            string stats = "=== ç½‘ç»œç»Ÿè®¡ ===\n";
+            stats += $"å†…éƒ¨è¿æ¥çŠ¶æ€: {isConnected}\n";
+            stats += $"å†…éƒ¨å¤§å…çŠ¶æ€: {isInLobby}\n";
+            stats += $"çœŸå®è¿æ¥çŠ¶æ€: {GetRealConnectionStatus()}\n";
+            stats += $"çœŸå®å¤§å…çŠ¶æ€: {GetRealLobbyStatus()}\n";
+            stats += $"æˆ¿é—´æ•°é‡: {cachedRoomList.Count}\n";
 
             if (PhotonNetworkAdapter.Instance.IsPhotonConnected)
             {
-                stats += $"Photon·¿¼ä×ÜÊı: {PhotonNetworkAdapter.Instance.PhotonRoomCount}\n";
-                stats += $"PhotonÍæ¼Ò×ÜÊı: {PhotonNetworkAdapter.Instance.PhotonPlayerCount}";
+                stats += $"Photonæˆ¿é—´æ€»æ•°: {PhotonNetworkAdapter.Instance.PhotonRoomCount}\n";
+                stats += $"Photonç©å®¶æ€»æ•°: {PhotonNetworkAdapter.Instance.PhotonPlayerCount}";
             }
 
             return stats;
         }
 
+        /// <summary>
+        /// å¼ºåˆ¶çŠ¶æ€åŒæ­¥ï¼ˆè°ƒè¯•ç”¨ï¼‰
+        /// </summary>
+        public void ForceSyncState()
+        {
+            LogDebug("å¼ºåˆ¶åŒæ­¥çŠ¶æ€");
+            CheckAndSyncCurrentState();
+        }
+
         #endregion
 
-        #region µ÷ÊÔ·½·¨
+        #region è°ƒè¯•æ–¹æ³•
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -593,38 +819,76 @@ namespace Lobby.Core
             }
         }
 
-        [ContextMenu("ÏÔÊ¾ÍøÂç×´Ì¬")]
+        [ContextMenu("æ˜¾ç¤ºç½‘ç»œçŠ¶æ€")]
         public void ShowNetworkStatus()
         {
             LogDebug(GetNetworkStats());
         }
 
-        [ContextMenu("Ç¿ÖÆË¢ĞÂ·¿¼äÁĞ±í")]
+        [ContextMenu("å¼ºåˆ¶åˆ·æ–°æˆ¿é—´åˆ—è¡¨")]
         public void ForceRefreshRoomList()
         {
             RefreshRoomList();
         }
 
-        [ContextMenu("Ç¿ÖÆÖØĞÂÁ¬½Ó")]
+        [ContextMenu("å¼ºåˆ¶é‡æ–°è¿æ¥")]
         public void ForceReconnectDebug()
         {
             ForceReconnect();
         }
 
-        [ContextMenu("²âÊÔ´´½¨·¿¼ä")]
-        public void TestCreateRoom()
+        [ContextMenu("å¼ºåˆ¶çŠ¶æ€åŒæ­¥")]
+        public void ForceSyncStateDebug()
         {
-            CreateRoom("²âÊÔ·¿¼ä_" + Random.Range(1000, 9999), 4);
+            ForceSyncState();
         }
 
-        [ContextMenu("ÏÔÊ¾»º´æ·¿¼äÁĞ±í")]
+        [ContextMenu("æµ‹è¯•åˆ›å»ºæˆ¿é—´")]
+        public void TestCreateRoom()
+        {
+            CreateRoom("æµ‹è¯•æˆ¿é—´_" + Random.Range(1000, 9999), 4);
+        }
+
+        [ContextMenu("æ˜¾ç¤ºç¼“å­˜æˆ¿é—´åˆ—è¡¨")]
         public void ShowCachedRoomList()
         {
-            LogDebug($"=== »º´æ·¿¼äÁĞ±í ({cachedRoomList.Count}) ===");
+            LogDebug($"=== ç¼“å­˜æˆ¿é—´åˆ—è¡¨ ({cachedRoomList.Count}) ===");
             for (int i = 0; i < cachedRoomList.Count; i++)
             {
                 var room = cachedRoomList[i];
                 LogDebug($"{i + 1}. {room.roomName} ({room.currentPlayers}/{room.maxPlayers}) - {room.status}");
+            }
+        }
+
+        [ContextMenu("è¯¦ç»†çŠ¶æ€è¯Šæ–­")]
+        public void DetailedStatusDiagnosis()
+        {
+            LogDebug("=== è¯¦ç»†çŠ¶æ€è¯Šæ–­ ===");
+            LogDebug($"PhotonNetworkAdapter.Instance: {(PhotonNetworkAdapter.Instance != null ? "å­˜åœ¨" : "ä¸ºç©º")}");
+
+            if (PhotonNetworkAdapter.Instance != null)
+            {
+                LogDebug($"PhotonNetworkAdapter.IsPhotonConnected: {PhotonNetworkAdapter.Instance.IsPhotonConnected}");
+                LogDebug($"PhotonNetworkAdapter.IsInPhotonLobby: {PhotonNetworkAdapter.Instance.IsInPhotonLobby}");
+            }
+
+            LogDebug($"PhotonNetwork.IsConnected: {PhotonNetwork.IsConnected}");
+            LogDebug($"PhotonNetwork.InLobby: {PhotonNetwork.InLobby}");
+            LogDebug($"PhotonNetwork.NetworkClientState: {PhotonNetwork.NetworkClientState}");
+
+            LogDebug($"LobbyNetworkManager.isConnected: {isConnected}");
+            LogDebug($"LobbyNetworkManager.isInLobby: {isInLobby}");
+            LogDebug($"LobbyNetworkManager.isConnecting: {isConnecting}");
+
+            LogDebug($"GetRealConnectionStatus(): {GetRealConnectionStatus()}");
+            LogDebug($"GetRealLobbyStatus(): {GetRealLobbyStatus()}");
+
+            LogDebug($"ç¼“å­˜æˆ¿é—´æ•°é‡: {cachedRoomList.Count}");
+
+            if (PhotonNetworkAdapter.Instance != null)
+            {
+                var photonRooms = PhotonNetworkAdapter.Instance.GetPhotonRoomList();
+                LogDebug($"PhotonAdapteræˆ¿é—´æ•°é‡: {photonRooms.Count}");
             }
         }
 

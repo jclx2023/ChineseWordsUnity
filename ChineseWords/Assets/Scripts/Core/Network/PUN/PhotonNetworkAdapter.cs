@@ -14,7 +14,7 @@ namespace Core.Network
     /// 作为NetworkManager的补充，处理Photon特定功能
     /// 渐进式迁移策略：先并存，后整合
     /// </summary>
-    public class PhotonNetworkAdapter : MonoBehaviourPun, IConnectionCallbacks, IMatchmakingCallbacks, IInRoomCallbacks
+    public class PhotonNetworkAdapter : MonoBehaviourPun, IConnectionCallbacks, IMatchmakingCallbacks, ILobbyCallbacks
     {
         [Header("Photon配置")]
         [SerializeField] private string gameVersion = "1.0";
@@ -76,6 +76,7 @@ namespace Core.Network
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
                 InitializePhoton();
+                PhotonNetwork.AddCallbackTarget(this);
                 LogDebug("PhotonNetworkAdapter 单例已创建");
             }
             else
@@ -88,6 +89,7 @@ namespace Core.Network
         private void OnDestroy()
         {
             CleanupPhoton();
+            PhotonNetwork.RemoveCallbackTarget(this);
             if (Instance == this)
             {
                 Instance = null;
@@ -471,7 +473,7 @@ namespace Core.Network
         public void OnConnectedToMaster()
         {
             LogDebug("已连接到Photon主服务器");
-
+            PhotonNetwork.JoinLobby();
             if (isPendingClient)
             {
                 JoinRandomRoom();
@@ -583,7 +585,16 @@ namespace Core.Network
             UpdateCachedRoomList(roomList);
             OnPhotonRoomListUpdate?.Invoke(roomList);
         }
+        public void OnLobbyStatisticsUpdate(List<TypedLobbyInfo> lobbyStatistics)
+        {
+            LogDebug($"大厅统计更新，收到 {lobbyStatistics.Count} 个大厅信息");
 
+            foreach (var lobby in lobbyStatistics)
+            {
+                LogDebug($"大厅: {lobby.Name} (类型: {lobby.Type}) - 房间数: {lobby.RoomCount}, 玩家数: {lobby.PlayerCount}");
+            }
+
+        }
 
         #endregion
 

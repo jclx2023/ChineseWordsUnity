@@ -274,18 +274,25 @@ namespace Lobby.UI
         /// </summary>
         private void OnCreateRoomClicked()
         {
+            LogDebug("=== 创建房间按钮点击 ===");
+            LogDebug($"表单验证: {IsFormValid()}");
+            LogDebug($"正在创建中: {isCreatingRoom}");
+            LogDebug($"LobbyNetworkManager存在: {LobbyNetworkManager.Instance != null}");
+
             if (isCreatingRoom || !IsFormValid())
             {
-                LogDebug("表单验证失败或正在创建房间中");
+                LogDebug("❌ 前置条件检查失败");
                 return;
             }
 
-            LogDebug("点击创建房间按钮");
+            LogDebug("✓ 前置条件检查通过");
 
             // 获取表单数据
             string roomName = roomNameInput.text.Trim();
             int maxPlayers = int.Parse(maxPlayersInput.text);
             string password = passwordInput.text.Trim();
+
+            LogDebug($"调用LobbyNetworkManager.CreateRoom...");
 
             // 开始创建房间
             StartCreatingRoom(roomName, maxPlayers, password);
