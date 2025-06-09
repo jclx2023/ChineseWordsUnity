@@ -1,57 +1,62 @@
 using UnityEngine;
 using System;
-using UI;
+using System.Collections;
+using Photon.Pun;
+using Photon.Realtime;
+using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 namespace Core.Network
 {
     /// <summary>
-    /// 房间管理器 - 处理房间逻辑和状态管理
-    /// 修复版本：使用统一的Host ID管理，延迟房间创建直到Host客户端准备就绪
+    /// 房间管理器 - RoomScene专用版
+    /// 职责：管理已加入房间的玩家状态、准备控制、游戏开始
+    /// 不负责房间创建/加入（由LobbyScene处理）
     /// </summary>
-    public class RoomManager : MonoBehaviour
+    public class RoomManager : MonoBehaviourPun, IInRoomCallbacks
     {
-        [Header("房间配置")]
-        [SerializeField] private int maxPlayersPerRoom = 4;
-        [SerializeField] private bool enableDebugLogs = false;
-
         [Header("游戏开始控制")]
-        [SerializeField] private bool hasGameStarted = false; // 防止重复开始
-        [SerializeField] private float gameStartDelay = 1f;
+        [SerializeField] private float gameStartDelay = 2f;
+        [SerializeField] private int minPlayersToStart = 2;
+
+        [Header("调试设置")]
+        [SerializeField] private bool enableDebugLogs = true;
 
         public static RoomManager Instance { get; private set; }
 
-        // 房间数据
-        private RoomData currentRoom;
-        private bool isHost;
-        private bool isInitialized = false;
+        // Photon房间属性键名常量
+        private const string ROOM_STATE_KEY = "roomState";
+        private const string GAME_STARTED_KEY = "gameStarted";
 
-        // **新增：房间创建等待状态**
-        private bool isWaitingForHostReady = false;
-        private string pendingRoomName = "";
-        private string pendingPlayerName = "";
+        // 玩家属性键名常量
+        private const string PLAYER_READY_KEY = "isReady";
 
-        // 事件
-        public static event Action<RoomData> OnRoomCreated;
-        public static event Action<RoomData> OnRoomJoined;
-        public static event Action<RoomPlayer> OnPlayerJoinedRoom;
-        public static event Action<ushort> OnPlayerLeftRoom;
-        public static event Action<ushort, bool> OnPlayerReadyChanged;
-        public static event Action OnGameStarting; // 唯一的游戏开始事件
-        public static event Action OnRoomLeft;
+        // RoomScene专用事件
+        public static event Action OnRoomEntered;           // 进入RoomScene时触发
+        public static event Action<Player> OnPlayerJoinedRoom;
+        public static event Action<Player> OnPlayerLeftRoom;
+        public static event Action<Player, bool> OnPlayerReadyChanged;
+        public static event Action OnAllPlayersReady;       // 所有玩家准备就绪
+        public static event Action OnGameStarting;          // 游戏即将开始
+        public static event Action OnReturnToLobby;         // 返回大厅
 
-        // 属性
-        public RoomData CurrentRoom => currentRoom;
-        public bool IsHost => isHost;
-        public bool IsInRoom => currentRoom != null;
+        // 状态属性 - 直接使用Photon API
+        public bool IsHost => PhotonNetwork.IsMasterClient;
+        public bool IsInRoom => PhotonNetwork.InRoom;
+        public string RoomName => PhotonNetwork.CurrentRoom?.Name ?? "";
+        public int PlayerCount => PhotonNetwork.CurrentRoom?.PlayerCount ?? 0;
+        public int MaxPlayers => PhotonNetwork.CurrentRoom?.MaxPlayers ?? 0;
         public bool IsInitialized => isInitialized;
+
+        // RoomScene状态
+        private bool isInitialized = false;
+        private bool hasGameStarted = false;
 
         private void Awake()
         {
             if (Instance == null)
             {
                 Instance = this;
-                DontDestroyOnLoad(gameObject);
-                LogDebug("RoomManager 初始化");
+                LogDebug("RoomManager (RoomScene版) 初始化");
             }
             else
             {
@@ -62,274 +67,176 @@ namespace Core.Network
 
         private void Start()
         {
-            // 订阅网络事件
-            SubscribeToNetworkEvents();
+            StartCoroutine(InitializeRoomManager());
+        }
+
+        /// <summary>
+        /// 初始化房间管理器
+        /// </summary>
+        private IEnumerator InitializeRoomManager()
+        {
+            // 等待确保在房间中
+            while (!PhotonNetwork.InRoom)
+            {
+                LogDebug("等待进入Photon房间...");
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            // 注册Photon回调
+            PhotonNetwork.AddCallbackTarget(this);
+
+            // 验证房间状态
+            if (!ValidateRoomState())
+            {
+                Debug.LogError("[RoomManager] 房间状态验证失败");
+                yield break;
+            }
+
+            // 重置游戏开始标志
+            hasGameStarted = GetGameStarted();
+
             isInitialized = true;
-        }
+            LogDebug($"RoomManager初始化完成 - 房间: {RoomName}, 玩家数: {PlayerCount}, 是否房主: {IsHost}");
 
-        private void SubscribeToNetworkEvents()
-        {
-            if (NetworkManager.Instance != null)
+            // 触发房间进入事件
+            OnRoomEntered?.Invoke();
+
+            // 如果是房主，确保房间处于等待状态
+            if (IsHost && !hasGameStarted)
             {
-                NetworkManager.OnHostStarted += OnNetworkHostStarted;
-                NetworkManager.OnPlayerJoined += OnNetworkPlayerJoined;
-                NetworkManager.OnPlayerLeft += OnNetworkPlayerLeft;
-                NetworkManager.OnDisconnected += OnNetworkDisconnected;
-
-                // **关键新增：监听Host玩家准备就绪事件**
-                NetworkManager.OnHostPlayerReady += OnHostPlayerReady;
+                SetRoomWaitingState();
             }
         }
 
-        private void UnsubscribeFromNetworkEvents()
+        private void OnDestroy()
         {
-            if (NetworkManager.Instance != null)
+            // 移除Photon回调
+            if (PhotonNetwork.NetworkingClient != null)
             {
-                NetworkManager.OnHostStarted -= OnNetworkHostStarted;
-                NetworkManager.OnPlayerJoined -= OnNetworkPlayerJoined;
-                NetworkManager.OnPlayerLeft -= OnNetworkPlayerLeft;
-                NetworkManager.OnDisconnected -= OnNetworkDisconnected;
-                NetworkManager.OnHostPlayerReady -= OnHostPlayerReady;
+                PhotonNetwork.RemoveCallbackTarget(this);
+            }
+
+            if (Instance == this)
+            {
+                Instance = null;
             }
         }
 
-        #region 房间操作
+        #region 玩家准备状态管理
 
         /// <summary>
-        /// 创建房间（Host调用）- 修复版本：延迟创建直到Host客户端准备就绪
-        /// </summary>
-        public bool CreateRoom(string roomName, string playerName)
-        {
-            if (IsInRoom)
-            {
-                LogDebug("已在房间中，无法创建新房间");
-                return false;
-            }
-
-            if (NetworkManager.Instance == null || !NetworkManager.Instance.IsHost)
-            {
-                LogDebug("不是Host模式，无法创建房间");
-                return false;
-            }
-
-            LogDebug($"请求创建房间: {roomName}, Host玩家: {playerName}");
-
-            // **关键修复：检查Host客户端是否准备就绪**
-            if (!NetworkManager.Instance.IsHostClientReady)
-            {
-                LogDebug("Host客户端尚未准备就绪，等待连接完成后创建房间");
-
-                // 保存待创建的房间信息
-                isWaitingForHostReady = true;
-                pendingRoomName = roomName;
-                pendingPlayerName = playerName;
-
-                return true; // 返回true表示请求已接受，但实际创建会延迟
-            }
-
-            // Host客户端已准备就绪，立即创建房间
-            return CreateRoomImmediate(roomName, playerName);
-        }
-
-        /// <summary>
-        /// 立即创建房间（私有方法）
-        /// </summary>
-        private bool CreateRoomImmediate(string roomName, string playerName)
-        {
-            // **使用统一的Host玩家ID接口**
-            ushort hostPlayerId = NetworkManager.Instance.GetHostPlayerId();
-
-            if (hostPlayerId == 0)
-            {
-                Debug.LogError("[RoomManager] Host玩家ID无效，无法创建房间");
-                return false;
-            }
-
-            LogDebug($"开始创建房间 - 房间名: {roomName}, Host玩家: {playerName}, Host ID: {hostPlayerId}");
-
-            // 生成房间代码
-            string roomCode = GenerateRoomCode();
-
-            // **使用正确的Host玩家ID创建房间**
-            currentRoom = new RoomData(roomName, roomCode, hostPlayerId, maxPlayersPerRoom);
-            isHost = true;
-
-            // **确保Host被添加到玩家列表**
-            bool hostAdded = currentRoom.AddPlayer(hostPlayerId, playerName);
-
-            if (!hostAdded)
-            {
-                Debug.LogError($"[RoomManager] 无法将Host添加到房间：ID={hostPlayerId}, Name={playerName}");
-                currentRoom = null;
-                isHost = false;
-                return false;
-            }
-
-            LogDebug($"房间创建成功: {roomName} (代码: {roomCode})");
-            LogDebug($"Host已添加到玩家列表: ID={hostPlayerId}, Name={playerName}");
-            LogDebug($"当前房间玩家数量: {currentRoom.players.Count}");
-
-            // 重置游戏开始状态
-            hasGameStarted = false;
-
-            // 清理等待状态
-            isWaitingForHostReady = false;
-            pendingRoomName = "";
-            pendingPlayerName = "";
-
-            // 触发事件
-            OnRoomCreated?.Invoke(currentRoom);
-
-            // 验证房间数据
-            ValidateRoomDataAfterCreation();
-
-            return true;
-        }
-
-        /// <summary>
-        /// Host玩家准备就绪事件处理
-        /// </summary>
-        private void OnHostPlayerReady()
-        {
-            LogDebug("Host玩家客户端准备就绪");
-
-            // 如果正在等待Host准备就绪来创建房间
-            if (isWaitingForHostReady && !string.IsNullOrEmpty(pendingRoomName))
-            {
-                LogDebug($"Host准备就绪，现在创建等待中的房间: {pendingRoomName}");
-                CreateRoomImmediate(pendingRoomName, pendingPlayerName);
-            }
-        }
-
-        /// <summary>
-        /// 验证房间创建后的数据（调试用）
-        /// </summary>
-        private void ValidateRoomDataAfterCreation()
-        {
-            if (currentRoom == null)
-            {
-                Debug.LogError("[RoomManager] 房间数据为空");
-                return;
-            }
-
-            LogDebug($"=== 房间创建后验证 ===");
-            LogDebug($"房间名: {currentRoom.roomName}");
-            LogDebug($"房间代码: {currentRoom.roomCode}");
-            LogDebug($"Host ID: {currentRoom.hostId}");
-            LogDebug($"玩家总数: {currentRoom.players.Count}/{currentRoom.maxPlayers}");
-            LogDebug($"非Host玩家数: {currentRoom.GetNonHostPlayerCount()}");
-
-            // 检查Host是否在玩家列表中
-            if (currentRoom.players.ContainsKey(currentRoom.hostId))
-            {
-                var hostPlayer = currentRoom.players[currentRoom.hostId];
-                LogDebug($"Host玩家信息: {hostPlayer.playerName} (isHost: {hostPlayer.isHost})");
-            }
-            else
-            {
-                Debug.LogError("[RoomManager] Host不在玩家列表中！");
-            }
-
-            // **验证与NetworkManager的一致性**
-            if (NetworkManager.Instance != null)
-            {
-                ushort networkHostId = NetworkManager.Instance.GetHostPlayerId();
-                if (currentRoom.hostId != networkHostId)
-                {
-                    Debug.LogError($"[RoomManager] Host ID不一致！房间中: {currentRoom.hostId}, NetworkManager中: {networkHostId}");
-                }
-                else
-                {
-                    LogDebug($"Host ID一致性验证通过: {currentRoom.hostId}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// 加入房间（Client调用）
-        /// </summary>
-        public bool JoinRoom(string playerName)
-        {
-            if (IsInRoom)
-            {
-                LogDebug("已在房间中");
-                return false;
-            }
-
-            if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
-            {
-                LogDebug("未连接到网络，无法加入房间");
-                return false;
-            }
-
-            isHost = false;
-            hasGameStarted = false;  // 重置游戏开始状态
-
-            LogDebug($"请求加入房间: 玩家 {playerName}");
-
-            // 客户端连接后自动请求房间信息
-            NetworkManager.Instance.RequestRoomInfo();
-
-            return true;
-        }
-
-        /// <summary>
-        /// 离开房间
-        /// </summary>
-        public void LeaveRoom()
-        {
-            if (!IsInRoom)
-                return;
-
-            LogDebug("离开房间");
-
-            // 重置状态
-            currentRoom = null;
-            isHost = false;
-            hasGameStarted = false;
-            isWaitingForHostReady = false;
-            pendingRoomName = "";
-            pendingPlayerName = "";
-
-            // 触发事件
-            OnRoomLeft?.Invoke();
-        }
-
-        /// <summary>
-        /// 设置玩家准备状态
+        /// 设置本地玩家准备状态
         /// </summary>
         public bool SetPlayerReady(bool ready)
         {
-            if (!IsInRoom || NetworkManager.Instance == null)
-                return false;
-
-            ushort playerId = NetworkManager.Instance.ClientId;
-
-            // 房主不需要准备状态
-            if (isHost)
+            if (!IsInRoom || !isInitialized)
             {
-                LogDebug("房主不需要设置准备状态");
+                LogDebug("房间未初始化，无法设置准备状态");
                 return false;
             }
 
-            // 发送网络请求而不是直接修改本地状态
-            NetworkManager.Instance.RequestReadyStateChange(ready);
+            if (IsHost)
+            {
+                LogDebug("房主无需设置准备状态");
+                return false;
+            }
+
+            if (hasGameStarted)
+            {
+                LogDebug("游戏已开始，无法更改准备状态");
+                return false;
+            }
+
+            LogDebug($"设置准备状态: {ready}");
+
+            // 使用Photon玩家属性
+            var props = new Hashtable { { PLAYER_READY_KEY, ready } };
+            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+
             return true;
         }
 
         /// <summary>
-        /// 启动游戏 - 统一入口点（修复版本）
-        /// **这是游戏开始的唯一入口，所有其他调用都应该通过这里**
+        /// 获取指定玩家的准备状态
+        /// </summary>
+        public bool GetPlayerReady(Player player)
+        {
+            if (player?.CustomProperties?.TryGetValue(PLAYER_READY_KEY, out object isReady) == true)
+            {
+                return (bool)isReady;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 获取本地玩家的准备状态
+        /// </summary>
+        public bool GetMyReadyState()
+        {
+            return GetPlayerReady(PhotonNetwork.LocalPlayer);
+        }
+
+        /// <summary>
+        /// 获取准备就绪的玩家数量（不包括房主）
+        /// </summary>
+        public int GetReadyPlayerCount()
+        {
+            if (!IsInRoom) return 0;
+
+            int readyCount = 0;
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (!player.IsMasterClient && GetPlayerReady(player))
+                {
+                    readyCount++;
+                }
+            }
+            return readyCount;
+        }
+
+        /// <summary>
+        /// 获取非房主玩家数量
+        /// </summary>
+        public int GetNonHostPlayerCount()
+        {
+            if (!IsInRoom) return 0;
+
+            int nonHostCount = 0;
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (!player.IsMasterClient)
+                {
+                    nonHostCount++;
+                }
+            }
+            return nonHostCount;
+        }
+
+        /// <summary>
+        /// 检查所有非房主玩家是否都已准备
+        /// </summary>
+        public bool AreAllPlayersReady()
+        {
+            if (!IsInRoom) return false;
+
+            int nonHostPlayers = GetNonHostPlayerCount();
+            if (nonHostPlayers == 0) return false;
+
+            int readyPlayers = GetReadyPlayerCount();
+            bool allReady = readyPlayers == nonHostPlayers;
+
+            return allReady;
+        }
+
+        #endregion
+
+        #region 游戏开始控制
+
+        /// <summary>
+        /// 启动游戏 - 房主专用
         /// </summary>
         public void StartGame()
         {
-            // 防止重复启动
-            if (hasGameStarted)
-            {
-                LogDebug("游戏已经开始，忽略重复调用");
-                return;
-            }
-
             if (!IsHost)
             {
                 Debug.LogError("[RoomManager] 只有房主可以启动游戏");
@@ -339,334 +246,306 @@ namespace Core.Network
             if (!CanStartGame())
             {
                 Debug.LogError("[RoomManager] 游戏启动条件不满足");
-                LogDebug($"详细检查 - 房间状态: {GetRoomStatusInfo()}");
+                LogDebug($"启动条件检查: {GetGameStartConditions()}");
                 return;
             }
 
-            LogDebug("房主发起游戏开始");
+            LogDebug("房主启动游戏");
 
-            // 设置标志防止重复启动
+            // 防止重复启动
             hasGameStarted = true;
 
-            // 更新房间状态
-            if (currentRoom != null)
+            // 使用房间属性广播游戏开始
+            var roomProps = new Hashtable
             {
-                currentRoom.state = RoomState.Starting;
-                LogDebug($"房间状态已更新为: {currentRoom.state}");
-            }
+                { ROOM_STATE_KEY, (int)RoomState.Starting },
+                { GAME_STARTED_KEY, true }
+            };
 
-            // 广播游戏开始消息给所有客户端
-            if (NetworkManager.Instance != null)
-            {
-                LogDebug("广播游戏开始消息");
-                NetworkManager.Instance.BroadcastGameStart();
-            }
+            PhotonNetwork.CurrentRoom.SetCustomProperties(roomProps);
 
-            // 延迟触发游戏开始事件（给网络消息传播时间）
-            Invoke(nameof(TriggerGameStartingEvent), gameStartDelay);
+            // 延迟触发游戏开始事件
+            StartCoroutine(DelayedGameStart());
         }
 
         /// <summary>
-        /// 触发游戏开始事件 - 私有方法
+        /// 延迟触发游戏开始事件
         /// </summary>
-        private void TriggerGameStartingEvent()
+        private IEnumerator DelayedGameStart()
         {
-            LogDebug("触发 OnGameStarting 事件 - 这将被RoomSceneController捕获并执行场景切换");
+            LogDebug($"游戏将在 {gameStartDelay} 秒后开始");
+            yield return new WaitForSeconds(gameStartDelay);
 
-            // 触发游戏开始事件 - 这会被RoomSceneController捕获并执行场景切换
+            LogDebug("触发游戏开始事件 - 准备切换到游戏场景");
             OnGameStarting?.Invoke();
         }
 
         /// <summary>
-        /// 网络游戏开始处理 - 由NetworkManager调用
-        /// **修改：统一路由到StartGame方法，但跳过网络广播**
-        /// </summary>
-        public void OnNetworkGameStart()
-        {
-            LogDebug("收到网络游戏开始消息");
-
-            // 防止重复处理
-            if (hasGameStarted)
-            {
-                LogDebug("游戏已经开始，忽略网络消息");
-                return;
-            }
-
-            // 客户端收到游戏开始消息
-            if (!IsHost)
-            {
-                LogDebug("客户端收到游戏开始通知");
-                hasGameStarted = true;
-
-                // 更新房间状态
-                if (currentRoom != null)
-                {
-                    currentRoom.state = RoomState.Starting;
-                }
-
-                // 直接触发游戏开始事件
-                TriggerGameStartingEvent();
-            }
-            else
-            {
-                // Host端收到自己的广播消息，忽略
-                LogDebug("Host收到自己的广播消息，忽略处理");
-            }
-        }
-
-        #endregion
-
-        #region 网络事件处理
-
-        private void OnNetworkHostStarted()
-        {
-            LogDebug("网络Host已启动（服务器层）");
-        }
-
-        private void OnNetworkPlayerJoined(ushort playerId)
-        {
-            if (!IsInRoom || !isHost)
-                return;
-
-            // **使用统一接口检查是否为Host玩家**
-            if (NetworkManager.Instance != null && NetworkManager.Instance.IsHostPlayer(playerId))
-            {
-                LogDebug($"忽略Host自己的玩家连接: {playerId}");
-                return;
-            }
-
-            // Host模式下，为新加入的玩家创建房间数据
-            string playerName = $"玩家{playerId}";
-            bool success = currentRoom.AddPlayer(playerId, playerName);
-
-            if (success)
-            {
-                LogDebug($"玩家 {playerId} 加入房间");
-                LogDebug($"当前房间玩家数: {currentRoom.players.Count}");
-
-                // 广播给所有客户端
-                NetworkManager.Instance.BroadcastPlayerJoinRoom(currentRoom.players[playerId]);
-
-                // 发送完整房间数据给新玩家
-                NetworkManager.Instance.SendRoomDataToClient(playerId, currentRoom);
-
-                // 触发本地事件
-                OnPlayerJoinedRoom?.Invoke(currentRoom.players[playerId]);
-            }
-            else
-            {
-                LogDebug($"玩家 {playerId} 加入失败（房间已满或重复）");
-            }
-        }
-
-        private void OnNetworkPlayerLeft(ushort playerId)
-        {
-            if (!IsInRoom)
-                return;
-
-            if (isHost)
-            {
-                // **使用统一接口检查是否为Host玩家**
-                if (NetworkManager.Instance != null && NetworkManager.Instance.IsHostPlayer(playerId))
-                {
-                    LogDebug($"Host玩家断开连接: {playerId}");
-                    // Host玩家断开不从房间移除，只标记状态
-                    return;
-                }
-
-                // Host处理其他玩家离开
-                bool success = currentRoom.RemovePlayer(playerId);
-                if (success)
-                {
-                    LogDebug($"玩家 {playerId} 离开房间");
-                    LogDebug($"当前房间玩家数: {currentRoom.players.Count}");
-
-                    // 广播给其他客户端
-                    NetworkManager.Instance.BroadcastPlayerLeaveRoom(playerId);
-
-                    // 触发本地事件
-                    OnPlayerLeftRoom?.Invoke(playerId);
-                }
-            }
-            else
-            {
-                // Client处理玩家离开通知
-                LogDebug($"网络玩家离开: {playerId}");
-
-                if (currentRoom != null && currentRoom.players.ContainsKey(playerId))
-                {
-                    currentRoom.players.Remove(playerId);
-                    OnPlayerLeftRoom?.Invoke(playerId);
-                }
-            }
-        }
-
-        private void OnNetworkDisconnected()
-        {
-            LogDebug("网络断开，离开房间");
-            LeaveRoom();
-        }
-
-        #endregion
-
-        #region 网络同步方法（供NetworkManager调用）
-
-        /// <summary>
-        /// 从网络更新房间数据（客户端调用）
-        /// </summary>
-        public void UpdateRoomFromNetwork(RoomData networkRoomData)
-        {
-            if (isHost) return; // Host不接受网络房间数据
-
-            LogDebug($"从网络更新房间数据: {networkRoomData.roomName}");
-
-            bool wasFirstSync = currentRoom == null;
-            currentRoom = networkRoomData;
-
-            // 重置游戏开始状态（因为收到了新的房间数据）
-            if (currentRoom.state == RoomState.Waiting)
-            {
-                hasGameStarted = false;
-            }
-
-            if (wasFirstSync)
-            {
-                // 首次同步，触发加入房间事件
-                LogDebug($"首次同步房间数据，玩家数: {currentRoom.players.Count}");
-                OnRoomJoined?.Invoke(currentRoom);
-            }
-            else
-            {
-                // 后续同步，可能需要更新UI
-                LogDebug($"更新房间数据，玩家数: {currentRoom.players.Count}");
-            }
-        }
-
-        /// <summary>
-        /// 处理网络玩家加入（客户端调用）
-        /// </summary>
-        public void OnNetworkPlayerJoined(RoomPlayer player)
-        {
-            if (isHost || !IsInRoom) return;
-
-            LogDebug($"网络玩家加入: {player.playerName} (ID: {player.playerId})");
-
-            if (!currentRoom.players.ContainsKey(player.playerId))
-            {
-                currentRoom.players[player.playerId] = player;
-                LogDebug($"客户端房间玩家数更新为: {currentRoom.players.Count}");
-                OnPlayerJoinedRoom?.Invoke(player);
-            }
-        }
-
-        /// <summary>
-        /// 处理网络玩家离开（供NetworkManager调用，处理网络消息）
-        /// </summary>
-        public void OnNetworkPlayerLeftMessage(ushort playerId)
-        {
-            if (isHost || !IsInRoom) return;
-
-            LogDebug($"收到网络玩家离开消息: {playerId}");
-
-            if (currentRoom.players.ContainsKey(playerId))
-            {
-                currentRoom.players.Remove(playerId);
-                LogDebug($"客户端房间玩家数更新为: {currentRoom.players.Count}");
-                OnPlayerLeftRoom?.Invoke(playerId);
-            }
-        }
-
-        /// <summary>
-        /// 处理网络玩家准备状态变化
-        /// </summary>
-        public void OnNetworkPlayerReadyChanged(ushort playerId, bool isReady)
-        {
-            if (!IsInRoom) return;
-
-            LogDebug($"网络玩家准备状态变化: {playerId} -> {isReady}");
-
-            if (currentRoom.players.ContainsKey(playerId))
-            {
-                currentRoom.SetPlayerReady(playerId, isReady);
-                OnPlayerReadyChanged?.Invoke(playerId, isReady);
-            }
-        }
-
-        #endregion
-
-        #region 状态查询方法
-
-        /// <summary>
-        /// 检查是否可以开始游戏（修复版本）
+        /// 检查是否可以开始游戏
         /// </summary>
         public bool CanStartGame()
         {
-            if (!IsHost)
+            if (!IsHost) return false;
+            if (!IsInRoom || !isInitialized) return false;
+            if (hasGameStarted) return false;
+
+            // 检查最小玩家数
+            if (PlayerCount < minPlayersToStart)
             {
-                LogDebug("只有房主可以开始游戏");
                 return false;
             }
 
-            if (currentRoom == null)
+            // 检查房间状态
+            if (GetRoomState() != RoomState.Waiting)
             {
-                LogDebug("房间数据为空");
-                return false;
-            }
-
-            if (hasGameStarted)
-            {
-                LogDebug("游戏已经开始");
-                return false;
-            }
-
-            if (currentRoom.state != RoomState.Waiting)
-            {
-                LogDebug($"房间状态不是等待中: {currentRoom.state}");
-                return false;
-            }
-
-            // **检查Host客户端是否准备就绪**
-            if (NetworkManager.Instance != null && !NetworkManager.Instance.IsHostClientReady)
-            {
-                LogDebug("Host客户端尚未准备就绪");
-                return false;
-            }
-
-            // 检查是否有非房主玩家
-            int nonHostPlayerCount = currentRoom.GetNonHostPlayerCount();
-            if (nonHostPlayerCount == 0)
-            {
-                LogDebug("没有其他玩家，无法开始游戏");
                 return false;
             }
 
             // 检查所有非房主玩家是否都已准备
-            if (!currentRoom.AreAllPlayersReady())
+            return AreAllPlayersReady();
+        }
+
+        /// <summary>
+        /// 获取游戏开始条件检查详情
+        /// </summary>
+        public string GetGameStartConditions()
+        {
+            if (!IsHost) return "不是房主";
+            if (!IsInRoom || !isInitialized) return "房间未初始化";
+            if (hasGameStarted) return "游戏已开始";
+
+            if (PlayerCount < minPlayersToStart)
+                return $"玩家数不足 ({PlayerCount}/{minPlayersToStart})";
+
+            if (GetRoomState() != RoomState.Waiting)
+                return $"房间状态错误 ({GetRoomState()})";
+
+            int readyCount = GetReadyPlayerCount();
+            int nonHostCount = GetNonHostPlayerCount();
+
+            if (!AreAllPlayersReady())
+                return $"玩家未全部准备 ({readyCount}/{nonHostCount})";
+
+            return "满足开始条件";
+        }
+
+        #endregion
+
+        #region 房间状态管理
+
+        /// <summary>
+        /// 设置房间为等待状态
+        /// </summary>
+        private void SetRoomWaitingState()
+        {
+            if (!IsHost) return;
+
+            var roomProps = new Hashtable
             {
-                int readyCount = currentRoom.GetReadyPlayerCount();
-                LogDebug($"还有玩家未准备: {readyCount}/{nonHostPlayerCount}");
+                { ROOM_STATE_KEY, (int)RoomState.Waiting },
+                { GAME_STARTED_KEY, false }
+            };
+
+            PhotonNetwork.CurrentRoom.SetCustomProperties(roomProps);
+            LogDebug("房间状态设置为等待中");
+        }
+
+        /// <summary>
+        /// 获取房间状态
+        /// </summary>
+        public RoomState GetRoomState()
+        {
+            if (!IsInRoom) return RoomState.Waiting;
+
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(ROOM_STATE_KEY, out object state))
+            {
+                return (RoomState)state;
+            }
+            return RoomState.Waiting;
+        }
+
+        /// <summary>
+        /// 获取游戏是否已开始
+        /// </summary>
+        public bool GetGameStarted()
+        {
+            if (!IsInRoom) return false;
+
+            if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(GAME_STARTED_KEY, out object started))
+            {
+                return (bool)started;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 验证房间状态
+        /// </summary>
+        private bool ValidateRoomState()
+        {
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogError("[RoomManager] 不在Photon房间中");
                 return false;
             }
+
+            if (PhotonNetwork.CurrentRoom == null)
+            {
+                Debug.LogError("[RoomManager] 当前房间为空");
+                return false;
+            }
+
+            if (PlayerCount == 0)
+            {
+                Debug.LogError("[RoomManager] 房间中没有玩家");
+                return false;
+            }
+
+            LogDebug("房间状态验证通过");
+            return true;
+        }
+
+        #endregion
+
+        #region 房间操作
+
+        /// <summary>
+        /// 离开房间并返回大厅
+        /// </summary>
+        public void LeaveRoomAndReturnToLobby()
+        {
+            if (!IsInRoom)
+            {
+                LogDebug("不在房间中，直接返回大厅");
+                OnReturnToLobby?.Invoke();
+                return;
+            }
+
+            LogDebug("离开房间并返回大厅");
+            PhotonNetwork.LeaveRoom();
+        }
+
+        /// <summary>
+        /// 踢出玩家（房主专用）
+        /// </summary>
+        public bool KickPlayer(Player player)
+        {
+            if (!IsHost)
+            {
+                Debug.LogError("[RoomManager] 只有房主可以踢出玩家");
+                return false;
+            }
+
+            if (player.IsMasterClient)
+            {
+                Debug.LogError("[RoomManager] 不能踢出房主");
+                return false;
+            }
+
+            LogDebug($"房主踢出玩家: {player.NickName}");
+
+            // Photon中踢出玩家需要通过关闭房间或其他方式
+            // 这里可以使用自定义RPC通知被踢出的玩家
+            photonView.RPC("OnKickedFromRoom", player);
 
             return true;
         }
 
-        /// <summary>
-        /// 获取当前玩家的准备状态
-        /// </summary>
-        public bool GetMyReadyState()
+        [PunRPC]
+        void OnKickedFromRoom()
         {
-            if (!IsInRoom || NetworkManager.Instance == null)
-                return false;
+            LogDebug("被房主踢出房间");
+            PhotonNetwork.LeaveRoom();
+        }
 
-            ushort myId = NetworkManager.Instance.ClientId;
-            if (currentRoom.players.ContainsKey(myId))
+        #endregion
+
+        #region Photon回调实现
+
+        void IInRoomCallbacks.OnPlayerEnteredRoom(Player newPlayer)
+        {
+            LogDebug($"玩家加入房间: {newPlayer.NickName} (ID: {newPlayer.ActorNumber})");
+            OnPlayerJoinedRoom?.Invoke(newPlayer);
+
+            // 如果房主，可以发送欢迎消息或房间状态
+            if (IsHost)
             {
-                return currentRoom.players[myId].state == PlayerRoomState.Ready;
+                LogDebug($"当前房间玩家数: {PlayerCount}/{MaxPlayers}");
+            }
+        }
+
+        void IInRoomCallbacks.OnPlayerLeftRoom(Player otherPlayer)
+        {
+            LogDebug($"玩家离开房间: {otherPlayer.NickName} (ID: {otherPlayer.ActorNumber})");
+            OnPlayerLeftRoom?.Invoke(otherPlayer);
+
+            // 检查是否还能继续游戏
+            if (hasGameStarted && PlayerCount < minPlayersToStart)
+            {
+                LogDebug("玩家数量不足，游戏可能需要暂停或结束");
+            }
+        }
+
+        void IInRoomCallbacks.OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
+        {
+            // 处理玩家准备状态变化
+            if (changedProps.TryGetValue(PLAYER_READY_KEY, out object isReadyObj))
+            {
+                bool isReady = (bool)isReadyObj;
+                LogDebug($"玩家准备状态更新: {targetPlayer.NickName} -> {isReady}");
+                OnPlayerReadyChanged?.Invoke(targetPlayer, isReady);
+
+                // 检查是否所有玩家都已准备
+                if (AreAllPlayersReady() && GetNonHostPlayerCount() > 0)
+                {
+                    LogDebug("所有玩家都已准备就绪");
+                    OnAllPlayersReady?.Invoke();
+                }
+            }
+        }
+
+        void IInRoomCallbacks.OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+        {
+            // 处理游戏开始
+            if (propertiesThatChanged.TryGetValue(GAME_STARTED_KEY, out object gameStartedObj))
+            {
+                bool gameStarted = (bool)gameStartedObj;
+                if (gameStarted && !IsHost) // 客户端收到游戏开始通知
+                {
+                    LogDebug("客户端收到游戏开始通知");
+                    hasGameStarted = true;
+                    StartCoroutine(DelayedGameStart());
+                }
             }
 
-            return false;
+            // 处理房间状态变化
+            if (propertiesThatChanged.TryGetValue(ROOM_STATE_KEY, out object roomStateObj))
+            {
+                RoomState newState = (RoomState)roomStateObj;
+                LogDebug($"房间状态更新: {newState}");
+            }
         }
+
+        void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient)
+        {
+            LogDebug($"房主切换到: {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+
+            // 如果本地玩家成为新房主
+            if (newMasterClient.IsLocal)
+            {
+                LogDebug("本地玩家成为新房主，重置房间状态");
+
+                // 重置房间状态
+                if (!hasGameStarted)
+                {
+                    SetRoomWaitingState();
+                }
+            }
+        }
+
+        #endregion
+
+        #region 状态查询
 
         /// <summary>
         /// 获取房间状态信息
@@ -676,58 +555,42 @@ namespace Core.Network
             if (!IsInRoom)
                 return "未在房间中";
 
-            try
-            {
-                string hostInfo = "";
-                if (NetworkManager.Instance != null)
-                {
-                    hostInfo = $", Host玩家ID: {NetworkManager.Instance.GetHostPlayerId()}, Host客户端就绪: {NetworkManager.Instance.IsHostClientReady}";
-                }
-
-                return $"房间: {currentRoom.roomName}, " +
-                       $"状态: {currentRoom.state}, " +
-                       $"玩家: {currentRoom.players.Count}/{currentRoom.maxPlayers}, " +
-                       $"准备: {currentRoom.GetReadyPlayerCount()}/{currentRoom.GetNonHostPlayerCount()}, " +
-                       $"是否房主: {isHost}, " +
-                       $"游戏已开始: {hasGameStarted}" +
-                       hostInfo;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"获取房间状态信息失败: {e.Message}");
-                return "房间状态异常";
-            }
+            return $"房间: {RoomName}, " +
+                   $"状态: {GetRoomState()}, " +
+                   $"玩家: {PlayerCount}/{MaxPlayers}, " +
+                   $"准备: {GetReadyPlayerCount()}/{GetNonHostPlayerCount()}, " +
+                   $"是否房主: {IsHost}, " +
+                   $"游戏已开始: {hasGameStarted}, " +
+                   $"可以开始: {CanStartGame()}";
         }
 
         /// <summary>
-        /// 获取房间内玩家列表
+        /// 获取玩家列表信息
         /// </summary>
-        public RoomPlayer[] GetPlayerList()
+        public string GetPlayerListInfo()
         {
-            if (!IsInRoom)
-                return new RoomPlayer[0];
+            if (!IsInRoom) return "未在房间中";
 
-            RoomPlayer[] players = new RoomPlayer[currentRoom.players.Count];
-            int index = 0;
-            foreach (var player in currentRoom.players.Values)
+            string info = "玩家列表:\n";
+            foreach (var player in PhotonNetwork.PlayerList)
             {
-                players[index++] = player;
-            }
+                bool isReady = GetPlayerReady(player);
+                info += $"  - {player.NickName} (ID: {player.ActorNumber}) ";
+                info += $"[{(player.IsMasterClient ? "房主" : "玩家")}] ";
 
-            return players;
+                if (!player.IsMasterClient)
+                {
+                    info += $"[{(isReady ? "已准备" : "未准备")}]";
+                }
+
+                info += "\n";
+            }
+            return info;
         }
 
         #endregion
 
         #region 辅助方法
-
-        /// <summary>
-        /// 生成房间代码
-        /// </summary>
-        private string GenerateRoomCode()
-        {
-            return UnityEngine.Random.Range(100000, 999999).ToString();
-        }
 
         /// <summary>
         /// 调试日志
@@ -740,254 +603,79 @@ namespace Core.Network
             }
         }
 
-        /// <summary>
-        /// 重置游戏开始状态（用于调试或错误恢复）
-        /// </summary>
-        public void ResetGameStartState()
-        {
-            LogDebug("重置游戏开始状态");
-            hasGameStarted = false;
-
-            if (currentRoom != null)
-            {
-                currentRoom.state = RoomState.Waiting;
-            }
-        }
-
         #endregion
 
-        #region 调试和验证方法
+        #region 调试方法
 
-        /// <summary>
-        /// 验证房间数据完整性
-        /// </summary>
-        public bool ValidateRoomData()
-        {
-            if (!IsInRoom)
-            {
-                LogDebug("未在房间中，无法验证");
-                return false;
-            }
-
-            try
-            {
-                // 检查房间基本信息
-                if (string.IsNullOrEmpty(currentRoom.roomName) ||
-                    string.IsNullOrEmpty(currentRoom.roomCode))
-                {
-                    Debug.LogWarning("房间基本信息不完整");
-                    return false;
-                }
-
-                // 检查玩家数据
-                if (currentRoom.players.Count == 0)
-                {
-                    Debug.LogWarning("房间没有玩家");
-                    return false;
-                }
-
-                // 检查房主是否存在
-                if (!currentRoom.players.ContainsKey(currentRoom.hostId))
-                {
-                    Debug.LogWarning($"房主(ID: {currentRoom.hostId})不在玩家列表中");
-                    return false;
-                }
-
-                // 验证房主标志
-                var hostPlayer = currentRoom.players[currentRoom.hostId];
-                if (!hostPlayer.isHost)
-                {
-                    Debug.LogWarning($"房主玩家的isHost标志为false");
-                    return false;
-                }
-
-                // **验证与NetworkManager的Host ID一致性**
-                if (NetworkManager.Instance != null)
-                {
-                    ushort networkHostId = NetworkManager.Instance.GetHostPlayerId();
-                    if (currentRoom.hostId != networkHostId)
-                    {
-                        Debug.LogWarning($"房间Host ID与NetworkManager不一致: 房间={currentRoom.hostId}, 网络={networkHostId}");
-                        return false;
-                    }
-                }
-
-                LogDebug("房间数据验证通过");
-                return true;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"房间数据验证异常: {e.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 获取详细的调试信息
-        /// </summary>
-        public string GetDetailedDebugInfo()
-        {
-            var info = "=== 房间管理器详细信息 ===\n";
-            info += $"是否为房主: {IsHost}\n";
-            info += $"是否在房间中: {IsInRoom}\n";
-            info += $"游戏是否已开始: {hasGameStarted}\n";
-            info += $"是否已初始化: {isInitialized}\n";
-            info += $"等待Host准备就绪: {isWaitingForHostReady}\n";
-
-            if (isWaitingForHostReady)
-            {
-                info += $"待创建房间名: {pendingRoomName}\n";
-                info += $"待创建玩家名: {pendingPlayerName}\n";
-            }
-
-            if (currentRoom != null)
-            {
-                try
-                {
-                    info += $"房间名: {currentRoom.roomName}\n";
-                    info += $"房间代码: {currentRoom.roomCode}\n";
-                    info += $"房间状态: {currentRoom.state}\n";
-                    info += $"房主ID: {currentRoom.hostId}\n";
-                    info += $"玩家数量: {currentRoom.players.Count}/{currentRoom.maxPlayers}\n";
-                    info += $"非房主玩家数: {currentRoom.GetNonHostPlayerCount()}\n";
-                    info += $"准备玩家数: {currentRoom.GetReadyPlayerCount()}\n";
-                    info += $"所有玩家是否准备: {currentRoom.AreAllPlayersReady()}\n";
-                    info += $"可以开始游戏: {CanStartGame()}\n";
-                    info += $"房间数据验证: {(ValidateRoomData() ? "通过" : "失败")}\n";
-
-                    info += "玩家列表:\n";
-                    foreach (var player in currentRoom.players.Values)
-                    {
-                        info += $"  - {player.playerName} (ID:{player.playerId}, Host:{player.isHost}, State:{player.state})\n";
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    info += $"获取房间信息时发生异常: {e.Message}\n";
-                }
-            }
-            else
-            {
-                info += "当前房间: null\n";
-            }
-
-            if (NetworkManager.Instance != null)
-            {
-                info += $"NetworkManager状态: 连接={NetworkManager.Instance.IsConnected}, Host={NetworkManager.Instance.IsHost}\n";
-                info += $"NetworkManager ClientID={NetworkManager.Instance.ClientId}, HostPlayerID={NetworkManager.Instance.GetHostPlayerId()}\n";
-                info += $"Host客户端就绪: {NetworkManager.Instance.IsHostClientReady}\n";
-            }
-            else
-            {
-                info += "NetworkManager: null\n";
-            }
-
-            return info;
-        }
-
-        /// <summary>
-        /// 调试方法：显示房间状态
-        /// </summary>
         [ContextMenu("显示房间状态")]
         public void ShowRoomStatus()
         {
             if (Application.isPlaying)
             {
-                Debug.Log(GetDetailedDebugInfo());
+                Debug.Log("=== RoomScene房间状态 ===");
+                Debug.Log(GetRoomStatusInfo());
+                Debug.Log(GetPlayerListInfo());
+                Debug.Log($"游戏开始条件: {GetGameStartConditions()}");
             }
         }
 
-        /// <summary>
-        /// 调试方法：强制开始游戏
-        /// </summary>
         [ContextMenu("强制开始游戏")]
         public void ForceStartGame()
         {
-            if (Application.isPlaying)
+            if (Application.isPlaying && IsHost)
             {
                 LogDebug("强制开始游戏（调试用）");
-                ResetGameStartState();
+                hasGameStarted = false; // 重置状态
                 StartGame();
             }
         }
 
-        /// <summary>
-        /// 调试方法：验证房间数据
-        /// </summary>
-        [ContextMenu("验证房间数据")]
-        public void DebugValidateRoomData()
+        [ContextMenu("切换准备状态")]
+        public void ToggleReadyState()
+        {
+            if (Application.isPlaying && IsInRoom && !IsHost)
+            {
+                bool currentReady = GetMyReadyState();
+                SetPlayerReady(!currentReady);
+                LogDebug($"切换准备状态: {currentReady} -> {!currentReady}");
+            }
+        }
+
+        [ContextMenu("重置房间状态")]
+        public void ResetRoomState()
+        {
+            if (Application.isPlaying && IsHost)
+            {
+                hasGameStarted = false;
+                SetRoomWaitingState();
+                LogDebug("房间状态已重置");
+            }
+        }
+
+        [ContextMenu("返回大厅")]
+        public void ReturnToLobby()
         {
             if (Application.isPlaying)
             {
-                bool isValid = ValidateRoomData();
-                Debug.Log($"房间数据验证结果: {(isValid ? "通过" : "失败")}");
-                if (!isValid)
-                {
-                    Debug.Log(GetDetailedDebugInfo());
-                }
-            }
-        }
-
-        /// <summary>
-        /// 调试方法：测试Host ID一致性
-        /// </summary>
-        [ContextMenu("测试Host ID一致性")]
-        public void TestHostIdConsistency()
-        {
-            if (Application.isPlaying && IsInRoom && IsHost)
-            {
-                ushort roomHostId = currentRoom.hostId;
-                ushort networkHostId = NetworkManager.Instance?.GetHostPlayerId() ?? 0;
-                ushort clientId = NetworkManager.Instance?.ClientId ?? 0;
-
-                Debug.Log($"=== Host ID 一致性测试 ===");
-                Debug.Log($"房间中Host ID: {roomHostId}");
-                Debug.Log($"NetworkManager Host玩家ID: {networkHostId}");
-                Debug.Log($"NetworkManager 客户端ID: {clientId}");
-                Debug.Log($"一致性检查: {(roomHostId == networkHostId && networkHostId == clientId ? "通过" : "失败")}");
-            }
-        }
-
-        /// <summary>
-        /// 强制刷新房间状态（调试用）
-        /// </summary>
-        [ContextMenu("刷新房间状态")]
-        public void RefreshRoomState()
-        {
-            if (IsInRoom)
-            {
-                LogDebug($"当前房间状态: {GetRoomStatusInfo()}");
-            }
-            else
-            {
-                LogDebug("未在房间中");
-            }
-        }
-
-        /// <summary>
-        /// 调试方法：强制创建房间（忽略等待状态）
-        /// </summary>
-        [ContextMenu("强制创建房间")]
-        public void ForceCreateRoom()
-        {
-            if (Application.isPlaying && isWaitingForHostReady)
-            {
-                LogDebug("强制创建等待中的房间");
-                CreateRoomImmediate(pendingRoomName, pendingPlayerName);
+                LeaveRoomAndReturnToLobby();
             }
         }
 
         #endregion
-
-        private void OnDestroy()
-        {
-            // 取消网络事件订阅
-            UnsubscribeFromNetworkEvents();
-
-            if (Instance == this)
-            {
-                Instance = null;
-            }
-        }
     }
+
+    #region 数据结构定义
+
+    /// <summary>
+    /// 房间状态枚举
+    /// </summary>
+    public enum RoomState
+    {
+        Waiting = 0,    // 等待玩家准备
+        Starting = 1,   // 准备开始游戏
+        InGame = 2,     // 游戏进行中
+        Ended = 3       // 游戏结束
+    }
+
+    #endregion
 }

@@ -2,6 +2,8 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using Core;
+using Photon.Pun;
+using Photon.Realtime;
 
 namespace Core.Network
 {
@@ -47,8 +49,10 @@ namespace Core.Network
             return GetHealthPercentage() < 0.1f;
         }
     }
+
     /// <summary>
-    /// 玩家状态管理器
+    /// 玩家状态管理器 - Photon优化版
+    /// </summary>
     public class PlayerStateManager
     {
         [Header("调试设置")]
@@ -66,6 +70,7 @@ namespace Core.Network
 
         /// <summary>
         /// 构造函数
+        /// </summary>
         public PlayerStateManager()
         {
             playerStates = new Dictionary<ushort, PlayerGameState>();
@@ -75,7 +80,7 @@ namespace Core.Network
         #region 初始化
 
         /// <summary>
-        /// 初始化玩家状态管理器
+        /// 初始化玩家状态管理器 - Photon适配版
         /// </summary>
         public void Initialize(NetworkManager networkMgr = null)
         {
@@ -88,6 +93,16 @@ namespace Core.Network
                 Debug.LogWarning("[PlayerStateManager] NetworkManager引用为空，Host验证功能可能受限");
             }
 
+            // 验证Photon连接状态
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("[PlayerStateManager] 未在Photon房间中，某些功能可能受限");
+            }
+            else
+            {
+                LogDebug($"Photon房间状态: {PhotonNetwork.CurrentRoom.Name}, 玩家数: {PhotonNetwork.PlayerList.Length}");
+            }
+
             LogDebug("PlayerStateManager初始化完成");
         }
 
@@ -96,7 +111,7 @@ namespace Core.Network
         #region 玩家管理
 
         /// <summary>
-        /// 添加玩家
+        /// 添加玩家 - Photon适配版
         /// </summary>
         public bool AddPlayer(ushort playerId, string playerName, int initialHealth = 100, int maxHealth = 100, bool isReady = true)
         {
@@ -106,14 +121,14 @@ namespace Core.Network
                 return false;
             }
 
-            // 判断是否为Host玩家
-            bool isHostPlayer = IsHostPlayer(playerId);
+            // 使用Photon判断是否为Host玩家
+            bool isHostPlayer = IsHostPlayerPhoton(playerId);
 
             // 创建玩家状态
             var playerState = new PlayerGameState
             {
                 playerId = playerId,
-                playerName = isHostPlayer ? "房主" : playerName,
+                playerName = isHostPlayer ? $"房主{playerName}" : playerName, // 标记房主
                 health = initialHealth,
                 maxHealth = maxHealth,
                 isAlive = true,
@@ -131,16 +146,30 @@ namespace Core.Network
             return true;
         }
 
+        /// <summary>
+        /// 从Photon房间添加玩家
+        /// </summary>
+        public bool AddPlayerFromPhoton(Player photonPlayer, int initialHealth = 100, int maxHealth = 100)
+        {
+            if (photonPlayer == null) return false;
+
+            ushort playerId = (ushort)photonPlayer.ActorNumber;
+            string playerName = photonPlayer.NickName ?? $"玩家{playerId}";
+
+            return AddPlayer(playerId, playerName, initialHealth, maxHealth, true);
+        }
+
+        /// <summary>
+        /// 从房间系统添加玩家（向后兼容）
+        /// </summary>
         public bool AddPlayerFromRoom(ushort playerId, string playerName, int initialHealth = 100, int maxHealth = 100)
         {
-            return AddPlayer(playerId, playerName, initialHealth, maxHealth, true); // 从房间来的都是准备好的
+            return AddPlayer(playerId, playerName, initialHealth, maxHealth, true);
         }
 
         /// <summary>
         /// 移除玩家
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>是否成功移除</returns>
         public bool RemovePlayer(ushort playerId)
         {
             if (!playerStates.ContainsKey(playerId))
@@ -181,10 +210,6 @@ namespace Core.Network
         /// <summary>
         /// 更新玩家血量
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="newHealth">新血量</param>
-        /// <param name="maxHealth">最大血量（可选）</param>
-        /// <returns>是否成功更新</returns>
         public bool UpdatePlayerHealth(ushort playerId, int newHealth, int? maxHealth = null)
         {
             if (!playerStates.ContainsKey(playerId))
@@ -214,9 +239,6 @@ namespace Core.Network
         /// <summary>
         /// 设置玩家存活状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="isAlive">是否存活</param>
-        /// <returns>是否成功设置</returns>
         public bool SetPlayerAlive(ushort playerId, bool isAlive)
         {
             if (!playerStates.ContainsKey(playerId))
@@ -245,9 +267,6 @@ namespace Core.Network
         /// <summary>
         /// 设置玩家准备状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="isReady">是否准备就绪</param>
-        /// <returns>是否成功设置</returns>
         public bool SetPlayerReady(ushort playerId, bool isReady)
         {
             if (!playerStates.ContainsKey(playerId))
@@ -267,12 +286,11 @@ namespace Core.Network
 
         #endregion
 
-        #region Host验证
+        #region Host验证 - Photon适配版
 
         /// <summary>
-        /// 验证Host数量并修复重复问题
+        /// 验证Host数量并修复重复问题 - Photon适配版
         /// </summary>
-        /// <returns>验证是否通过</returns>
         public bool ValidateAndFixHostCount()
         {
             LogDebug("开始验证Host数量...");
@@ -289,15 +307,12 @@ namespace Core.Network
                 var hostPlayer = hostPlayers[0];
                 LogDebug($"Host验证通过: ID={hostPlayer.playerId}, Name={hostPlayer.playerName}");
 
-                // 验证与NetworkManager的一致性
-                if (networkManager != null)
+                // 验证与Photon的一致性
+                ushort photonMasterClientId = GetPhotonMasterClientId();
+                if (hostPlayer.playerId != photonMasterClientId)
                 {
-                    ushort networkHostId = networkManager.GetHostPlayerId();
-                    if (hostPlayer.playerId != networkHostId)
-                    {
-                        Debug.LogError($"[PlayerStateManager] Host ID不一致！游戏中: {hostPlayer.playerId}, NetworkManager: {networkHostId}");
-                        return false;
-                    }
+                    Debug.LogError($"[PlayerStateManager] Host ID与Photon不一致！游戏中: {hostPlayer.playerId}, Photon MasterClient: {photonMasterClientId}");
+                    return false;
                 }
 
                 OnHostValidationPassed?.Invoke(hostPlayer.playerId);
@@ -312,23 +327,22 @@ namespace Core.Network
                 OnHostValidationFailed?.Invoke(duplicateHostIds);
 
                 // 尝试修复
-                return FixDuplicateHosts();
+                return FixDuplicateHostsPhoton();
             }
         }
 
         /// <summary>
-        /// 修复重复Host问题
+        /// 修复重复Host问题 - Photon适配版
         /// </summary>
-        /// <returns>是否修复成功</returns>
-        public bool FixDuplicateHosts()
+        public bool FixDuplicateHostsPhoton()
         {
-            if (networkManager == null)
+            ushort correctHostId = GetPhotonMasterClientId();
+            if (correctHostId == 0)
             {
-                Debug.LogError("[PlayerStateManager] NetworkManager为空，无法修复重复Host");
+                Debug.LogError("[PlayerStateManager] 无法获取Photon MasterClient ID，无法修复重复Host");
                 return false;
             }
 
-            ushort correctHostId = networkManager.GetHostPlayerId();
             LogDebug($"修复重复房主，正确的Host ID: {correctHostId}");
 
             var hostPlayers = GetHostPlayers();
@@ -340,33 +354,40 @@ namespace Core.Network
 
             LogDebug($"发现 {hostPlayers.Count} 个房主，开始修复");
 
-            // 保留正确ID的房主，移除其他的
+            // 保留正确ID的房主，修改其他的
             var correctHost = hostPlayers.FirstOrDefault(h => h.playerId == correctHostId);
 
             if (correctHost != null)
             {
                 LogDebug($"保留正确房主: ID={correctHost.playerId}, Name={correctHost.playerName}");
 
-                // 移除其他房主，但保留玩家数据（只修改名称）
+                // 修改其他房主为普通玩家
                 var duplicateHosts = hostPlayers.Where(h => h.playerId != correctHostId).ToList();
                 foreach (var duplicateHost in duplicateHosts)
                 {
-                    // 修改名称为普通玩家
-                    duplicateHost.playerName = $"玩家{duplicateHost.playerId}";
+                    // 移除"房主"标记
+                    duplicateHost.playerName = duplicateHost.playerName.Replace("房主", "").Trim();
+                    if (string.IsNullOrEmpty(duplicateHost.playerName))
+                    {
+                        duplicateHost.playerName = $"玩家{duplicateHost.playerId}";
+                    }
                     LogDebug($"修正重复房主为普通玩家: ID={duplicateHost.playerId}, 新名称={duplicateHost.playerName}");
                 }
             }
             else
             {
-                // 如果没有找到正确ID的房主，保留最小ID的房主
+                Debug.LogWarning($"[PlayerStateManager] 找不到正确ID({correctHostId})的房主，保留第一个房主");
+
                 var primaryHost = hostPlayers.OrderBy(h => h.playerId).First();
                 var duplicateHosts = hostPlayers.Skip(1).ToList();
 
-                LogDebug($"保留主房主: ID={primaryHost.playerId}, 修正其他重复房主");
-
                 foreach (var duplicateHost in duplicateHosts)
                 {
-                    duplicateHost.playerName = $"玩家{duplicateHost.playerId}";
+                    duplicateHost.playerName = duplicateHost.playerName.Replace("房主", "").Trim();
+                    if (string.IsNullOrEmpty(duplicateHost.playerName))
+                    {
+                        duplicateHost.playerName = $"玩家{duplicateHost.playerId}";
+                    }
                     LogDebug($"修正重复房主为普通玩家: ID={duplicateHost.playerId}");
                 }
             }
@@ -379,7 +400,6 @@ namespace Core.Network
         /// <summary>
         /// 简单验证Host数量（不修复）
         /// </summary>
-        /// <returns>验证是否通过</returns>
         public bool ValidateHostCount()
         {
             var hostPlayers = GetHostPlayers();
@@ -389,20 +409,32 @@ namespace Core.Network
         /// <summary>
         /// 获取所有Host玩家
         /// </summary>
-        /// <returns>Host玩家列表</returns>
         private List<PlayerGameState> GetHostPlayers()
         {
             return playerStates.Values.Where(p => p.playerName.Contains("房主")).ToList();
         }
 
         /// <summary>
-        /// 判断玩家是否为Host
+        /// 判断玩家是否为Host - Photon版本
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>是否为Host</returns>
-        private bool IsHostPlayer(ushort playerId)
+        private bool IsHostPlayerPhoton(ushort playerId)
         {
-            return networkManager?.IsHostPlayer(playerId) ?? false;
+            if (!PhotonNetwork.InRoom) return false;
+
+            return PhotonNetwork.MasterClient != null &&
+                   PhotonNetwork.MasterClient.ActorNumber == playerId;
+        }
+
+        /// <summary>
+        /// 获取Photon MasterClient ID
+        /// </summary>
+        private ushort GetPhotonMasterClientId()
+        {
+            if (PhotonNetwork.InRoom && PhotonNetwork.MasterClient != null)
+            {
+                return (ushort)PhotonNetwork.MasterClient.ActorNumber;
+            }
+            return 0;
         }
 
         #endregion
@@ -412,8 +444,6 @@ namespace Core.Network
         /// <summary>
         /// 获取玩家状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>玩家状态，不存在则返回null</returns>
         public PlayerGameState GetPlayerState(ushort playerId)
         {
             return playerStates.ContainsKey(playerId) ? playerStates[playerId] : null;
@@ -422,8 +452,6 @@ namespace Core.Network
         /// <summary>
         /// 检查玩家是否存在
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>是否存在</returns>
         public bool ContainsPlayer(ushort playerId)
         {
             return playerStates.ContainsKey(playerId);
@@ -432,8 +460,6 @@ namespace Core.Network
         /// <summary>
         /// 检查玩家是否存活
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>是否存活</returns>
         public bool IsPlayerAlive(ushort playerId)
         {
             return playerStates.ContainsKey(playerId) && playerStates[playerId].isAlive;
@@ -442,7 +468,6 @@ namespace Core.Network
         /// <summary>
         /// 获取所有玩家状态
         /// </summary>
-        /// <returns>玩家状态字典的副本</returns>
         public Dictionary<ushort, PlayerGameState> GetAllPlayerStates()
         {
             return new Dictionary<ushort, PlayerGameState>(playerStates);
@@ -451,7 +476,6 @@ namespace Core.Network
         /// <summary>
         /// 获取存活玩家列表
         /// </summary>
-        /// <returns>存活玩家ID列表</returns>
         public List<ushort> GetAlivePlayerIds()
         {
             return playerStates.Where(p => p.Value.isAlive).Select(p => p.Key).ToList();
@@ -460,7 +484,6 @@ namespace Core.Network
         /// <summary>
         /// 获取存活玩家状态列表
         /// </summary>
-        /// <returns>存活玩家状态列表</returns>
         public List<PlayerGameState> GetAlivePlayers()
         {
             return playerStates.Values.Where(p => p.isAlive).ToList();
@@ -469,7 +492,6 @@ namespace Core.Network
         /// <summary>
         /// 获取玩家总数
         /// </summary>
-        /// <returns>玩家总数</returns>
         public int GetPlayerCount()
         {
             return playerStates.Count;
@@ -478,7 +500,6 @@ namespace Core.Network
         /// <summary>
         /// 获取存活玩家数量
         /// </summary>
-        /// <returns>存活玩家数量</returns>
         public int GetAlivePlayerCount()
         {
             return playerStates.Values.Count(p => p.isAlive);
@@ -487,7 +508,6 @@ namespace Core.Network
         /// <summary>
         /// 获取准备就绪的玩家数量
         /// </summary>
-        /// <returns>准备就绪的玩家数量</returns>
         public int GetReadyPlayerCount()
         {
             return playerStates.Values.Count(p => p.isReady);
@@ -496,20 +516,119 @@ namespace Core.Network
         /// <summary>
         /// 检查是否所有玩家都已准备
         /// </summary>
-        /// <returns>是否所有玩家都已准备</returns>
         public bool AreAllPlayersReady()
         {
             return playerStates.Count > 0 && playerStates.Values.All(p => p.isReady);
         }
 
         /// <summary>
-        /// 获取Host玩家ID
+        /// 获取Host玩家ID - Photon适配版
         /// </summary>
-        /// <returns>Host玩家ID，未找到返回0</returns>
         public ushort GetHostPlayerId()
         {
+            // 优先使用Photon的MasterClient
+            ushort photonMasterClientId = GetPhotonMasterClientId();
+            if (photonMasterClientId != 0)
+            {
+                return photonMasterClientId;
+            }
+
+            // 备用：从玩家状态中查找
             var hostPlayer = playerStates.Values.FirstOrDefault(p => p.playerName.Contains("房主"));
             return hostPlayer?.playerId ?? 0;
+        }
+
+        #endregion
+
+        #region 房间数据同步 - Photon优化版
+
+        /// <summary>
+        /// 从Photon房间同步玩家数据
+        /// </summary>
+        public int SyncFromPhotonRoom(int initialHealth = 100)
+        {
+            LogDebug("从Photon房间同步玩家数据");
+
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("[PlayerStateManager] 未在Photon房间中，无法同步玩家数据");
+                return 0;
+            }
+
+            // 清空现有玩家状态
+            ClearAllPlayers();
+
+            int syncedCount = 0;
+
+            // 从Photon房间同步所有玩家
+            foreach (var photonPlayer in PhotonNetwork.PlayerList)
+            {
+                if (AddPlayerFromPhoton(photonPlayer, initialHealth, initialHealth))
+                {
+                    syncedCount++;
+                }
+            }
+
+            LogDebug($"Photon房间玩家同步完成，总计玩家数: {syncedCount}");
+            return syncedCount;
+        }
+
+        /// <summary>
+        /// 从房间系统同步玩家数据（向后兼容，优先使用Photon）
+        /// </summary>
+        public int SyncFromRoomSystem(int initialHealth = 100)
+        {
+            LogDebug("从房间系统同步玩家数据");
+
+            // 优先使用Photon房间数据
+            if (PhotonNetwork.InRoom)
+            {
+                return SyncFromPhotonRoom(initialHealth);
+            }
+
+            // 向后兼容：从RoomManager获取
+            if (RoomManager.Instance != null && RoomManager.Instance.IsInRoom)
+            {
+                LogDebug($"从RoomManager同步，使用Photon房间数据，玩家数: {RoomManager.Instance.PlayerCount}");
+
+                ClearAllPlayers();
+                int syncedCount = 0;
+
+                // 直接使用PhotonNetwork.PlayerList
+                foreach (var photonPlayer in PhotonNetwork.PlayerList)
+                {
+                    ushort playerId = (ushort)photonPlayer.ActorNumber;
+                    string playerName = photonPlayer.NickName ?? $"玩家{playerId}";
+
+                    if (AddPlayerFromRoom(playerId, playerName, initialHealth, initialHealth))
+                    {
+                        syncedCount++;
+                    }
+                }
+
+                LogDebug($"房间玩家同步完成，总计玩家数: {syncedCount}");
+                return syncedCount;
+            }
+
+            // 最后备用：从NetworkManager获取（如果有的话）
+            if (networkManager != null)
+            {
+                LogDebug("从NetworkManager获取基本信息...");
+
+                ushort hostPlayerId = GetPhotonMasterClientId();
+                if (hostPlayerId != 0)
+                {
+                    ClearAllPlayers();
+                    if (AddPlayer(hostPlayerId, "房主", initialHealth, initialHealth))
+                    {
+                        LogDebug($"添加Host玩家: ID={hostPlayerId}");
+                        return 1;
+                    }
+                }
+            }
+
+            LogDebug("无法从任何来源同步玩家数据");
+            return 0;
         }
 
         #endregion
@@ -517,12 +636,11 @@ namespace Core.Network
         #region 状态信息
 
         /// <summary>
-        /// 获取玩家状态管理器状态信息
+        /// 获取玩家状态管理器状态信息 - Photon增强版
         /// </summary>
-        /// <returns>状态信息字符串</returns>
         public string GetStatusInfo()
         {
-            var status = "=== PlayerStateManager状态 ===\n";
+            var status = "=== PlayerStateManager状态 (Photon版) ===\n";
             status += $"玩家总数: {GetPlayerCount()}\n";
             status += $"存活玩家数: {GetAlivePlayerCount()}\n";
             status += $"准备玩家数: {GetReadyPlayerCount()}\n";
@@ -530,6 +648,18 @@ namespace Core.Network
 
             var hostId = GetHostPlayerId();
             status += $"Host玩家ID: {(hostId != 0 ? hostId.ToString() : "未找到")}\n";
+
+            // Photon房间信息
+            if (PhotonNetwork.InRoom)
+            {
+                status += $"Photon房间: {PhotonNetwork.CurrentRoom.Name}\n";
+                status += $"Photon玩家数: {PhotonNetwork.PlayerList.Length}\n";
+                status += $"Photon MasterClient: {PhotonNetwork.MasterClient?.ActorNumber ?? 0}\n";
+            }
+            else
+            {
+                status += "Photon房间: 未连接\n";
+            }
 
             if (playerStates.Count > 0)
             {
@@ -544,60 +674,6 @@ namespace Core.Network
             }
 
             return status;
-        }
-
-        #endregion
-
-        #region 房间数据同步
-        public int SyncFromRoomSystem(int initialHealth = 100)
-        {
-            LogDebug("从房间系统同步玩家数据");
-
-            // 清空现有玩家状态，避免重复
-            ClearAllPlayers();
-
-            int syncedCount = 0;
-
-            // 方法1：从RoomManager获取
-            if (RoomManager.Instance?.CurrentRoom != null)
-            {
-                var room = RoomManager.Instance.CurrentRoom;
-                LogDebug($"从RoomManager同步，房间玩家数: {room.players.Count}");
-
-                foreach (var roomPlayer in room.players.Values)
-                {
-                    if (AddPlayerFromRoom(roomPlayer.playerId, roomPlayer.playerName, initialHealth, initialHealth))
-                    {
-                        syncedCount++;
-                    }
-                }
-
-                LogDebug($"房间玩家同步完成，总计玩家数: {syncedCount}");
-                return syncedCount;
-            }
-
-            // 方法2：从NetworkManager的连接状态获取
-            if (networkManager != null)
-            {
-                LogDebug($"从NetworkManager同步，连接玩家数: {networkManager.ConnectedPlayerCount}");
-
-                ushort hostPlayerId = networkManager.GetHostPlayerId();
-                if (hostPlayerId != 0 && networkManager.IsHostClientReady)
-                {
-                    if (AddPlayerFromRoom(hostPlayerId, "房主", initialHealth, initialHealth))
-                    {
-                        syncedCount++;
-                        LogDebug($"添加Host玩家: ID={hostPlayerId}");
-                    }
-                }
-                else
-                {
-                    LogDebug($"Host玩家尚未准备就绪: ID={hostPlayerId}, Ready={networkManager.IsHostClientReady}");
-                }
-            }
-
-            LogDebug($"玩家同步完成，总计玩家数: {syncedCount}");
-            return syncedCount;
         }
 
         #endregion

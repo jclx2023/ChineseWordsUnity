@@ -4,18 +4,6 @@ using UnityEngine;
 namespace Core.Network
 {
     /// <summary>
-    /// 房间状态枚举
-    /// </summary>
-    public enum RoomState
-    {
-        Waiting,    // 等待玩家加入
-        Ready,      // 准备开始（所有玩家已准备）
-        Starting,   // 正在启动游戏
-        InGame,     // 游戏进行中
-        Ended       // 游戏结束
-    }
-
-    /// <summary>
     /// 玩家房间状态
     /// </summary>
     public enum PlayerRoomState

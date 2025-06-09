@@ -5,12 +5,13 @@ using Core.Network;
 using TMPro;
 using UnityEngine.UI;
 using UI.RoomConfig;
+using Photon.Pun;
 
 namespace Core.Network
 {
     /// <summary>
-    /// 简化版房间配置管理器
-    /// 专注于RoomGameConfig的管理，Timer配置通过TimerConfigManager处理
+    /// 房间配置管理器 - Photon优化版
+    /// 专注于RoomGameConfig的管理，简化权限检查，完全适配Photon系统
     /// </summary>
     public class RoomConfigManager : MonoBehaviour
     {
@@ -20,9 +21,15 @@ namespace Core.Network
         [Header("UI设置")]
         [SerializeField] private GameObject configUIPrefab;
         [SerializeField] private KeyCode configUIHotkey = KeyCode.F1;
+        [SerializeField] private bool enableHotkeyInGame = true;
+
+        [Header("场景设置")]
+        [SerializeField] private bool allowInAllScenes = false;
+        [SerializeField] private string[] allowedScenes = { "RoomScene", "NetworkGameScene" };
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool forceAllowInEditor = true;
 
         // 单例实例
         public static RoomConfigManager Instance { get; private set; }
@@ -36,26 +43,44 @@ namespace Core.Network
         private RoomConfigUI configUIComponent;
         private bool isUIOpen = false;
 
+        // 初始化状态
+        private bool isInitialized = false;
+
         // 属性
         public RoomGameConfig CurrentConfig => currentConfig;
         public bool IsUIOpen => isUIOpen;
-
-
+        public bool IsInitialized => isInitialized;
 
         private void Awake()
         {
             if (Instance == null)
             {
                 Instance = this;
-                LogDebug("RoomConfigManager 单例已创建");
+                LogDebug("RoomConfigManager (Photon版) 单例已创建");
 
-                // 不设置DontDestroyOnLoad，让它留在当前场景
-                LoadDefaultConfig();
+                // 根据场景决定是否保持
+                if (ShouldPersistAcrossScenes())
+                {
+                    DontDestroyOnLoad(gameObject);
+                    LogDebug("设置为跨场景持久化");
+                }
             }
             else if (Instance != this)
             {
                 LogDebug("销毁重复的RoomConfigManager实例");
                 Destroy(gameObject);
+                return;
+            }
+
+            StartCoroutine(InitializeConfigManager());
+        }
+
+        private void Update()
+        {
+            // 处理配置UI热键
+            if (enableHotkeyInGame && Input.GetKeyDown(configUIHotkey))
+            {
+                HandleConfigUIToggle();
             }
         }
 
@@ -66,6 +91,25 @@ namespace Core.Network
             {
                 Instance = null;
             }
+        }
+
+        #region 初始化
+
+        /// <summary>
+        /// 初始化配置管理器
+        /// </summary>
+        private IEnumerator InitializeConfigManager()
+        {
+            LogDebug("开始初始化RoomConfigManager");
+
+            // 加载默认配置
+            LoadDefaultConfig();
+
+            // 等待一帧确保其他管理器初始化
+            yield return null;
+
+            isInitialized = true;
+            LogDebug("RoomConfigManager初始化完成");
         }
 
         /// <summary>
@@ -92,6 +136,7 @@ namespace Core.Network
                 else
                 {
                     currentConfig = ScriptableObject.CreateInstance<RoomGameConfig>();
+                    currentConfig.name = "DefaultRoomGameConfig";
                     LogDebug("创建默认配置");
                 }
             }
@@ -120,7 +165,150 @@ namespace Core.Network
             }
         }
 
-        #region RoomGameConfig管理
+        /// <summary>
+        /// 判断是否应该跨场景持久化
+        /// </summary>
+        private bool ShouldPersistAcrossScenes()
+        {
+            // 如果允许在所有场景使用，则持久化
+            return allowInAllScenes;
+        }
+
+        #endregion
+
+        #region 权限和场景检查 - Photon优化版
+
+        /// <summary>
+        /// 检查当前玩家是否为房主 - Photon版本
+        /// </summary>
+        private bool IsCurrentPlayerHost()
+        {
+            // 开发模式特权
+            if (Application.isEditor && forceAllowInEditor)
+            {
+                LogDebug("编辑器模式，允许配置访问");
+                return true;
+            }
+
+            // 使用Photon的MasterClient机制
+            if (PhotonNetwork.InRoom)
+            {
+                bool isMaster = PhotonNetwork.IsMasterClient;
+                LogDebug($"Photon房间中，是否为MasterClient: {isMaster}");
+                return isMaster;
+            }
+
+            // 如果不在Photon房间中，检查是否有其他网络管理器
+            if (NetworkManager.Instance != null)
+            {
+                bool isHost = NetworkManager.Instance.IsHost;
+                LogDebug($"NetworkManager中，是否为Host: {isHost}");
+                return isHost;
+            }
+
+            LogDebug("无法确定房主状态，拒绝访问");
+            return false;
+        }
+
+        /// <summary>
+        /// 获取当前玩家ID - Photon版本
+        /// </summary>
+        private int GetCurrentPlayerId()
+        {
+            if (PhotonNetwork.InRoom)
+            {
+                return PhotonNetwork.LocalPlayer.ActorNumber;
+            }
+
+            if (NetworkManager.Instance != null)
+            {
+                return NetworkManager.Instance.ClientId;
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 检查是否在允许的场景中
+        /// </summary>
+        private bool IsInAllowedScene()
+        {
+            if (allowInAllScenes)
+            {
+                LogDebug("允许在所有场景中使用配置");
+                return true;
+            }
+
+            string currentScene = SceneManager.GetActiveScene().name;
+
+            foreach (string allowedScene in allowedScenes)
+            {
+                if (currentScene.Contains(allowedScene))
+                {
+                    LogDebug($"当前场景 {currentScene} 在允许列表中");
+                    return true;
+                }
+            }
+
+            LogDebug($"当前场景 {currentScene} 不在允许列表中: [{string.Join(", ", allowedScenes)}]");
+            return false;
+        }
+
+        /// <summary>
+        /// 检查是否在房间环境中
+        /// </summary>
+        private bool IsInRoomEnvironment()
+        {
+            // 优先检查Photon房间状态
+            if (PhotonNetwork.InRoom)
+            {
+                LogDebug("在Photon房间中");
+                return true;
+            }
+
+            // 备用检查：RoomManager状态
+            if (RoomManager.Instance != null && RoomManager.Instance.IsInRoom)
+            {
+                LogDebug("RoomManager显示在房间中");
+                return true;
+            }
+
+            LogDebug("不在房间环境中");
+            return false;
+        }
+
+        /// <summary>
+        /// 检查操作权限 - 简化版
+        /// </summary>
+        private bool CheckPermissions()
+        {
+            // 检查场景权限
+            if (!IsInAllowedScene())
+            {
+                LogDebug("当前场景不允许打开配置UI");
+                return false;
+            }
+
+            // 检查房间环境（可选）
+            if (!allowInAllScenes && !IsInRoomEnvironment())
+            {
+                LogDebug("不在房间环境中，无法打开配置UI");
+                return false;
+            }
+
+            // 检查房主权限
+            if (!IsCurrentPlayerHost())
+            {
+                LogDebug("只有房主可以打开配置UI");
+                return false;
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region 配置管理
 
         /// <summary>
         /// 获取当前Timer配置
@@ -154,76 +342,97 @@ namespace Core.Network
         /// </summary>
         public string GetConfigSummary()
         {
-            return runtimeConfig?.GetConfigSummary() ?? "配置未加载";
+            if (runtimeConfig == null)
+                return "配置未加载";
+
+            var summary = runtimeConfig.GetConfigSummary();
+
+            // 添加权限和场景信息
+            summary += $"\n权限状态: 房主={IsCurrentPlayerHost()}, 场景={IsInAllowedScene()}, 房间={IsInRoomEnvironment()}";
+            summary += $"\n玩家ID: {GetCurrentPlayerId()}";
+
+            if (PhotonNetwork.InRoom)
+            {
+                summary += $"\nPhoton房间: {PhotonNetwork.CurrentRoom.Name}, MasterClient: {PhotonNetwork.MasterClient?.ActorNumber}";
+            }
+
+            return summary;
+        }
+
+        /// <summary>
+        /// 应用配置更改
+        /// </summary>
+        public void ApplyConfigChanges()
+        {
+            LogDebug("应用配置更改");
+
+            if (runtimeConfig != null && runtimeConfig.ValidateConfig())
+            {
+                currentConfig = runtimeConfig.CreateCopy();
+                currentConfig.ClearDirty();
+
+                // 更新Timer配置管理器
+                var timerConfig = currentConfig.GetEffectiveTimerConfig();
+                if (timerConfig != null)
+                {
+                    TimerConfigManager.SetConfig(timerConfig);
+                }
+
+                LogDebug("配置已应用");
+
+                // 如果在房间中，可以考虑广播配置更新
+                BroadcastConfigUpdate();
+            }
+            else
+            {
+                Debug.LogError("[RoomConfigManager] 配置验证失败，无法应用更改");
+            }
+        }
+
+        /// <summary>
+        /// 重置为默认配置
+        /// </summary>
+        public void ResetToDefault()
+        {
+            LogDebug("重置为默认配置");
+
+            if (runtimeConfig != null)
+            {
+                runtimeConfig.ResetToDefault();
+            }
+            else
+            {
+                LoadDefaultConfig();
+            }
+
+            // 重置Timer配置
+            InitializeTimerConfig();
+        }
+
+        /// <summary>
+        /// 获取传递给游戏场景的配置
+        /// </summary>
+        public RoomGameConfig GetGameSceneConfig()
+        {
+            return currentConfig?.CreateCopy();
+        }
+
+        /// <summary>
+        /// 广播配置更新（如果在多人房间中）
+        /// </summary>
+        private void BroadcastConfigUpdate()
+        {
+            if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+            {
+                // 可以通过房间属性或RPC广播配置更新
+                // 这里是扩展点，具体实现取决于需求
+                LogDebug("房主配置更新，可以广播给其他玩家");
+            }
         }
 
         #endregion
 
-        #region 现有方法（保持不变）
-
-        /// <summary>
-        /// 检查当前玩家是否为房主
-        /// </summary>
-        private bool IsCurrentPlayerHost()
-        {
-            // 检查NetworkManager
-            if (NetworkManager.Instance != null)
-            {
-                return NetworkManager.Instance.IsHost;
-            }
-
-            // 检查RoomManager
-            if (RoomManager.Instance?.CurrentRoom != null)
-            {
-                var room = RoomManager.Instance.CurrentRoom;
-                ushort currentPlayerId = GetCurrentPlayerId();
-                return currentPlayerId != 0 && currentPlayerId == room.hostId;
-            }
-
-            // 开发模式允许
-            return Application.isEditor;
-        }
-
-        /// <summary>
-        /// 获取当前玩家ID
-        /// </summary>
-        private ushort GetCurrentPlayerId()
-        {
-            if (NetworkManager.Instance != null)
-            {
-                return NetworkManager.Instance.ClientId;
-            }
-            return 0;
-        }
-
-        /// <summary>
-        /// 检查是否在房间场景
-        /// </summary>
-        private bool IsInRoomScene()
-        {
-            string currentScene = SceneManager.GetActiveScene().name;
-            return currentScene.Contains("Room") || currentScene.Contains("Lobby");
-        }
-
-        /// <summary>
-        /// 检查操作权限
-        /// </summary>
-        private bool CheckPermissions()
-        {
-            if (!IsInRoomScene())
-            {
-                LogDebug("当前不在房间场景，无法打开配置");
-                return false;
-            }
-
-            if (!IsCurrentPlayerHost())
-            {
-                LogDebug("只有房主可以打开配置UI");
-                return false;
-            }
-
-            return true;
-        }
+        #region UI管理
 
         /// <summary>
         /// 处理配置UI开关
@@ -258,6 +467,12 @@ namespace Core.Network
                 return;
             }
 
+            if (!CheckPermissions())
+            {
+                LogDebug("没有权限打开配置UI");
+                return;
+            }
+
             LogDebug("打开配置UI");
 
             if (configUIInstance == null)
@@ -279,7 +494,7 @@ namespace Core.Network
             }
             else
             {
-                LogDebug("配置UI创建失败");
+                Debug.LogError("[RoomConfigManager] 配置UI创建失败");
             }
         }
 
@@ -302,7 +517,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 创建配置UI实例 - 确保在当前场景中
+        /// 创建配置UI实例
         /// </summary>
         private void CreateConfigUIInstance()
         {
@@ -310,16 +525,21 @@ namespace Core.Network
 
             if (configUIPrefab == null)
             {
+                // 尝试从Resources加载
                 configUIPrefab = Resources.Load<GameObject>("RoomConfigUI");
                 if (configUIPrefab == null)
                 {
                     configUIPrefab = Resources.Load<GameObject>("UI/RoomConfigUI");
                 }
+                if (configUIPrefab == null)
+                {
+                    configUIPrefab = Resources.Load<GameObject>("Prefabs/UI/RoomConfigUI");
+                }
             }
 
             if (configUIPrefab != null)
             {
-                // 关键修复：在当前场景的Canvas下创建UI
+                // 在当前场景中创建UI
                 configUIInstance = CreateUIInCurrentScene();
 
                 if (configUIInstance != null)
@@ -327,7 +547,7 @@ namespace Core.Network
                     configUIComponent = configUIInstance.GetComponent<RoomConfigUI>();
                     if (configUIComponent == null)
                     {
-                        LogDebug("错误：配置UI预制体缺少RoomConfigUI组件");
+                        Debug.LogError("[RoomConfigManager] 配置UI预制体缺少RoomConfigUI组件");
                     }
 
                     configUIInstance.SetActive(false);
@@ -336,21 +556,22 @@ namespace Core.Network
             }
             else
             {
-                LogDebug("错误：无法加载配置UI预制体");
+                Debug.LogError("[RoomConfigManager] 无法加载配置UI预制体，请检查Resources路径");
             }
         }
 
         /// <summary>
-        /// 在当前场景中创建UI（避免DontDestroyOnLoad问题）
+        /// 在当前场景中创建UI
         /// </summary>
         private GameObject CreateUIInCurrentScene()
         {
             LogDebug("在当前场景中创建UI");
 
-            // 方法1：直接实例化，Unity会自动放在当前场景
+            // 直接实例化
             var uiInstance = Instantiate(configUIPrefab);
+            uiInstance.name = "RoomConfigUI_Instance";
 
-            // 方法2：如果UI仍然跑到DontDestroy，强制移回当前场景
+            // 如果意外创建在DontDestroyOnLoad场景，移回当前场景
             if (uiInstance.scene.name == "DontDestroyOnLoad")
             {
                 LogDebug("UI被创建在DontDestroyOnLoad，强制移回当前场景");
@@ -363,7 +584,14 @@ namespace Core.Network
             {
                 canvas.enabled = true;
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvas.sortingOrder = 1000;
+                canvas.sortingOrder = 1000; // 确保在最上层
+            }
+
+            // 添加GraphicRaycaster（如果没有）
+            var raycaster = uiInstance.GetComponent<GraphicRaycaster>();
+            if (raycaster == null)
+            {
+                uiInstance.AddComponent<GraphicRaycaster>();
             }
 
             return uiInstance;
@@ -387,47 +615,51 @@ namespace Core.Network
             }
         }
 
+        #endregion
+
+        #region 公共接口
+
         /// <summary>
-        /// 应用配置更改
+        /// 强制打开配置UI（忽略权限检查，调试用）
         /// </summary>
-        public void ApplyConfigChanges()
+        public void ForceOpenConfigUI()
         {
-            LogDebug("应用配置更改");
+            LogDebug("强制打开配置UI（调试模式）");
 
-            if (runtimeConfig != null && runtimeConfig.ValidateConfig())
+            if (configUIInstance == null)
             {
-                currentConfig = runtimeConfig.CreateCopy();
-                currentConfig.ClearDirty();
+                CreateConfigUIInstance();
+            }
 
-                // 更新Timer配置管理器
-                var timerConfig = currentConfig.GetEffectiveTimerConfig();
-                if (timerConfig != null)
+            if (configUIInstance != null)
+            {
+                configUIInstance.SetActive(true);
+                isUIOpen = true;
+
+                if (configUIComponent != null)
                 {
-                    TimerConfigManager.SetConfig(timerConfig);
+                    configUIComponent.Initialize();
                 }
-
-                LogDebug("配置已应用");
             }
         }
 
         /// <summary>
-        /// 重置为默认配置
+        /// 检查当前是否有权限访问配置
         /// </summary>
-        public void ResetToDefault()
+        public bool HasConfigPermission()
         {
-            LogDebug("重置为默认配置");
-            runtimeConfig.ResetToDefault();
-
-            // 重置Timer配置
-            InitializeTimerConfig();
+            return CheckPermissions();
         }
 
         /// <summary>
-        /// 获取传递给游戏场景的配置
+        /// 获取权限状态详情
         /// </summary>
-        public RoomGameConfig GetGameSceneConfig()
+        public string GetPermissionStatus()
         {
-            return currentConfig?.CreateCopy();
+            return $"房主权限: {IsCurrentPlayerHost()}, " +
+                   $"场景权限: {IsInAllowedScene()}, " +
+                   $"房间环境: {IsInRoomEnvironment()}, " +
+                   $"整体权限: {CheckPermissions()}";
         }
 
         #endregion
@@ -446,25 +678,24 @@ namespace Core.Network
         }
 
         [ContextMenu("强制打开配置UI")]
-        public void ForceOpenConfigUI()
+        public void DebugForceOpenConfigUI()
         {
-            LogDebug("强制打开配置UI（调试模式）");
-            OpenConfigUI();
+            ForceOpenConfigUI();
         }
 
         [ContextMenu("显示当前配置")]
-        public void ShowCurrentConfig()
+        public void DebugShowCurrentConfig()
         {
-            Debug.Log(GetConfigSummary());
+            Debug.Log("=== 当前配置 ===\n" + GetConfigSummary());
         }
 
         [ContextMenu("显示Timer配置")]
-        public void ShowTimerConfig()
+        public void DebugShowTimerConfig()
         {
             var timerConfig = GetCurrentTimerConfig();
             if (timerConfig != null)
             {
-                Debug.Log($"Timer配置: {timerConfig.GetConfigSummary()}");
+                Debug.Log($"=== Timer配置 ===\n{timerConfig.GetConfigSummary()}");
             }
             else
             {
@@ -472,8 +703,36 @@ namespace Core.Network
             }
         }
 
+        [ContextMenu("显示权限状态")]
+        public void DebugShowPermissionStatus()
+        {
+            Debug.Log($"=== 权限状态 ===\n{GetPermissionStatus()}");
+        }
+
+        [ContextMenu("测试权限检查")]
+        public void DebugTestPermissions()
+        {
+            bool hasPermission = CheckPermissions();
+            Debug.Log($"权限检查结果: {(hasPermission ? "通过" : "失败")}");
+            Debug.Log(GetPermissionStatus());
+        }
+
+        [ContextMenu("重置配置")]
+        public void DebugResetConfig()
+        {
+            ResetToDefault();
+            Debug.Log("配置已重置为默认值");
+        }
+
+        [ContextMenu("应用配置")]
+        public void DebugApplyConfig()
+        {
+            ApplyConfigChanges();
+            Debug.Log("配置已应用");
+        }
+
         [ContextMenu("测试Timer配置设置")]
-        public void TestTimerConfigSetting()
+        public void DebugTestTimerConfigSetting()
         {
             var timerConfig = TimerConfigManager.Config;
             if (timerConfig != null)

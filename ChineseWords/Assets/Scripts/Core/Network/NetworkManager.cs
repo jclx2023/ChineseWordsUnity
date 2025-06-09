@@ -1,98 +1,101 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using Photon.Pun;
 using Photon.Realtime;
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using UI;
-using Core.Network;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 namespace Core.Network
 {
     /// <summary>
-    /// »ùÓÚPhotonµÄÍøÂç¹ÜÀíÆ÷£¨ÍêÕû¼æÈİ°æ£©
-    /// ¸ºÔğÓÎÏ·ÄÚÍøÂçÍ¨ĞÅ¡¢Íæ¼Ò¹ÜÀí¡¢RPCÏûÏ¢´¦Àí
+    /// ä¼˜åŒ–çš„ç½‘ç»œç®¡ç†å™¨ - ä¸“æ³¨äºæ¸¸æˆå†…RPCé€šä¿¡
+    /// é€‚ç”¨åœºæ™¯ï¼šRoomScene å’Œ NetworkGameScene
+    /// èŒè´£ï¼šç©å®¶çŠ¶æ€åŒæ­¥ã€æ¸¸æˆå†…RPCæ¶ˆæ¯å¤„ç†
     /// </summary>
-    public class NetworkManager : MonoBehaviourPun, IPunObservable, IConnectionCallbacks, IMatchmakingCallbacks, IInRoomCallbacks
+    public class NetworkManager : MonoBehaviourPun, IInRoomCallbacks
     {
-        [Header("ÍøÂçÅäÖÃ")]
-        [SerializeField] private ushort maxClients = 8;
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static NetworkManager Instance { get; private set; }
 
-        // === ÍøÂç×´Ì¬ÊôĞÔ£¨ÍêÈ«¼æÈİ£© ===
+        #region æ ¸å¿ƒçŠ¶æ€å±æ€§
+
+        // ç½‘ç»œçŠ¶æ€ï¼ˆåªä¿ç•™å¿…è¦çš„ï¼‰
         public bool IsHost => PhotonNetwork.IsMasterClient;
-        public bool IsClient => PhotonNetwork.IsConnected && PhotonNetwork.InRoom;
-        public bool IsConnected => IsClient;
-
-        // Ö÷ÒªIDÊôĞÔ - ±£³Öushort¼æÈİ
+        public bool IsConnected => PhotonNetwork.IsConnected && PhotonNetwork.InRoom;
         public ushort ClientId => (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
-        public ushort Port => 7777; // ¼æÈİÊôĞÔ
 
-        // ·¿¼äĞÅÏ¢ÊôĞÔ
+        // æˆ¿é—´ä¿¡æ¯
         public string RoomName => PhotonNetwork.CurrentRoom?.Name ?? "";
+        public int PlayerCount => PhotonNetwork.CurrentRoom?.PlayerCount ?? 0;
         public int MaxPlayers => PhotonNetwork.CurrentRoom?.MaxPlayers ?? 0;
-        public int ConnectedPlayerCount => PhotonNetwork.CurrentRoom?.PlayerCount ?? 0;
 
-        // HostÉí·İ¹ÜÀí£¨¼æÈİushort£©
-        private ushort hostPlayerId = 0;
-        private bool isHostClientReady = false;
+        // Hostèº«ä»½ç®¡ç†
+        public ushort HostPlayerId => (ushort)(PhotonNetwork.MasterClient?.ActorNumber ?? 0);
+        public bool IsHostPlayer(ushort playerId) => IsHost && playerId == ClientId;
 
-        // ÓÎÏ·×´Ì¬¹ÜÀí
-        private bool isGameInProgress = false;
-        private ushort lastTurnPlayerId = 0;
-        private int gameProgressSequence = 0;
-        private bool gameStartReceived = false;
+        #endregion
 
-        // === ÍêÈ«¼æÈİµÄÊÂ¼şÏµÍ³ ===
-        public static event Action OnConnected;
-        public static event Action OnDisconnected;
+        #region æ¸¸æˆå†…äº‹ä»¶ç³»ç»Ÿ
+
+        // æ ¸å¿ƒæ¸¸æˆäº‹ä»¶ï¼ˆåªä¿ç•™æ¸¸æˆå†…éœ€è¦çš„ï¼‰
         public static event Action<NetworkQuestionData> OnQuestionReceived;
         public static event Action<bool, string> OnAnswerResultReceived;
-        public static event Action<ushort, int, int> OnHealthUpdated;  // ±£³Öushort
-        public static event Action<ushort> OnPlayerTurnChanged;        // ±£³Öushort
+        public static event Action<ushort, int, int> OnHealthUpdated;
+        public static event Action<ushort> OnPlayerTurnChanged;
+        public static event Action<int, int, ushort> OnGameStarted; // æ€»ç©å®¶æ•°, å­˜æ´»æ•°, é¦–å›åˆç©å®¶
 
-        // HostÌØÓĞÊÂ¼ş£¨±£³Öushort¼æÈİ£©
-        public static event Action OnHostStarted;
-        public static event Action OnHostStopped;
+        // æˆ¿é—´äº‹ä»¶ï¼ˆRoomSceneéœ€è¦ï¼‰
         public static event Action<ushort> OnPlayerJoined;
         public static event Action<ushort> OnPlayerLeft;
-        public static event Action OnHostPlayerReady;
+        public static event Action<ushort, bool> OnPlayerReadyChanged;
+
+        #endregion
+
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
-            Application.runInBackground = true;
-
+            // ç®€åŒ–çš„å•ä¾‹æ¨¡å¼ - ä¸ä½¿ç”¨DontDestroyOnLoad
             if (Instance == null)
             {
                 Instance = this;
-                DontDestroyOnLoad(gameObject);
-
-                // È·±£ÓĞPhotonView×é¼ş
-                if (GetComponent<PhotonView>() == null)
-                {
-                    gameObject.AddComponent<PhotonView>();
-                    LogDebug("×Ô¶¯Ìí¼ÓPhotonView×é¼ş");
-                }
-
-                // ×¢²áPhoton»Øµ÷
-                PhotonNetwork.AddCallbackTarget(this);
-
-                InitializeNetwork();
-                LogDebug("NetworkManager µ¥ÀıÒÑ´´½¨");
+                LogDebug("NetworkManager å®ä¾‹å·²åˆ›å»º");
             }
             else
             {
-                LogDebug("Ïú»ÙÖØ¸´µÄNetworkManagerÊµÀı");
+                LogDebug("é”€æ¯é‡å¤çš„NetworkManagerå®ä¾‹");
                 Destroy(gameObject);
+                return;
             }
+
+            // ç¡®ä¿PhotonViewç»„ä»¶å­˜åœ¨
+            if (photonView == null)
+            {
+                gameObject.AddComponent<PhotonView>();
+                LogDebug("è‡ªåŠ¨æ·»åŠ PhotonViewç»„ä»¶");
+            }
+        }
+
+        private void Start()
+        {
+            // æ³¨å†ŒPhotonå›è°ƒ
+            PhotonNetwork.AddCallbackTarget(this);
+
+            // éªŒè¯ç½‘ç»œçŠ¶æ€
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogError("[NetworkManager] å¯åŠ¨æ—¶æœªåœ¨Photonæˆ¿é—´ä¸­ï¼");
+                return;
+            }
+
+            LogDebug($"NetworkManagerå·²å¯åŠ¨ - æˆ¿é—´: {RoomName}, ç©å®¶ID: {ClientId}, æ˜¯å¦Host: {IsHost}");
         }
 
         private void OnDestroy()
         {
-            // ÒÆ³ıPhoton»Øµ÷×¢²á
+            // æ¸…ç†Photonå›è°ƒ
             if (PhotonNetwork.NetworkingClient != null)
             {
                 PhotonNetwork.RemoveCallbackTarget(this);
@@ -102,663 +105,77 @@ namespace Core.Network
             {
                 Instance = null;
             }
-        }
 
-        private void Start()
-        {
-            string currentSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-            if (IsMainMenuScene(currentSceneName))
-            {
-                LogDebug("¼ì²âµ½Ö÷²Ëµ¥³¡¾°£¬NetworkManager±£³Ö´ıÃü×´Ì¬");
-                return;
-            }
-
-            InitializeFromMainMenu();
-        }
-
-        #region ³õÊ¼»¯·½·¨
-
-        /// <summary>
-        /// ³õÊ¼»¯ÍøÂç×é¼ş
-        /// </summary>
-        private void InitializeNetwork()
-        {
-            // Èç¹û²»ÔÚ·¿¼äÖĞ£¬³¢ÊÔÍ¬²½×´Ì¬
-            if (!PhotonNetwork.InRoom)
-            {
-                LogDebug("µ±Ç°²»ÔÚPhoton·¿¼äÖĞ");
-                return;
-            }
-
-            SyncPhotonState();
-        }
-
-        /// <summary>
-        /// Í¬²½Photon×´Ì¬
-        /// </summary>
-        private void SyncPhotonState()
-        {
-            if (PhotonNetwork.InRoom)
-            {
-                LogDebug($"Í¬²½Photon×´Ì¬ - ·¿¼ä: {PhotonNetwork.CurrentRoom.Name}");
-
-                if (PhotonNetwork.IsMasterClient)
-                {
-                    hostPlayerId = (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
-                    isHostClientReady = true;
-                    LogDebug($"¼ì²âµ½MasterClientÉí·İ - HostÍæ¼ÒID: {hostPlayerId}");
-                    OnHostStarted?.Invoke();
-                    OnHostPlayerReady?.Invoke();
-                }
-
-                OnConnected?.Invoke();
-            }
-        }
-
-        /// <summary>
-        /// ¼ì²éÊÇ·ñÎªÖ÷²Ëµ¥³¡¾°
-        /// </summary>
-        private bool IsMainMenuScene(string sceneName)
-        {
-            string[] mainMenuScenes = { "MainMenuScene", "MainMenu", "Menu", "Lobby" };
-            foreach (string menuScene in mainMenuScenes)
-            {
-                if (sceneName.Equals(menuScene, System.StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// ¸ù¾İÖ÷²Ëµ¥Ñ¡Ôñ³õÊ¼»¯
-        /// </summary>
-        private void InitializeFromMainMenu()
-        {
-            LogDebug($"¸ù¾İÖ÷²Ëµ¥³õÊ¼»¯£¬Ñ¡¶¨Ä£Ê½: {MainMenuManager.SelectedGameMode}");
-
-            switch (MainMenuManager.SelectedGameMode)
-            {
-                case MainMenuManager.GameMode.Host:
-                    InitializeAsHost();
-                    break;
-
-                case MainMenuManager.GameMode.Client:
-                    InitializeAsClient();
-                    break;
-
-                case MainMenuManager.GameMode.SinglePlayer:
-                    LogDebug("µ¥»úÄ£Ê½£¬²»ĞèÒªÍøÂçÁ¬½Ó");
-                    break;
-
-                default:
-                    Debug.LogWarning("Î´ÖªµÄÓÎÏ·Ä£Ê½");
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// ³õÊ¼»¯HostÄ£Ê½
-        /// </summary>
-        private void InitializeAsHost()
-        {
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.LogError("HostÄ£Ê½³õÊ¼»¯Ê§°Ü£ºÎ´ÔÚPhoton·¿¼äÖĞ");
-                return;
-            }
-
-            if (!PhotonNetwork.IsMasterClient)
-            {
-                Debug.LogError("HostÄ£Ê½³õÊ¼»¯Ê§°Ü£º²»ÊÇMasterClient");
-                return;
-            }
-
-            hostPlayerId = (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
-            isHostClientReady = true;
-            ResetGameState();
-
-            LogDebug($"HostÄ£Ê½³õÊ¼»¯Íê³É - Íæ¼ÒID: {hostPlayerId}");
-            OnHostStarted?.Invoke();
-            OnHostPlayerReady?.Invoke();
-            OnConnected?.Invoke();
-        }
-
-        /// <summary>
-        /// ³õÊ¼»¯ClientÄ£Ê½
-        /// </summary>
-        private void InitializeAsClient()
-        {
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.LogError("ClientÄ£Ê½³õÊ¼»¯Ê§°Ü£ºÎ´ÔÚPhoton·¿¼äÖĞ");
-                return;
-            }
-
-            ResetGameState();
-            LogDebug($"ClientÄ£Ê½³õÊ¼»¯Íê³É - Íæ¼ÒID: {ClientId}");
-            OnConnected?.Invoke();
-        }
-
-        /// <summary>
-        /// ÖØÖÃÓÎÏ·×´Ì¬
-        /// </summary>
-        private void ResetGameState()
-        {
-            gameStartReceived = false;
-            lastTurnPlayerId = 0;
-            gameProgressSequence = 0;
-            isGameInProgress = false;
-            LogDebug("ÓÎÏ·×´Ì¬ÒÑÖØÖÃ");
+            LogDebug("NetworkManagerå·²é”€æ¯");
         }
 
         #endregion
 
-        #region PhotonÊÂ¼ş»Øµ÷£¨Í¨¹ı½Ó¿ÚÊµÏÖ£©
+        #region Photonæˆ¿é—´äº‹ä»¶å¤„ç†
 
-        // IConnectionCallbacks
-        void IConnectionCallbacks.OnConnected()
-        {
-            LogDebug("PhotonÍøÂçÁ¬½Ó³É¹¦");
-        }
-
-        void IConnectionCallbacks.OnConnectedToMaster()
-        {
-            LogDebug("Á¬½Óµ½PhotonÖ÷·şÎñÆ÷");
-        }
-
-        void IConnectionCallbacks.OnDisconnected(DisconnectCause cause)
-        {
-            LogDebug($"ÓëPhoton¶Ï¿ªÁ¬½Ó: {cause}");
-            ResetGameState();
-            OnDisconnected?.Invoke();
-        }
-
-        void IConnectionCallbacks.OnRegionListReceived(RegionHandler regionHandler)
-        {
-            // ²»ĞèÒª´¦Àí
-        }
-
-        void IConnectionCallbacks.OnCustomAuthenticationResponse(Dictionary<string, object> data)
-        {
-            // ²»ĞèÒª´¦Àí
-        }
-
-        void IConnectionCallbacks.OnCustomAuthenticationFailed(string debugMessage)
-        {
-            LogDebug($"PhotonÈÏÖ¤Ê§°Ü: {debugMessage}");
-        }
-
-        // IMatchmakingCallbacks
-        void IMatchmakingCallbacks.OnFriendListUpdate(List<FriendInfo> friendList)
-        {
-            // ²»ĞèÒª´¦Àí
-        }
-
-        void IMatchmakingCallbacks.OnCreatedRoom()
-        {
-            LogDebug("Photon·¿¼ä´´½¨³É¹¦");
-        }
-
-        void IMatchmakingCallbacks.OnCreateRoomFailed(short returnCode, string message)
-        {
-            LogDebug($"Photon·¿¼ä´´½¨Ê§°Ü: {message}");
-        }
-
-        void IMatchmakingCallbacks.OnJoinedRoom()
-        {
-            LogDebug($"¼ÓÈë·¿¼ä³É¹¦: {PhotonNetwork.CurrentRoom.Name}");
-            SyncPhotonState();
-        }
-
-        void IMatchmakingCallbacks.OnJoinRoomFailed(short returnCode, string message)
-        {
-            LogDebug($"¼ÓÈë·¿¼äÊ§°Ü: {message}");
-        }
-
-        void IMatchmakingCallbacks.OnJoinRandomFailed(short returnCode, string message)
-        {
-            LogDebug($"¼ÓÈëËæ»ú·¿¼äÊ§°Ü: {message}");
-        }
-
-        void IMatchmakingCallbacks.OnLeftRoom()
-        {
-            LogDebug("Àë¿ª·¿¼ä");
-            ResetGameState();
-            OnDisconnected?.Invoke();
-        }
-
-        // IInRoomCallbacks
         void IInRoomCallbacks.OnPlayerEnteredRoom(Player newPlayer)
         {
             ushort playerId = (ushort)newPlayer.ActorNumber;
-            LogDebug($"Íæ¼Ò¼ÓÈë: {newPlayer.NickName} (ID: {playerId})");
+            LogDebug($"ç©å®¶åŠ å…¥: {newPlayer.NickName} (ID: {playerId})");
             OnPlayerJoined?.Invoke(playerId);
         }
 
         void IInRoomCallbacks.OnPlayerLeftRoom(Player otherPlayer)
         {
             ushort playerId = (ushort)otherPlayer.ActorNumber;
-            LogDebug($"Íæ¼ÒÀë¿ª: {otherPlayer.NickName} (ID: {playerId})");
+            LogDebug($"ç©å®¶ç¦»å¼€: {otherPlayer.NickName} (ID: {playerId})");
             OnPlayerLeft?.Invoke(playerId);
-        }
-
-        void IInRoomCallbacks.OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
-        {
-            LogDebug("·¿¼äÊôĞÔ¸üĞÂ");
         }
 
         void IInRoomCallbacks.OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
         {
-            LogDebug($"Íæ¼ÒÊôĞÔ¸üĞÂ: {targetPlayer.NickName}");
+            // å¤„ç†ç©å®¶å‡†å¤‡çŠ¶æ€å˜æ›´
+            if (changedProps.TryGetValue("isReady", out object isReadyObj))
+            {
+                ushort playerId = (ushort)targetPlayer.ActorNumber;
+                bool isReady = (bool)isReadyObj;
+                LogDebug($"ç©å®¶å‡†å¤‡çŠ¶æ€æ›´æ–°: {targetPlayer.NickName} -> {isReady}");
+                OnPlayerReadyChanged?.Invoke(playerId, isReady);
+            }
         }
 
         void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient)
         {
-            LogDebug($"MasterClientÇĞ»»µ½: {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+            LogDebug($"Hoståˆ‡æ¢åˆ°: {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+            // Hoståˆ‡æ¢æ—¶å¯èƒ½éœ€è¦é€šçŸ¥å…¶ä»–ç³»ç»Ÿ
+        }
 
-            if (PhotonNetwork.IsMasterClient)
-            {
-                // ±¾µØÍæ¼Ò³ÉÎªĞÂµÄHost
-                hostPlayerId = (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
-                isHostClientReady = true;
-                LogDebug($"±¾µØÍæ¼Ò³ÉÎªĞÂHost - ID: {hostPlayerId}");
-                OnHostStarted?.Invoke();
-                OnHostPlayerReady?.Invoke();
-            }
-            else
-            {
-                // ÆäËûÍæ¼Ò³ÉÎªHost
-                hostPlayerId = (ushort)newMasterClient.ActorNumber;
-                OnHostStopped?.Invoke();
-            }
+        void IInRoomCallbacks.OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+        {
+            // å¤„ç†æˆ¿é—´å±æ€§å˜æ›´ï¼ˆå¦‚æ¸¸æˆå¼€å§‹çŠ¶æ€ç­‰ï¼‰
         }
 
         #endregion
 
-        #region ÍêÈ«¼æÈİµÄ¹«¹²½Ó¿Ú·½·¨
+        #region ç©å®¶å‡†å¤‡çŠ¶æ€ç®¡ç†
 
         /// <summary>
-        /// Á¬½Óµ½·şÎñÆ÷£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void Connect(string ip = null, ushort? serverPort = null)
-        {
-            LogDebug("Connect·½·¨±»µ÷ÓÃ£¬µ«µ±Ç°Ê¹ÓÃPhoton¹ÜÀíÁ¬½Ó");
-        }
-
-        /// <summary>
-        /// ¶Ï¿ªÁ¬½Ó
-        /// </summary>
-        public void Disconnect()
-        {
-            LogDebug("¶Ï¿ªPhoton·¿¼äÁ¬½Ó");
-            PhotonNetwork.LeaveRoom();
-        }
-
-        /// <summary>
-        /// ÍêÈ«¹Ø±ÕÍøÂç
-        /// </summary>
-        public void Shutdown()
-        {
-            LogDebug("ÍøÂç¹ÜÀíÆ÷¹Ø±Õ");
-            if (PhotonNetwork.InRoom)
-            {
-                PhotonNetwork.LeaveRoom();
-            }
-        }
-
-        /// <summary>
-        /// »ñÈ¡HostÍæ¼ÒID£¨¼æÈİushort£©
-        /// </summary>
-        public ushort GetHostPlayerId()
-        {
-            return hostPlayerId;
-        }
-
-        /// <summary>
-        /// ¼ì²éÖ¸¶¨IDÊÇ·ñÎªHostÍæ¼Ò
-        /// </summary>
-        public bool IsHostPlayer(ushort playerId)
-        {
-            return IsHost && playerId == hostPlayerId;
-        }
-
-        /// <summary>
-        /// Host¿Í»§¶ËÊÇ·ñ×¼±¸¾ÍĞ÷
-        /// </summary>
-        public bool IsHostClientReady => isHostClientReady;
-
-        /// <summary>
-        /// »ñÈ¡ÓÃÓÚ·¿¼ä´´½¨µÄHostĞÅÏ¢£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public (ushort hostId, bool isReady) GetHostRoomInfo()
-        {
-            return (hostPlayerId, isHostClientReady);
-        }
-
-        /// <summary>
-        /// Ìá½»´ğ°¸
-        /// </summary>
-        public void SubmitAnswer(string answer)
-        {
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.LogWarning("Î´ÔÚ·¿¼äÖĞ£¬ÎŞ·¨Ìá½»´ğ°¸");
-                return;
-            }
-
-            photonView.RPC("OnAnswerSubmitted", RpcTarget.MasterClient, (int)ClientId, answer);
-            LogDebug($"Ìá½»´ğ°¸: {answer}");
-        }
-
-        /// <summary>
-        /// ÇëÇóÌâÄ¿£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void RequestQuestion()
-        {
-            LogDebug("RequestQuestion±»µ÷ÓÃ£¬µ«PhotonÊ¹ÓÃRPCÏµÍ³");
-        }
-
-        /// <summary>
-        /// »ñÈ¡·¿¼äĞÅÏ¢
-        /// </summary>
-        public string GetRoomInfo()
-        {
-            if (PhotonNetwork.InRoom)
-            {
-                return $"·¿¼ä: {RoomName} | Íæ¼Ò: {ConnectedPlayerCount}/{MaxPlayers} | Íæ¼ÒID: {ClientId} | Host: {IsHost}";
-            }
-            return "Î´ÔÚ·¿¼äÖĞ";
-        }
-
-        /// <summary>
-        /// »ñÈ¡ÍøÂç×´Ì¬
-        /// </summary>
-        public string GetNetworkStatus()
-        {
-            return $"IsHost: {IsHost}, IsClient: {IsClient}, IsConnected: {IsConnected}, " +
-                   $"ClientId: {ClientId}, HostPlayerId: {hostPlayerId}, HostClientReady: {isHostClientReady}";
-        }
-
-        #endregion
-
-        #region ¼æÈİµÄÏûÏ¢·¢ËÍ·½·¨
-
-        /// <summary>
-        /// ·¢ËÍÏûÏ¢£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void SendMessage(object message)
-        {
-            LogDebug("SendMessage±»µ÷ÓÃ£¬µ«PhotonÊ¹ÓÃRPCÏµÍ³");
-        }
-
-        /// <summary>
-        /// ¹ã²¥ÏûÏ¢£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void BroadcastMessage(object message)
-        {
-            LogDebug("BroadcastMessage±»µ÷ÓÃ£¬µ«PhotonÊ¹ÓÃRPCÏµÍ³");
-        }
-
-        /// <summary>
-        /// ·¢ËÍÏûÏ¢¸øÖ¸¶¨¿Í»§¶Ë£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void SendMessageToClient(ushort clientId, object message)
-        {
-            LogDebug($"SendMessageToClient±»µ÷ÓÃ£¬µ«PhotonÊ¹ÓÃRPCÏµÍ³");
-        }
-
-        #endregion
-
-        #region ·¿¼ä¹ÜÀíÏûÏ¢´¦Àí£¨¼æÈİ·½·¨£©
-
-        /// <summary>
-        /// ·¢ËÍ·¿¼äÊı¾İ¸øÖ¸¶¨¿Í»§¶Ë£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void SendRoomDataToClient(ushort clientId, RoomData roomData)
-        {
-            LogDebug($"SendRoomDataToClient±»µ÷ÓÃ: ¿Í»§¶Ë{clientId}");
-        }
-
-        /// <summary>
-        /// ¹ã²¥Íæ¼Ò¼ÓÈë·¿¼ä£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void BroadcastPlayerJoinRoom(RoomPlayer player)
-        {
-            LogDebug($"BroadcastPlayerJoinRoom±»µ÷ÓÃ: {player.playerName}");
-        }
-
-        /// <summary>
-        /// ¹ã²¥Íæ¼ÒÀë¿ª·¿¼ä£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void BroadcastPlayerLeaveRoom(ushort playerId)
-        {
-            LogDebug($"BroadcastPlayerLeaveRoom±»µ÷ÓÃ: Íæ¼Ò{playerId}");
-        }
-
-        /// <summary>
-        /// ¹ã²¥Íæ¼Ò×¼±¸×´Ì¬¸üĞÂ£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void BroadcastPlayerReadyUpdate(ushort playerId, bool isReady)
-        {
-            LogDebug($"BroadcastPlayerReadyUpdate±»µ÷ÓÃ: Íæ¼Ò{playerId} -> {isReady}");
-        }
-
-        /// <summary>
-        /// ¹ã²¥ÓÎÏ·¿ªÊ¼ÃüÁî£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void BroadcastGameStart()
-        {
-            LogDebug("BroadcastGameStart±»µ÷ÓÃ");
-        }
-
-        /// <summary>
-        /// ÇëÇó·¿¼äĞÅÏ¢£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void RequestRoomInfo()
-        {
-            LogDebug("RequestRoomInfo±»µ÷ÓÃ");
-        }
-
-        /// <summary>
-        /// ÇëÇó¸Ä±ä×¼±¸×´Ì¬£¨¼æÈİ·½·¨£©
-        /// </summary>
-        public void RequestReadyStateChange(bool isReady)
-        {
-            LogDebug($"RequestReadyStateChange±»µ÷ÓÃ: {isReady}");
-        }
-
-        #endregion
-
-        #region RPCÏûÏ¢½ÓÊÕ´¦Àí
-
-        [PunRPC]
-        void OnQuestionReceived_RPC(byte[] questionData)
-        {
-            NetworkQuestionData question = NetworkQuestionData.Deserialize(questionData);
-            if (question != null)
-            {
-                LogDebug($"ÊÕµ½ÌâÄ¿: {question.questionType} - {question.questionText}");
-
-                if (!gameStartReceived)
-                {
-                    Debug.LogWarning("ÊÕµ½ÌâÄ¿µ«ÓÎÏ·ÉĞÎ´¿ªÊ¼£¬ºöÂÔ");
-                    return;
-                }
-
-                OnQuestionReceived?.Invoke(question);
-
-                // Ö±½ÓÍ¨ÖªNQMC
-                if (NetworkQuestionManagerController.Instance != null)
-                {
-                    var onQuestionMethod = NetworkQuestionManagerController.Instance.GetType()
-                        .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                    if (onQuestionMethod != null)
-                    {
-                        onQuestionMethod.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
-                    }
-                }
-            }
-        }
-
-        [PunRPC]
-        void OnAnswerResult_RPC(bool isCorrect, string correctAnswer)
-        {
-            LogDebug($"ÊÕµ½´ğÌâ½á¹û: {(isCorrect ? "ÕıÈ·" : "´íÎó")} - {correctAnswer}");
-            OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
-        }
-
-        [PunRPC]
-        void OnHealthUpdate_RPC(int playerId, int newHealth, int maxHealth)
-        {
-            ushort playerIdUShort = (ushort)playerId;
-            LogDebug($"ÊÕµ½ÑªÁ¿¸üĞÂ: Íæ¼Ò{playerIdUShort} {newHealth}/{maxHealth}");
-            OnHealthUpdated?.Invoke(playerIdUShort, newHealth, maxHealth);
-
-            // ×ª·¢¸øNetworkUI
-            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnHealthUpdateReceived(playerIdUShort, newHealth, maxHealth);
-            }
-        }
-
-        [PunRPC]
-        void OnPlayerTurnChanged_RPC(int newTurnPlayerId)
-        {
-            ushort playerIdUShort = (ushort)newTurnPlayerId;
-            LogDebug($"ÊÕµ½»ØºÏ±ä¸ü: Íæ¼Ò{playerIdUShort}");
-
-            if (lastTurnPlayerId == playerIdUShort)
-            {
-                Debug.LogWarning($"ÖØ¸´µÄ»ØºÏ±ä¸üÏûÏ¢: {playerIdUShort}");
-                return;
-            }
-
-            lastTurnPlayerId = playerIdUShort;
-            OnPlayerTurnChanged?.Invoke(playerIdUShort);
-
-            // ×ª·¢¸øNetworkUI
-            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnTurnChangedReceived(playerIdUShort);
-            }
-
-            // Í¨ÖªNQMC
-            if (NetworkQuestionManagerController.Instance != null)
-            {
-                NetworkQuestionManagerController.Instance.GetType()
-                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    ?.Invoke(NetworkQuestionManagerController.Instance, new object[] { playerIdUShort });
-            }
-        }
-
-        [PunRPC]
-        void OnGameStart_RPC(int totalPlayerCount, int alivePlayerCount, int firstTurnPlayerId)
-        {
-            ushort firstTurnPlayerIdUShort = (ushort)firstTurnPlayerId;
-            LogDebug($"ÊÕµ½ÓÎÏ·¿ªÊ¼: ×ÜÍæ¼Ò{totalPlayerCount}, ´æ»î{alivePlayerCount}, Ê×»ØºÏÍæ¼Ò{firstTurnPlayerIdUShort}");
-
-            gameStartReceived = true;
-            lastTurnPlayerId = 0;
-            gameProgressSequence = 0;
-            isGameInProgress = true;
-
-            // ×ª·¢¸øNetworkUI
-            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnGameStartReceived(totalPlayerCount, alivePlayerCount, firstTurnPlayerIdUShort);
-            }
-        }
-
-        [PunRPC]
-        void OnGameProgress_RPC(int questionNumber, int alivePlayerCount, int turnPlayerId, int questionType, float timeLimit)
-        {
-            ushort turnPlayerIdUShort = (ushort)turnPlayerId;
-            LogDebug($"ÊÕµ½ÓÎÏ·½ø¶È: µÚ{questionNumber}Ìâ, ´æ»î{alivePlayerCount}ÈË, »ØºÏÍæ¼Ò{turnPlayerIdUShort}");
-
-            if (questionNumber < gameProgressSequence)
-            {
-                Debug.LogWarning($"ÊÕµ½¹ıÆÚµÄÓÎÏ·½ø¶ÈÏûÏ¢: {questionNumber} < {gameProgressSequence}");
-                return;
-            }
-
-            gameProgressSequence = questionNumber;
-
-            // ×ª·¢¸øNetworkUI
-            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnGameProgressReceived(questionNumber, alivePlayerCount, turnPlayerIdUShort);
-            }
-        }
-
-        [PunRPC]
-        void OnPlayerStateSync_RPC(int playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
-        {
-            ushort playerIdUShort = (ushort)playerId;
-            LogDebug($"ÊÕµ½Íæ¼Ò×´Ì¬Í¬²½: {playerName} (ID:{playerIdUShort}) HP:{currentHealth}/{maxHealth}");
-
-            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnPlayerStateSyncReceived(playerIdUShort, playerName, isHost, currentHealth, maxHealth, isAlive);
-            }
-        }
-
-        [PunRPC]
-        void OnPlayerAnswerResult_RPC(int playerId, bool isCorrect, string answer)
-        {
-            ushort playerIdUShort = (ushort)playerId;
-            LogDebug($"ÊÕµ½Íæ¼Ò´ğÌâ½á¹û: Íæ¼Ò{playerIdUShort} {(isCorrect ? "ÕıÈ·" : "´íÎó")} - {answer}");
-
-            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnPlayerAnswerResultReceived(playerIdUShort, isCorrect, answer);
-            }
-        }
-
-        [PunRPC]
-        void OnAnswerSubmitted(int playerId, string answer)
-        {
-            // Ö»ÓĞHost´¦Àí´ğ°¸Ìá½»
-            if (!IsHost)
-                return;
-
-            ushort playerIdUShort = (ushort)playerId;
-            LogDebug($"ÊÕµ½´ğ°¸Ìá½»: Íæ¼Ò{playerIdUShort} - {answer}");
-
-            // ×ª·¢¸øHostGameManager´¦Àí
-            if (HostGameManager.Instance != null)
-            {
-                HostGameManager.Instance.HandlePlayerAnswer(playerIdUShort, answer);
-            }
-        }
-
-        #endregion
-
-        #region ·¿¼ä¹ÜÀíÏà¹Ø·½·¨£¨¼ò»¯°æ£©
-
-        /// <summary>
-        /// ÉèÖÃÍæ¼Ò×¼±¸×´Ì¬£¨Í¨¹ıPhoton×Ô¶¨ÒåÊôĞÔ£©
+        /// è®¾ç½®æœ¬åœ°ç©å®¶å‡†å¤‡çŠ¶æ€
         /// </summary>
         public void SetPlayerReady(bool isReady)
         {
-            var props = new Hashtable();
-            props["isReady"] = isReady;
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("[NetworkManager] æœªåœ¨æˆ¿é—´ä¸­ï¼Œæ— æ³•è®¾ç½®å‡†å¤‡çŠ¶æ€");
+                return;
+            }
+
+            var props = new Hashtable { ["isReady"] = isReady };
             PhotonNetwork.LocalPlayer.SetCustomProperties(props);
-            LogDebug($"ÉèÖÃ×¼±¸×´Ì¬: {isReady}");
+            LogDebug($"è®¾ç½®å‡†å¤‡çŠ¶æ€: {isReady}");
         }
 
         /// <summary>
-        /// »ñÈ¡Íæ¼Ò×¼±¸×´Ì¬
+        /// è·å–æŒ‡å®šç©å®¶çš„å‡†å¤‡çŠ¶æ€
         /// </summary>
         public bool GetPlayerReady(Player player)
         {
-            if (player.CustomProperties.TryGetValue("isReady", out object isReady))
+            if (player?.CustomProperties?.TryGetValue("isReady", out object isReady) == true)
             {
                 return (bool)isReady;
             }
@@ -766,41 +183,376 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ¼ì²éËùÓĞÍæ¼ÒÊÇ·ñ×¼±¸¾ÍĞ÷
+        /// è·å–æŒ‡å®šIDç©å®¶çš„å‡†å¤‡çŠ¶æ€
+        /// </summary>
+        public bool GetPlayerReady(ushort playerId)
+        {
+            var player = GetPlayerById(playerId);
+            return player != null && GetPlayerReady(player);
+        }
+
+        /// <summary>
+        /// æ£€æŸ¥æ‰€æœ‰ç©å®¶æ˜¯å¦éƒ½å‡†å¤‡å°±ç»ª
         /// </summary>
         public bool AreAllPlayersReady()
         {
+            if (!PhotonNetwork.InRoom) return false;
+
             foreach (var player in PhotonNetwork.PlayerList)
             {
                 if (!GetPlayerReady(player))
+                {
                     return false;
+                }
             }
-            return true;
+            return PhotonNetwork.PlayerList.Length > 1; // è‡³å°‘éœ€è¦2ä¸ªç©å®¶
         }
 
-        #endregion
-
-        #region IPunObservableÊµÏÖ
-
-        public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+        /// <summary>
+        /// è·å–å‡†å¤‡å°±ç»ªçš„ç©å®¶æ•°é‡
+        /// </summary>
+        public int GetReadyPlayerCount()
         {
-            if (stream.IsWriting)
+            if (!PhotonNetwork.InRoom) return 0;
+
+            int readyCount = 0;
+            foreach (var player in PhotonNetwork.PlayerList)
             {
-                // ·¢ËÍÓÎÏ·×´Ì¬Êı¾İ£¨Èç¹ûĞèÒªµÄ»°£©
-                stream.SendNext(isGameInProgress);
-                stream.SendNext(gameProgressSequence);
+                if (GetPlayerReady(player))
+                {
+                    readyCount++;
+                }
             }
-            else
-            {
-                // ½ÓÊÕÓÎÏ·×´Ì¬Êı¾İ
-                isGameInProgress = (bool)stream.ReceiveNext();
-                gameProgressSequence = (int)stream.ReceiveNext();
-            }
+            return readyCount;
         }
 
         #endregion
 
-        #region µ÷ÊÔ·½·¨
+        #region æ¸¸æˆå†…RPCæ–¹æ³•
+
+        /// <summary>
+        /// æäº¤ç­”æ¡ˆï¼ˆClient â†’ Hostï¼‰
+        /// </summary>
+        public void SubmitAnswer(string answer)
+        {
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("[NetworkManager] æœªåœ¨æˆ¿é—´ä¸­ï¼Œæ— æ³•æäº¤ç­”æ¡ˆ");
+                return;
+            }
+
+            photonView.RPC("OnAnswerSubmitted", RpcTarget.MasterClient, (int)ClientId, answer);
+            LogDebug($"æäº¤ç­”æ¡ˆ: {answer}");
+        }
+
+        [PunRPC]
+        void OnAnswerSubmitted(int playerId, string answer)
+        {
+            // åªæœ‰Hostå¤„ç†ç­”æ¡ˆæäº¤
+            if (!IsHost) return;
+
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"æ”¶åˆ°ç­”æ¡ˆæäº¤: ç©å®¶{playerIdUShort} - {answer}");
+
+            // è½¬å‘ç»™HostGameManagerå¤„ç†
+            if (HostGameManager.Instance != null)
+            {
+                HostGameManager.Instance.HandlePlayerAnswer(playerIdUShort, answer);
+            }
+        }
+
+        [PunRPC]
+        void OnQuestionReceived_RPC(byte[] questionData)
+        {
+            var question = NetworkQuestionData.Deserialize(questionData);
+            if (question != null)
+            {
+                LogDebug($"æ”¶åˆ°é¢˜ç›®: {question.questionType} - {question.questionText}");
+                OnQuestionReceived?.Invoke(question);
+
+                // é€šçŸ¥NQMC
+                NotifyNQMCQuestionReceived(question);
+            }
+        }
+
+        [PunRPC]
+        void OnAnswerResult_RPC(bool isCorrect, string correctAnswer)
+        {
+            LogDebug($"æ”¶åˆ°ç­”é¢˜ç»“æœ: {(isCorrect ? "æ­£ç¡®" : "é”™è¯¯")} - {correctAnswer}");
+            OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
+        }
+
+        [PunRPC]
+        void OnHealthUpdate_RPC(int playerId, int newHealth, int maxHealth)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"æ”¶åˆ°è¡€é‡æ›´æ–°: ç©å®¶{playerIdUShort} {newHealth}/{maxHealth}");
+            OnHealthUpdated?.Invoke(playerIdUShort, newHealth, maxHealth);
+
+            // è½¬å‘ç»™NetworkUI
+            NotifyNetworkUIHealthUpdate(playerIdUShort, newHealth, maxHealth);
+        }
+
+        [PunRPC]
+        void OnPlayerTurnChanged_RPC(int newTurnPlayerId)
+        {
+            ushort playerIdUShort = (ushort)newTurnPlayerId;
+            LogDebug($"æ”¶åˆ°å›åˆå˜æ›´: ç©å®¶{playerIdUShort}");
+            OnPlayerTurnChanged?.Invoke(playerIdUShort);
+
+            // è½¬å‘ç»™NetworkUIå’ŒNQMC
+            NotifyNetworkUITurnChanged(playerIdUShort);
+            NotifyNQMCTurnChanged(playerIdUShort);
+        }
+
+        [PunRPC]
+        void OnGameStart_RPC(int totalPlayerCount, int alivePlayerCount, int firstTurnPlayerId)
+        {
+            ushort firstTurnPlayerIdUShort = (ushort)firstTurnPlayerId;
+            LogDebug($"æ”¶åˆ°æ¸¸æˆå¼€å§‹: æ€»ç©å®¶{totalPlayerCount}, å­˜æ´»{alivePlayerCount}, é¦–å›åˆç©å®¶{firstTurnPlayerIdUShort}");
+
+            OnGameStarted?.Invoke(totalPlayerCount, alivePlayerCount, firstTurnPlayerIdUShort);
+
+            // è½¬å‘ç»™NetworkUI
+            NotifyNetworkUIGameStart(totalPlayerCount, alivePlayerCount, firstTurnPlayerIdUShort);
+        }
+
+        [PunRPC]
+        void OnGameProgress_RPC(int questionNumber, int alivePlayerCount, int turnPlayerId, int questionType, float timeLimit)
+        {
+            ushort turnPlayerIdUShort = (ushort)turnPlayerId;
+            LogDebug($"æ”¶åˆ°æ¸¸æˆè¿›åº¦: ç¬¬{questionNumber}é¢˜, å­˜æ´»{alivePlayerCount}äºº, å›åˆç©å®¶{turnPlayerIdUShort}");
+
+            // è½¬å‘ç»™NetworkUI
+            NotifyNetworkUIGameProgress(questionNumber, alivePlayerCount, turnPlayerIdUShort);
+        }
+
+        [PunRPC]
+        void OnPlayerStateSync_RPC(int playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"æ”¶åˆ°ç©å®¶çŠ¶æ€åŒæ­¥: {playerName} (ID:{playerIdUShort}) HP:{currentHealth}/{maxHealth}");
+
+            // è½¬å‘ç»™NetworkUI
+            NotifyNetworkUIPlayerStateSync(playerIdUShort, playerName, isHost, currentHealth, maxHealth, isAlive);
+        }
+
+        [PunRPC]
+        void OnPlayerAnswerResult_RPC(int playerId, bool isCorrect, string answer)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"æ”¶åˆ°ç©å®¶ç­”é¢˜ç»“æœ: ç©å®¶{playerIdUShort} {(isCorrect ? "æ­£ç¡®" : "é”™è¯¯")} - {answer}");
+
+            // è½¬å‘ç»™NetworkUI
+            NotifyNetworkUIPlayerAnswerResult(playerIdUShort, isCorrect, answer);
+        }
+
+        #endregion
+
+        #region Hostä¸“ç”¨RPCå‘é€æ–¹æ³•
+
+        /// <summary>
+        /// å¹¿æ’­é¢˜ç›®ï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastQuestion(NetworkQuestionData question)
+        {
+            if (!IsHost)
+            {
+                Debug.LogWarning("[NetworkManager] åªæœ‰Hostå¯ä»¥å¹¿æ’­é¢˜ç›®");
+                return;
+            }
+
+            byte[] questionData = question.Serialize();
+            photonView.RPC("OnQuestionReceived_RPC", RpcTarget.Others, questionData);
+            LogDebug($"å¹¿æ’­é¢˜ç›®: {question.questionType}");
+        }
+
+        /// <summary>
+        /// å¹¿æ’­ç­”é¢˜ç»“æœï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastAnswerResult(bool isCorrect, string correctAnswer)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnAnswerResult_RPC", RpcTarget.Others, isCorrect, correctAnswer);
+            LogDebug($"å¹¿æ’­ç­”é¢˜ç»“æœ: {(isCorrect ? "æ­£ç¡®" : "é”™è¯¯")}");
+        }
+
+        /// <summary>
+        /// å¹¿æ’­è¡€é‡æ›´æ–°ï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastHealthUpdate(ushort playerId, int newHealth, int maxHealth)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnHealthUpdate_RPC", RpcTarget.Others, (int)playerId, newHealth, maxHealth);
+            LogDebug($"å¹¿æ’­è¡€é‡æ›´æ–°: ç©å®¶{playerId} {newHealth}/{maxHealth}");
+        }
+
+        /// <summary>
+        /// å¹¿æ’­å›åˆå˜æ›´ï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastPlayerTurnChanged(ushort newTurnPlayerId)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnPlayerTurnChanged_RPC", RpcTarget.Others, (int)newTurnPlayerId);
+            LogDebug($"å¹¿æ’­å›åˆå˜æ›´: ç©å®¶{newTurnPlayerId}");
+        }
+
+        /// <summary>
+        /// å¹¿æ’­æ¸¸æˆå¼€å§‹ï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastGameStart(int totalPlayerCount, int alivePlayerCount, ushort firstTurnPlayerId)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnGameStart_RPC", RpcTarget.Others, totalPlayerCount, alivePlayerCount, (int)firstTurnPlayerId);
+            LogDebug($"å¹¿æ’­æ¸¸æˆå¼€å§‹: æ€»ç©å®¶{totalPlayerCount}, é¦–å›åˆç©å®¶{firstTurnPlayerId}");
+        }
+
+        /// <summary>
+        /// å¹¿æ’­æ¸¸æˆè¿›åº¦ï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastGameProgress(int questionNumber, int alivePlayerCount, ushort turnPlayerId, int questionType, float timeLimit)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnGameProgress_RPC", RpcTarget.Others, questionNumber, alivePlayerCount, (int)turnPlayerId, questionType, timeLimit);
+        }
+
+        /// <summary>
+        /// å¹¿æ’­ç©å®¶çŠ¶æ€åŒæ­¥ï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastPlayerStateSync(ushort playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnPlayerStateSync_RPC", RpcTarget.Others, (int)playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+        }
+
+        /// <summary>
+        /// å¹¿æ’­ç©å®¶ç­”é¢˜ç»“æœï¼ˆHost â†’ Allï¼‰
+        /// </summary>
+        public void BroadcastPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
+        {
+            if (!IsHost) return;
+            photonView.RPC("OnPlayerAnswerResult_RPC", RpcTarget.Others, (int)playerId, isCorrect, answer);
+        }
+
+        #endregion
+
+        #region è¾…åŠ©æ–¹æ³•
+
+        /// <summary>
+        /// æ ¹æ®IDè·å–ç©å®¶å¯¹è±¡
+        /// </summary>
+        private Player GetPlayerById(ushort playerId)
+        {
+            if (!PhotonNetwork.InRoom) return null;
+
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (player.ActorNumber == playerId)
+                {
+                    return player;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// è·å–æˆ¿é—´çŠ¶æ€ä¿¡æ¯
+        /// </summary>
+        public string GetRoomStatus()
+        {
+            if (!PhotonNetwork.InRoom)
+                return "æœªåœ¨æˆ¿é—´ä¸­";
+
+            return $"æˆ¿é—´: {RoomName} | ç©å®¶: {PlayerCount}/{MaxPlayers} | å‡†å¤‡: {GetReadyPlayerCount()}/{PlayerCount} | Host: {IsHost}";
+        }
+
+        #endregion
+
+        #region ç»„ä»¶é€šçŸ¥æ–¹æ³•ï¼ˆå‡å°‘è€¦åˆï¼‰
+
+        /// <summary>
+        /// é€šçŸ¥NQMCæ”¶åˆ°é¢˜ç›®
+        /// </summary>
+        private void NotifyNQMCQuestionReceived(NetworkQuestionData question)
+        {
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                var method = NetworkQuestionManagerController.Instance.GetType()
+                    .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                method?.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
+            }
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NQMCå›åˆå˜æ›´
+        /// </summary>
+        private void NotifyNQMCTurnChanged(ushort playerId)
+        {
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                var method = NetworkQuestionManagerController.Instance.GetType()
+                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                method?.Invoke(NetworkQuestionManagerController.Instance, new object[] { playerId });
+            }
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NetworkUIè¡€é‡æ›´æ–°
+        /// </summary>
+        private void NotifyNetworkUIHealthUpdate(ushort playerId, int newHealth, int maxHealth)
+        {
+            var networkUI = FindObjectOfType<NetworkUI>();
+            networkUI?.OnHealthUpdateReceived(playerId, newHealth, maxHealth);
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NetworkUIå›åˆå˜æ›´
+        /// </summary>
+        private void NotifyNetworkUITurnChanged(ushort playerId)
+        {
+            var networkUI = FindObjectOfType<NetworkUI>();
+            networkUI?.OnTurnChangedReceived(playerId);
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NetworkUIæ¸¸æˆå¼€å§‹
+        /// </summary>
+        private void NotifyNetworkUIGameStart(int totalPlayerCount, int alivePlayerCount, ushort firstTurnPlayerId)
+        {
+            var networkUI = FindObjectOfType<NetworkUI>();
+            networkUI?.OnGameStartReceived(totalPlayerCount, alivePlayerCount, firstTurnPlayerId);
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NetworkUIæ¸¸æˆè¿›åº¦
+        /// </summary>
+        private void NotifyNetworkUIGameProgress(int questionNumber, int alivePlayerCount, ushort turnPlayerId)
+        {
+            var networkUI = FindObjectOfType<NetworkUI>();
+            networkUI?.OnGameProgressReceived(questionNumber, alivePlayerCount, turnPlayerId);
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NetworkUIç©å®¶çŠ¶æ€åŒæ­¥
+        /// </summary>
+        private void NotifyNetworkUIPlayerStateSync(ushort playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
+        {
+            var networkUI = FindObjectOfType<NetworkUI>();
+            networkUI?.OnPlayerStateSyncReceived(playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+        }
+
+        /// <summary>
+        /// é€šçŸ¥NetworkUIç©å®¶ç­”é¢˜ç»“æœ
+        /// </summary>
+        private void NotifyNetworkUIPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
+        {
+            var networkUI = FindObjectOfType<NetworkUI>();
+            networkUI?.OnPlayerAnswerResultReceived(playerId, isCorrect, answer);
+        }
+
+        #endregion
+
+        #region è°ƒè¯•æ–¹æ³•
 
         private void LogDebug(string message)
         {
@@ -810,22 +562,36 @@ namespace Core.Network
             }
         }
 
-        [ContextMenu("ÏÔÊ¾ÍøÂç×´Ì¬")]
-        public void ShowNetworkStatus()
+        [ContextMenu("æ˜¾ç¤ºæˆ¿é—´çŠ¶æ€")]
+        public void ShowRoomStatus()
         {
-            Debug.Log($"=== ÍøÂç×´Ì¬ ===\n{GetNetworkStatus()}");
+            Debug.Log($"=== æˆ¿é—´çŠ¶æ€ ===\n{GetRoomStatus()}");
         }
 
-        [ContextMenu("ÏÔÊ¾·¿¼äĞÅÏ¢")]
-        public void ShowRoomInfo()
+        [ContextMenu("æ˜¾ç¤ºå‡†å¤‡çŠ¶æ€")]
+        public void ShowReadyStatus()
         {
-            Debug.Log($"=== ·¿¼äĞÅÏ¢ ===\n{GetRoomInfo()}");
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.Log("æœªåœ¨æˆ¿é—´ä¸­");
+                return;
+            }
+
+            string status = "=== ç©å®¶å‡†å¤‡çŠ¶æ€ ===\n";
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                bool isReady = GetPlayerReady(player);
+                status += $"{player.NickName} (ID: {player.ActorNumber}): {(isReady ? "âœ“ å‡†å¤‡" : "âœ— æœªå‡†å¤‡")}\n";
+            }
+            status += $"æ€»è®¡: {GetReadyPlayerCount()}/{PlayerCount} å‡†å¤‡å°±ç»ª";
+
+            Debug.Log(status);
         }
 
-        [ContextMenu("ÖØÖÃÓÎÏ·×´Ì¬")]
-        public void DebugResetGameState()
+        [ContextMenu("æµ‹è¯•è®¾ç½®å‡†å¤‡çŠ¶æ€")]
+        public void TestSetReady()
         {
-            ResetGameState();
+            SetPlayerReady(!GetPlayerReady(PhotonNetwork.LocalPlayer));
         }
 
         #endregion
