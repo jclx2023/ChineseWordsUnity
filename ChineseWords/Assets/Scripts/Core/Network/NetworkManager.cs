@@ -1,95 +1,85 @@
 using UnityEngine;
-using Riptide;
-using Riptide.Utils;
-using Core.Network;
+using Photon.Pun;
+using Photon.Realtime;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UI;
-using Riptide.Transports.Tcp;
+using Core.Network;
+using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 namespace Core.Network
 {
     /// <summary>
-    /// 网络管理器（支持Host-Client架构）
-    /// 修复版本：解决Host ID不一致问题，统一Host玩家身份管理
+    /// 基于Photon的网络管理器（完整兼容版）
+    /// 负责游戏内网络通信、玩家管理、RPC消息处理
     /// </summary>
-    public class NetworkManager : MonoBehaviour
+    public class NetworkManager : MonoBehaviourPun, IPunObservable, IConnectionCallbacks, IMatchmakingCallbacks, IInRoomCallbacks
     {
         [Header("网络配置")]
-        [SerializeField] private ushort defaultPort = 7777;
         [SerializeField] private ushort maxClients = 8;
-        [SerializeField] private ushort timeoutTime = 20000;
-
-        [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static NetworkManager Instance { get; private set; }
 
-        // 网络组件
-        private Server server;  // Host模式下的服务器
-        private Client client;  // 客户端（Host和Client模式都需要）
+        // === 网络状态属性（完全兼容） ===
+        public bool IsHost => PhotonNetwork.IsMasterClient;
+        public bool IsClient => PhotonNetwork.IsConnected && PhotonNetwork.InRoom;
+        public bool IsConnected => IsClient;
 
-        // 模式状态
-        public bool IsHost { get; private set; }
-        public bool IsClient => client?.IsConnected ?? false;
-        public bool IsServer => server?.IsRunning ?? false;
-        public bool IsConnected => IsClient; // 保持与原NetworkManager的兼容性
-        public ushort ClientId => client?.Id ?? 0;
-        public ushort Port { get; private set; }
+        // 主要ID属性 - 保持ushort兼容
+        public ushort ClientId => (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
+        public ushort Port => 7777; // 兼容属性
 
-        // **关键修复：统一Host身份管理**
-        private ushort hostPlayerId = 0;  // Host作为玩家的真实ID
-        private bool isHostClientReady = false;  // Host客户端是否准备就绪
+        // 房间信息属性
+        public string RoomName => PhotonNetwork.CurrentRoom?.Name ?? "";
+        public int MaxPlayers => PhotonNetwork.CurrentRoom?.MaxPlayers ?? 0;
+        public int ConnectedPlayerCount => PhotonNetwork.CurrentRoom?.PlayerCount ?? 0;
 
-        // Host模式下的服务器信息
-        public string RoomName { get; private set; }
-        public int MaxPlayers { get; private set; }
-        public int ConnectedPlayerCount => server?.ClientCount ?? 0;
+        // Host身份管理（兼容ushort）
+        private ushort hostPlayerId = 0;
+        private bool isHostClientReady = false;
 
-        // 初始化状态
-        private bool isHostInitialized = false;
+        // 游戏状态管理
+        private bool isGameInProgress = false;
+        private ushort lastTurnPlayerId = 0;
+        private int gameProgressSequence = 0;
+        private bool gameStartReceived = false;
 
-        // 事件（保持与原NetworkManager兼容）
+        // === 完全兼容的事件系统 ===
         public static event Action OnConnected;
         public static event Action OnDisconnected;
         public static event Action<NetworkQuestionData> OnQuestionReceived;
         public static event Action<bool, string> OnAnswerResultReceived;
-        public static event Action<ushort, int, int> OnHealthUpdated;
-        public static event Action<ushort> OnPlayerTurnChanged;
+        public static event Action<ushort, int, int> OnHealthUpdated;  // 保持ushort
+        public static event Action<ushort> OnPlayerTurnChanged;        // 保持ushort
 
-        // 新增Host-Client特有事件
+        // Host特有事件（保持ushort兼容）
         public static event Action OnHostStarted;
         public static event Action OnHostStopped;
         public static event Action<ushort> OnPlayerJoined;
         public static event Action<ushort> OnPlayerLeft;
-
-        // **新增：Host玩家准备就绪事件**
-        public static event Action OnHostPlayerReady;  // Host作为玩家准备就绪
-
-
-        private ushort lastTurnPlayerId = 0;  // 上一次的回合玩家ID
-        private int gameProgressSequence = 0;  // 游戏进度序列号
-        private bool gameStartReceived = false;  // 是否已收到游戏开始消息
-
-        // 消息缓冲区（防止消息乱序）
-        private struct PendingQuestionMessage
-        {
-            public NetworkQuestionData question;
-            public float receivedTime;
-        }
-        private PendingQuestionMessage? pendingQuestion = null;
-        private const float QUESTION_BUFFER_TIMEOUT = 2f;  // 缓冲超时时间
+        public static event Action OnHostPlayerReady;
 
         private void Awake()
         {
             Application.runInBackground = true;
-            LogDebug($"NetworkManager Awake 执行时间: {Time.time}");
 
-            // 单例模式
             if (Instance == null)
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
+
+                // 确保有PhotonView组件
+                if (GetComponent<PhotonView>() == null)
+                {
+                    gameObject.AddComponent<PhotonView>();
+                    LogDebug("自动添加PhotonView组件");
+                }
+
+                // 注册Photon回调
+                PhotonNetwork.AddCallbackTarget(this);
+
                 InitializeNetwork();
                 LogDebug("NetworkManager 单例已创建");
             }
@@ -100,11 +90,22 @@ namespace Core.Network
             }
         }
 
+        private void OnDestroy()
+        {
+            // 移除Photon回调注册
+            if (PhotonNetwork.NetworkingClient != null)
+            {
+                PhotonNetwork.RemoveCallbackTarget(this);
+            }
+
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+        }
+
         private void Start()
         {
-            LogDebug($"NetworkManager Start 执行时间: {Time.time}");
-
-            // 检查当前场景，如果是主菜单场景则不自动初始化
             string currentSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             if (IsMainMenuScene(currentSceneName))
             {
@@ -112,8 +113,46 @@ namespace Core.Network
                 return;
             }
 
-            // 只有在网络游戏场景才根据主菜单选择的模式进行初始化
             InitializeFromMainMenu();
+        }
+
+        #region 初始化方法
+
+        /// <summary>
+        /// 初始化网络组件
+        /// </summary>
+        private void InitializeNetwork()
+        {
+            // 如果不在房间中，尝试同步状态
+            if (!PhotonNetwork.InRoom)
+            {
+                LogDebug("当前不在Photon房间中");
+                return;
+            }
+
+            SyncPhotonState();
+        }
+
+        /// <summary>
+        /// 同步Photon状态
+        /// </summary>
+        private void SyncPhotonState()
+        {
+            if (PhotonNetwork.InRoom)
+            {
+                LogDebug($"同步Photon状态 - 房间: {PhotonNetwork.CurrentRoom.Name}");
+
+                if (PhotonNetwork.IsMasterClient)
+                {
+                    hostPlayerId = (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
+                    isHostClientReady = true;
+                    LogDebug($"检测到MasterClient身份 - Host玩家ID: {hostPlayerId}");
+                    OnHostStarted?.Invoke();
+                    OnHostPlayerReady?.Invoke();
+                }
+
+                OnConnected?.Invoke();
+            }
         }
 
         /// <summary>
@@ -121,57 +160,13 @@ namespace Core.Network
         /// </summary>
         private bool IsMainMenuScene(string sceneName)
         {
-            string[] mainMenuScenes = { "MainMenuScene", "MainMenu", "Menu" };
-
+            string[] mainMenuScenes = { "MainMenuScene", "MainMenu", "Menu", "Lobby" };
             foreach (string menuScene in mainMenuScenes)
             {
                 if (sceneName.Equals(menuScene, System.StringComparison.OrdinalIgnoreCase))
                     return true;
             }
-
             return false;
-        }
-
-        /// <summary>
-        /// 手动启动网络初始化（从MainMenuManager调用）
-        /// </summary>
-        public void ManualInitializeNetwork()
-        {
-            LogDebug("手动启动网络初始化");
-            InitializeFromMainMenu();
-        }
-
-        private void Update()
-        {
-            // 更新网络组件（原有逻辑）
-            if (server != null && server.IsRunning)
-                server.Update();
-
-            if (client != null)
-                client.Update();
-
-            // 新增：检查待处理消息
-            CheckPendingMessages();
-        }
-
-        private void OnApplicationQuit()
-        {
-            Shutdown();
-        }
-
-        private void OnDestroy()
-        {
-            Shutdown();
-        }
-
-        /// <summary>
-        /// 初始化网络组件
-        /// </summary>
-        private void InitializeNetwork()
-        {
-            // 设置Riptide日志级别
-            RiptideLogger.Initialize(Debug.Log, Debug.Log, Debug.LogWarning, Debug.LogError, false);
-            LogDebug("Riptide日志系统初始化完成");
         }
 
         /// <summary>
@@ -180,17 +175,15 @@ namespace Core.Network
         private void InitializeFromMainMenu()
         {
             LogDebug($"根据主菜单初始化，选定模式: {MainMenuManager.SelectedGameMode}");
-            LogDebug($"MainMenuManager 配置 - Port: {MainMenuManager.Port}, RoomName: {MainMenuManager.RoomName}, MaxPlayers: {MainMenuManager.MaxPlayers}");
 
             switch (MainMenuManager.SelectedGameMode)
             {
                 case MainMenuManager.GameMode.Host:
-                    // 使用协程来确保正确的初始化顺序
-                    StartCoroutine(StartHostWithDelay());
+                    InitializeAsHost();
                     break;
 
                 case MainMenuManager.GameMode.Client:
-                    Connect(MainMenuManager.HostIP, MainMenuManager.Port);
+                    InitializeAsClient();
                     break;
 
                 case MainMenuManager.GameMode.SinglePlayer:
@@ -204,212 +197,201 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 延迟启动Host，确保所有组件都已准备就绪
+        /// 初始化Host模式
         /// </summary>
-        private IEnumerator StartHostWithDelay()
+        private void InitializeAsHost()
         {
-            LogDebug("开始Host启动流程...");
-
-            // 等待几帧确保所有组件初始化完成
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-
-            // 启动Host
-            StartAsHost(MainMenuManager.Port, MainMenuManager.RoomName, MainMenuManager.MaxPlayers);
-        }
-
-        /// <summary>
-        /// 连接到服务器（保持与原NetworkManager兼容）
-        /// </summary>
-        public void Connect(string ip = null, ushort? serverPort = null)
-        {
-            string targetIP = ip ?? "127.0.0.1";
-            ushort targetPort = serverPort ?? defaultPort;
-
-            ConnectAsClient(targetIP, targetPort);
-        }
-
-        /// <summary>
-        /// 断开连接（保持与原NetworkManager兼容）
-        /// </summary>
-        public void Disconnect()
-        {
-            if (IsHost)
-                StopHost();
-            else
-                DisconnectClient();
-        }
-
-        /// <summary>
-        /// 作为主机启动（Host模式）- 修复版本
-        /// </summary>
-        public void StartAsHost(ushort port, string roomName, int maxPlayers)
-        {
-            if (IsHost || IsServer)
+            if (!PhotonNetwork.InRoom)
             {
-                LogDebug("已经在运行主机模式");
+                Debug.LogError("Host模式初始化失败：未在Photon房间中");
                 return;
             }
 
-            Port = port;
-            RoomName = roomName;
-            MaxPlayers = maxPlayers;
-
-            // **重置Host状态**
-            hostPlayerId = 0;
-            isHostClientReady = false;
-
-            LogDebug($"启动主机模式 - 房间: {roomName}, 端口: {port}, 最大玩家: {maxPlayers}");
-
-            try
+            if (!PhotonNetwork.IsMasterClient)
             {
-                // 启动服务器
-                server = new Server();
-                server.ClientConnected += OnServerClientConnected;
-                server.ClientDisconnected += OnServerClientDisconnected;
-
-                LogDebug("正在启动服务器...");
-                server.Start(port, (ushort)maxPlayers);
-                LogDebug($"服务器启动成功，IsRunning: {server.IsRunning}");
-
-                // 设置主机状态
-                IsHost = true;
-                LogDebug($"IsHost 设置为: {IsHost}");
-
-                // **修改：先触发服务器启动事件，但不触发Host玩家准备事件**
-                LogDebug("触发 OnHostStarted 事件（服务器层启动）");
-                OnHostStarted?.Invoke();
-
-                // 同时作为客户端连接到自己的服务器
-                StartCoroutine(ConnectSelfClientWithDelay(port));
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"启动主机失败: {e.Message}");
-                StopHost();
-            }
-        }
-
-        /// <summary>
-        /// 延迟连接自己的客户端到服务器
-        /// </summary>
-        private IEnumerator ConnectSelfClientWithDelay(ushort port)
-        {
-            // 等待服务器完全启动
-            yield return new WaitForSeconds(0.1f);
-
-            LogDebug("开始连接自己的客户端到服务器...");
-
-            try
-            {
-                client = new Client();
-                client.Connected += OnSelfClientConnected;
-                client.Disconnected += OnSelfClientDisconnected;
-                client.ConnectionFailed += OnSelfClientConnectionFailed;
-
-                LogDebug($"客户端连接到: 127.0.0.1:{port}");
-                client.Connect($"127.0.0.1:{port}", timeoutTime);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"自连接失败: {e.Message}");
-                StopHost();
-            }
-        }
-
-        /// <summary>
-        /// 作为客户端连接（Client模式）
-        /// </summary>
-        public void ConnectAsClient(string hostIP, ushort port)
-        {
-            if (IsClient)
-            {
-                LogDebug("已经连接到主机");
+                Debug.LogError("Host模式初始化失败：不是MasterClient");
                 return;
             }
 
-            Port = port;
-            IsHost = false;
+            hostPlayerId = (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
+            isHostClientReady = true;
+            ResetGameState();
 
-            LogDebug($"连接到主机: {hostIP}:{port}");
-
-            try
-            {
-                client = new Client();
-                client.Connected += OnClientConnectedToHost;
-                client.Disconnected += OnClientDisconnectedFromHost;
-                client.ConnectionFailed += OnClientConnectionFailed;
-                client.Connect($"{hostIP}:{port}", timeoutTime);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"连接主机失败: {e.Message}");
-            }
+            LogDebug($"Host模式初始化完成 - 玩家ID: {hostPlayerId}");
+            OnHostStarted?.Invoke();
+            OnHostPlayerReady?.Invoke();
+            OnConnected?.Invoke();
         }
 
         /// <summary>
-        /// 停止主机
+        /// 初始化Client模式
         /// </summary>
-        public void StopHost()
+        private void InitializeAsClient()
         {
-            if (!IsHost)
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogError("Client模式初始化失败：未在Photon房间中");
                 return;
-
-            LogDebug("停止主机");
-
-            // 停止服务器
-            if (server != null)
-            {
-                server.ClientConnected -= OnServerClientConnected;
-                server.ClientDisconnected -= OnServerClientDisconnected;
-                server.Stop();
-                server = null;
-                LogDebug("服务器已停止");
             }
 
-            // 断开客户端
-            DisconnectClient();
-
-            // **重置Host状态**
-            IsHost = false;
-            isHostInitialized = false;
-            hostPlayerId = 0;
-            isHostClientReady = false;
-
-            LogDebug("触发 OnHostStopped 事件");
-            OnHostStopped?.Invoke();
+            ResetGameState();
+            LogDebug($"Client模式初始化完成 - 玩家ID: {ClientId}");
+            OnConnected?.Invoke();
         }
 
         /// <summary>
-        /// 断开客户端连接
+        /// 重置游戏状态
         /// </summary>
-        public void DisconnectClient()
+        private void ResetGameState()
         {
-            if (client != null)
-            {
-                if (IsClient)
-                {
-                    LogDebug("断开客户端连接");
-                    client.Disconnect();
-                }
-
-                // 清理事件订阅（原有逻辑）
-                client.Connected -= OnSelfClientConnected;
-                client.Connected -= OnClientConnectedToHost;
-                client.Disconnected -= OnSelfClientDisconnected;
-                client.Disconnected -= OnClientDisconnectedFromHost;
-                client.ConnectionFailed -= OnSelfClientConnectionFailed;
-                client.ConnectionFailed -= OnClientConnectionFailed;
-
-                client = null;
-            }
-
-            // 新增：清理消息状态
             gameStartReceived = false;
             lastTurnPlayerId = 0;
             gameProgressSequence = 0;
-            pendingQuestion = null;
-            LogDebug("网络消息状态已清理");
+            isGameInProgress = false;
+            LogDebug("游戏状态已重置");
+        }
+
+        #endregion
+
+        #region Photon事件回调（通过接口实现）
+
+        // IConnectionCallbacks
+        void IConnectionCallbacks.OnConnected()
+        {
+            LogDebug("Photon网络连接成功");
+        }
+
+        void IConnectionCallbacks.OnConnectedToMaster()
+        {
+            LogDebug("连接到Photon主服务器");
+        }
+
+        void IConnectionCallbacks.OnDisconnected(DisconnectCause cause)
+        {
+            LogDebug($"与Photon断开连接: {cause}");
+            ResetGameState();
+            OnDisconnected?.Invoke();
+        }
+
+        void IConnectionCallbacks.OnRegionListReceived(RegionHandler regionHandler)
+        {
+            // 不需要处理
+        }
+
+        void IConnectionCallbacks.OnCustomAuthenticationResponse(Dictionary<string, object> data)
+        {
+            // 不需要处理
+        }
+
+        void IConnectionCallbacks.OnCustomAuthenticationFailed(string debugMessage)
+        {
+            LogDebug($"Photon认证失败: {debugMessage}");
+        }
+
+        // IMatchmakingCallbacks
+        void IMatchmakingCallbacks.OnFriendListUpdate(List<FriendInfo> friendList)
+        {
+            // 不需要处理
+        }
+
+        void IMatchmakingCallbacks.OnCreatedRoom()
+        {
+            LogDebug("Photon房间创建成功");
+        }
+
+        void IMatchmakingCallbacks.OnCreateRoomFailed(short returnCode, string message)
+        {
+            LogDebug($"Photon房间创建失败: {message}");
+        }
+
+        void IMatchmakingCallbacks.OnJoinedRoom()
+        {
+            LogDebug($"加入房间成功: {PhotonNetwork.CurrentRoom.Name}");
+            SyncPhotonState();
+        }
+
+        void IMatchmakingCallbacks.OnJoinRoomFailed(short returnCode, string message)
+        {
+            LogDebug($"加入房间失败: {message}");
+        }
+
+        void IMatchmakingCallbacks.OnJoinRandomFailed(short returnCode, string message)
+        {
+            LogDebug($"加入随机房间失败: {message}");
+        }
+
+        void IMatchmakingCallbacks.OnLeftRoom()
+        {
+            LogDebug("离开房间");
+            ResetGameState();
+            OnDisconnected?.Invoke();
+        }
+
+        // IInRoomCallbacks
+        void IInRoomCallbacks.OnPlayerEnteredRoom(Player newPlayer)
+        {
+            ushort playerId = (ushort)newPlayer.ActorNumber;
+            LogDebug($"玩家加入: {newPlayer.NickName} (ID: {playerId})");
+            OnPlayerJoined?.Invoke(playerId);
+        }
+
+        void IInRoomCallbacks.OnPlayerLeftRoom(Player otherPlayer)
+        {
+            ushort playerId = (ushort)otherPlayer.ActorNumber;
+            LogDebug($"玩家离开: {otherPlayer.NickName} (ID: {playerId})");
+            OnPlayerLeft?.Invoke(playerId);
+        }
+
+        void IInRoomCallbacks.OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+        {
+            LogDebug("房间属性更新");
+        }
+
+        void IInRoomCallbacks.OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
+        {
+            LogDebug($"玩家属性更新: {targetPlayer.NickName}");
+        }
+
+        void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient)
+        {
+            LogDebug($"MasterClient切换到: {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+
+            if (PhotonNetwork.IsMasterClient)
+            {
+                // 本地玩家成为新的Host
+                hostPlayerId = (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
+                isHostClientReady = true;
+                LogDebug($"本地玩家成为新Host - ID: {hostPlayerId}");
+                OnHostStarted?.Invoke();
+                OnHostPlayerReady?.Invoke();
+            }
+            else
+            {
+                // 其他玩家成为Host
+                hostPlayerId = (ushort)newMasterClient.ActorNumber;
+                OnHostStopped?.Invoke();
+            }
+        }
+
+        #endregion
+
+        #region 完全兼容的公共接口方法
+
+        /// <summary>
+        /// 连接到服务器（兼容方法）
+        /// </summary>
+        public void Connect(string ip = null, ushort? serverPort = null)
+        {
+            LogDebug("Connect方法被调用，但当前使用Photon管理连接");
+        }
+
+        /// <summary>
+        /// 断开连接
+        /// </summary>
+        public void Disconnect()
+        {
+            LogDebug("断开Photon房间连接");
+            PhotonNetwork.LeaveRoom();
         }
 
         /// <summary>
@@ -418,14 +400,14 @@ namespace Core.Network
         public void Shutdown()
         {
             LogDebug("网络管理器关闭");
-            StopHost();
-            DisconnectClient();
+            if (PhotonNetwork.InRoom)
+            {
+                PhotonNetwork.LeaveRoom();
+            }
         }
 
-        #region 统一Host身份管理接口
-
         /// <summary>
-        /// 获取Host玩家ID（统一接口）
+        /// 获取Host玩家ID（兼容ushort）
         /// </summary>
         public ushort GetHostPlayerId()
         {
@@ -446,852 +428,404 @@ namespace Core.Network
         public bool IsHostClientReady => isHostClientReady;
 
         /// <summary>
-        /// 获取用于房间创建的Host信息
+        /// 获取用于房间创建的Host信息（兼容方法）
         /// </summary>
         public (ushort hostId, bool isReady) GetHostRoomInfo()
         {
             return (hostPlayerId, isHostClientReady);
         }
 
-        #endregion
-
         /// <summary>
-        /// 发送消息（保持与原NetworkManager兼容）
+        /// 提交答案
         /// </summary>
-        public void SendMessage(Message message)
+        public void SubmitAnswer(string answer)
         {
-            if (IsClient)
+            if (!PhotonNetwork.InRoom)
             {
-                client.Send(message);
-            }
-            else
-            {
-                Debug.LogWarning("未连接到服务器，无法发送消息");
-            }
-        }
-
-        /// <summary>
-        /// 广播消息给所有客户端（主机使用）
-        /// </summary>
-        public void BroadcastMessage(Message message)
-        {
-            if (IsServer)
-            {
-                server.SendToAll(message);
-            }
-            else
-            {
-                Debug.LogWarning("不是主机，无法广播消息");
-            }
-        }
-
-        /// <summary>
-        /// 发送消息给指定客户端（主机使用）
-        /// </summary>
-        public void SendMessageToClient(ushort clientId, Message message)
-        {
-            if (IsServer)
-            {
-                server.Send(message, clientId);
-            }
-            else
-            {
-                Debug.LogWarning("不是主机，无法发送消息给特定客户端");
-            }
-        }
-
-        #region 房间管理消息处理
-
-        /// <summary>
-        /// 发送房间数据给指定客户端
-        /// </summary>
-        public void SendRoomDataToClient(ushort clientId, RoomData roomData)
-        {
-            if (!IsHost || server == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.RoomDataSync);
-            message.SerializeRoomData(roomData);
-            server.Send(message, clientId);
-
-            LogDebug($"发送房间数据给客户端 {clientId}");
-        }
-
-        /// <summary>
-        /// 广播玩家加入房间
-        /// </summary>
-        public void BroadcastPlayerJoinRoom(RoomPlayer player)
-        {
-            if (!IsHost || server == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerJoinRoom);
-            message.SerializePlayer(player);
-            server.SendToAll(message);
-
-            LogDebug($"广播玩家加入: {player.playerName}");
-        }
-
-        /// <summary>
-        /// 广播玩家离开房间
-        /// </summary>
-        public void BroadcastPlayerLeaveRoom(ushort playerId)
-        {
-            if (!IsHost || server == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerLeaveRoom);
-            message.AddUShort(playerId);
-            server.SendToAll(message);
-
-            LogDebug($"广播玩家离开: {playerId}");
-        }
-
-        /// <summary>
-        /// 广播玩家准备状态更新
-        /// </summary>
-        public void BroadcastPlayerReadyUpdate(ushort playerId, bool isReady)
-        {
-            if (!IsHost || server == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerReadyUpdate);
-            message.SerializeReadyChange(playerId, isReady);
-            server.SendToAll(message);
-
-            LogDebug($"广播准备状态: 玩家{playerId} -> {isReady}");
-        }
-
-        /// <summary>
-        /// 广播游戏开始命令
-        /// </summary>
-        public void BroadcastGameStart()
-        {
-            if (!IsHost || server == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.GameStartRequest);
-            server.SendToAll(message);
-
-            LogDebug("广播游戏开始命令");
-        }
-
-        /// <summary>
-        /// 请求房间信息
-        /// </summary>
-        public void RequestRoomInfo()
-        {
-            if (IsHost || client == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.RoomInfoRequest);
-            client.Send(message);
-
-            LogDebug("请求房间信息");
-        }
-
-        /// <summary>
-        /// 请求改变准备状态
-        /// </summary>
-        public void RequestReadyStateChange(bool isReady)
-        {
-            if (IsHost || client == null)
-                return;
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.PlayerReadyRequest);
-            message.SerializeReadyChange(ClientId, isReady);
-            client.Send(message);
-
-            LogDebug($"请求改变准备状态: {isReady}");
-        }
-
-        #endregion
-
-        #region 服务器事件处理（Host模式）
-
-        private void OnServerClientConnected(object sender, ServerConnectedEventArgs e)
-        {
-            LogDebug($"客户端连接到服务器: ID={e.Client.Id}");
-
-            // **关键修复：区分Host自己的客户端和其他玩家**
-            if (IsHost && !isHostClientReady)
-            {
-                // 这是Host自己的客户端连接
-                hostPlayerId = e.Client.Id;
-                LogDebug($"Host玩家ID确定为: {hostPlayerId}");
-                // 不在这里设置isHostClientReady，等待OnSelfClientConnected
+                Debug.LogWarning("未在房间中，无法提交答案");
                 return;
             }
 
-            // 其他玩家加入
-            LogDebug($"新玩家加入房间: ID={e.Client.Id}");
-            OnPlayerJoined?.Invoke(e.Client.Id);
-        }
-
-        private void OnServerClientDisconnected(object sender, ServerDisconnectedEventArgs e)
-        {
-            LogDebug($"客户端断开连接: ID={e.Client.Id}");
-
-            // 检查是否是Host玩家断开
-            if (IsHost && e.Client.Id == hostPlayerId)
-            {
-                LogDebug("Host玩家客户端断开连接");
-                isHostClientReady = false;
-                return;
-            }
-
-            // 其他玩家离开
-            LogDebug($"玩家离开房间: ID={e.Client.Id}");
-            OnPlayerLeft?.Invoke(e.Client.Id);
-        }
-
-        #endregion
-
-        #region 客户端事件处理（Host模式下的自连接）
-
-        /// <summary>
-        /// 修改Host启动事件处理 - 重置消息状态
-        /// </summary>
-        private void OnSelfClientConnected(object sender, EventArgs e)
-        {
-            LogDebug($"Host客户端连接成功! 玩家ID: {ClientId}");
-
-            // 原有逻辑...
-            if (hostPlayerId == 0 || hostPlayerId != ClientId)
-            {
-                hostPlayerId = ClientId;
-                LogDebug($"Host玩家ID更新为: {hostPlayerId}");
-            }
-
-            isHostClientReady = true;
-
-            if (!isHostInitialized)
-            {
-                isHostInitialized = true;
-                LogDebug("Host完全初始化完成");
-            }
-
-            // 新增：重置消息状态
-            gameStartReceived = false;
-            lastTurnPlayerId = 0;
-            gameProgressSequence = 0;
-            pendingQuestion = null;
-            LogDebug("Host消息状态已重置");
-
-            OnHostPlayerReady?.Invoke();
-            OnConnected?.Invoke();
-        }
-
-        private void OnSelfClientDisconnected(object sender, EventArgs e)
-        {
-            LogDebug("Host客户端断开连接");
-            isHostClientReady = false;
-            OnDisconnected?.Invoke(); // 触发兼容事件
-        }
-
-        private void OnSelfClientConnectionFailed(object sender, EventArgs e)
-        {
-            Debug.LogError("Host客户端连接失败");
-            StopHost();
-        }
-
-        #endregion
-
-        #region 客户端事件处理（Client模式）
-
-        private void OnClientConnectedToHost(object sender, EventArgs e)
-        {
-            LogDebug($"成功连接到主机! ID: {ClientId}");
-
-            // 新增：重置消息状态
-            gameStartReceived = false;
-            lastTurnPlayerId = 0;
-            gameProgressSequence = 0;
-            pendingQuestion = null;
-            LogDebug("Client消息状态已重置");
-
-            OnConnected?.Invoke();
-        }
-
-        private void OnClientDisconnectedFromHost(object sender, EventArgs e)
-        {
-            LogDebug("与主机断开连接");
-            OnDisconnected?.Invoke(); // 触发兼容事件
-        }
-
-        private void OnClientConnectionFailed(object sender, EventArgs e)
-        {
-            Debug.LogError("连接主机失败");
-        }
-
-        #endregion
-
-        #region 游戏消息处理器（保持与原NetworkManager兼容）
-
-        /// <summary>
-        /// 处理游戏进度消息 - 修复版本：添加序列验证
-        /// </summary>
-        [MessageHandler((ushort)NetworkMessageType.GameProgress)]
-        private static void HandleGameProgress(Message message)
-        {
-            int questionNumber = message.GetInt();
-            int alivePlayerCount = message.GetInt();
-            ushort turnPlayerId = message.GetUShort();
-
-            // 可选：读取额外的进度信息
-            int questionTypeInt = -1;
-            float timeLimit = 0f;
-            try
-            {
-                questionTypeInt = message.GetInt();
-                timeLimit = message.GetFloat();
-            }
-            catch
-            {
-                // 兼容旧版本消息格式
-            }
-
-            Debug.Log($"[NetworkManager] 收到游戏进度: 第{questionNumber}题, 存活{alivePlayerCount}人, 回合玩家{turnPlayerId}");
-
-            if (Instance != null)
-            {
-                // 验证进度序列（防止乱序）
-                if (questionNumber < Instance.gameProgressSequence)
-                {
-                    Debug.LogWarning($"[NetworkManager] 收到过期的游戏进度消息: {questionNumber} < {Instance.gameProgressSequence}");
-                    return;
-                }
-
-                Instance.gameProgressSequence = questionNumber;
-                Debug.Log($"[NetworkManager] 游戏进度序列已更新: {questionNumber}");
-            }
-
-            // 转发给NetworkUI
-            var networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnGameProgressReceived(questionNumber, alivePlayerCount, turnPlayerId);
-            }
+            photonView.RPC("OnAnswerSubmitted", RpcTarget.MasterClient, (int)ClientId, answer);
+            LogDebug($"提交答案: {answer}");
         }
 
         /// <summary>
-        /// 处理回合变更消息 - 修复版本：添加状态验证和缓冲处理
+        /// 请求题目（兼容方法）
         /// </summary>
-        [MessageHandler((ushort)NetworkMessageType.PlayerTurnChanged)]
-        private static void HandlePlayerTurnChanged(Message message)
+        public void RequestQuestion()
         {
-            ushort newTurnPlayerId = message.GetUShort();
-
-            Debug.Log($"[NetworkManager] 收到回合变更: 玩家{newTurnPlayerId}");
-
-            if (Instance != null)
-            {
-                // 验证回合变更的合理性
-                if (Instance.lastTurnPlayerId == newTurnPlayerId)
-                {
-                    Debug.LogWarning($"[NetworkManager] 重复的回合变更消息: {newTurnPlayerId}");
-                    return;
-                }
-
-                Instance.lastTurnPlayerId = newTurnPlayerId;
-                Debug.Log($"[NetworkManager] 回合状态已更新: {newTurnPlayerId}");
-
-                // 检查是否有待处理的题目
-                Instance.ProcessPendingQuestion();
-            }
-
-            // 先更新UI中的回合状态
-            var networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnTurnChangedReceived(newTurnPlayerId);
-            }
-
-            // 再通知NQMC（确保UI状态先更新）
-            if (NetworkQuestionManagerController.Instance != null)
-            {
-                NetworkQuestionManagerController.Instance.GetType()
-                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    ?.Invoke(NetworkQuestionManagerController.Instance, new object[] { newTurnPlayerId });
-            }
+            LogDebug("RequestQuestion被调用，但Photon使用RPC系统");
         }
-
-        /// <summary>
-        /// 处理血量更新消息（如果还没有的话）
-        /// </summary>
-        [MessageHandler((ushort)NetworkMessageType.HealthUpdate)]
-        private static void HandleHealthUpdate(Message message)
-        {
-            ushort playerId = message.GetUShort();
-            int newHealth = message.GetInt();
-            int maxHealth = message.GetInt();
-
-            Debug.Log($"[NetworkManager] 收到血量更新: 玩家{playerId} {newHealth}/{maxHealth}");
-
-            // 转发给NetworkUI
-            var networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnHealthUpdateReceived(playerId, newHealth, maxHealth);
-            }
-        }
-
-        /// <summary>
-        /// 处理玩家答题结果消息（修复版本）
-        /// </summary>
-        [MessageHandler((ushort)NetworkMessageType.PlayerAnswerResult)]
-        private static void HandlePlayerAnswerResult(Message message)
-        {
-            ushort playerId = message.GetUShort();
-            bool isCorrect = message.GetBool();
-            string answer = message.GetString();
-
-            Debug.Log($"[NetworkManager] 收到答题结果: 玩家{playerId} {(isCorrect ? "正确" : "错误")} - {answer}");
-
-            // 转发给NetworkUI（如果NetworkUI需要显示答题结果）
-            var networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                // 需要在NetworkUI中添加对应的处理方法
-                networkUI.OnPlayerAnswerResultReceived(playerId, isCorrect, answer);
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.SendQuestion)]
-        private static void HandleQuestionReceived(Message message)
-        {
-            byte[] questionData = message.GetBytes();
-            NetworkQuestionData question = NetworkQuestionData.Deserialize(questionData);
-
-            if (question != null)
-            {
-                Debug.Log($"[NetworkManager] 收到题目: {question.questionType} - {question.questionText}");
-
-                if (Instance != null)
-                {
-                    // 验证接收时机
-                    if (!Instance.gameStartReceived)
-                    {
-                        Debug.LogWarning("[NetworkManager] 收到题目但游戏尚未开始，忽略");
-                        return;
-                    }
-
-                    // 检查是否应该缓冲题目（等待回合状态更新）
-                    if (Instance.ShouldBufferQuestion())
-                    {
-                        Debug.Log("[NetworkManager] 缓冲题目，等待回合状态更新");
-                        Instance.pendingQuestion = new PendingQuestionMessage
-                        {
-                            question = question,
-                            receivedTime = Time.time
-                        };
-                        return;
-                    }
-
-                    // 立即处理题目
-                    Instance.ProcessQuestionImmediate(question);
-                }
-                else
-                {
-                    // 备用处理（无Instance时）
-                    ProcessQuestionFallback(question);
-                }
-            }
-            else
-            {
-                Debug.LogError("[NetworkManager] 题目数据解析失败");
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.AnswerResult)]
-        private static void HandleAnswerResult(Message message)
-        {
-            bool isCorrect = message.GetBool();
-            string correctAnswer = message.GetString();
-
-            Debug.Log($"答题结果: {(isCorrect ? "正确" : "错误")} - 正确答案: {correctAnswer}");
-            OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
-        }
-
-        #endregion
-
-        #region 房间消息处理器
-
-        [MessageHandler((ushort)NetworkMessageType.RoomInfoRequest)]
-        private static void HandleRoomInfoRequest(ushort fromClientId, Message message)
-        {
-            Debug.Log($"[NetworkManager] 收到房间信息请求来自客户端 {fromClientId}");
-
-            // 获取当前房间数据
-            if (RoomManager.Instance?.CurrentRoom != null)
-            {
-                Instance.SendRoomDataToClient(fromClientId, RoomManager.Instance.CurrentRoom);
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.PlayerReadyRequest)]
-        private static void HandlePlayerReadyRequest(ushort fromClientId, Message message)
-        {
-            var (playerId, isReady) = message.DeserializeReadyChange();
-
-            Debug.Log($"[NetworkManager] 收到准备状态请求: 玩家{playerId} -> {isReady}");
-
-            // 更新房间中玩家的准备状态
-            if (RoomManager.Instance?.CurrentRoom != null)
-            {
-                bool success = RoomManager.Instance.CurrentRoom.SetPlayerReady(playerId, isReady);
-                if (success)
-                {
-                    // 广播准备状态变化给所有客户端
-                    Instance.BroadcastPlayerReadyUpdate(playerId, isReady);
-                }
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.RoomDataSync)]
-        private static void HandleRoomDataSync(Message message)
-        {
-            RoomData roomData = message.DeserializeRoomData();
-            Debug.Log($"[NetworkManager] 收到房间数据同步: {roomData.roomName}");
-
-            // 通知RoomManager更新房间数据
-            if (RoomManager.Instance != null)
-            {
-                RoomManager.Instance.UpdateRoomFromNetwork(roomData);
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.PlayerJoinRoom)]
-        private static void HandlePlayerJoinRoom(Message message)
-        {
-            RoomPlayer player = message.DeserializePlayer();
-            Debug.Log($"[NetworkManager] 收到玩家加入通知: {player.playerName}");
-
-            // 通知RoomManager
-            if (RoomManager.Instance != null)
-            {
-                RoomManager.Instance.OnNetworkPlayerJoined(player);
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.PlayerLeaveRoom)]
-        private static void HandlePlayerLeaveRoom(Message message)
-        {
-            ushort playerId = message.GetUShort();
-            Debug.Log($"[NetworkManager] 收到玩家离开通知: {playerId}");
-
-            // 通知RoomManager
-            if (RoomManager.Instance != null)
-            {
-                RoomManager.Instance.OnNetworkPlayerLeftMessage(playerId);
-            }
-        }
-
-        [MessageHandler((ushort)NetworkMessageType.PlayerReadyUpdate)]
-        private static void HandlePlayerReadyUpdate(Message message)
-        {
-            var (playerId, isReady) = message.DeserializeReadyChange();
-            Debug.Log($"[NetworkManager] 收到准备状态更新: 玩家{playerId} -> {isReady}");
-
-            // 通知RoomManager
-            if (RoomManager.Instance != null)
-            {
-                RoomManager.Instance.OnNetworkPlayerReadyChanged(playerId, isReady);
-            }
-        }
-        [MessageHandler((ushort)NetworkMessageType.GameStartRequest)]
-        private static void HandleGameStartRequest(Message message)
-        {
-            Debug.Log("[NetworkManager] 收到游戏开始请求");
-
-            if (RoomManager.Instance != null)
-            {
-                RoomManager.Instance.OnNetworkGameStart();
-                Debug.Log("[NetworkManager] 已通知RoomManager处理游戏开始");
-            }
-            else
-            {
-                Debug.LogError("[NetworkManager] RoomManager实例不存在，无法处理游戏开始请求");
-            }
-        }
-        /// <summary>
-        /// 处理游戏开始消息 - 修复版本：重置状态
-        /// </summary>
-        [MessageHandler((ushort)NetworkMessageType.GameStart)]
-        private static void HandleGameStart(Message message)
-        {
-            int totalPlayerCount = message.GetInt();
-            int alivePlayerCount = message.GetInt();
-            ushort firstTurnPlayerId = message.GetUShort();
-
-            Debug.Log($"[NetworkManager] 收到游戏开始: 总玩家{totalPlayerCount}, 存活{alivePlayerCount}, 首回合玩家{firstTurnPlayerId}");
-
-            // 重置状态
-            if (Instance != null)
-            {
-                Instance.gameStartReceived = true;
-                Instance.lastTurnPlayerId = 0;
-                Instance.gameProgressSequence = 0;
-                Instance.pendingQuestion = null;
-
-                Debug.Log("[NetworkManager] 游戏状态已重置");
-            }
-
-            // 转发给NetworkUI
-            var networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnGameStartReceived(totalPlayerCount, alivePlayerCount, firstTurnPlayerId);
-            }
-        }
-        /// <summary>
-        /// 处理玩家状态同步消息
-        /// </summary>
-        [MessageHandler((ushort)NetworkMessageType.PlayerStateSync)]
-        private static void HandlePlayerStateSync(Message message)
-        {
-            ushort playerId = message.GetUShort();
-            string playerName = message.GetString();
-            bool isHost = message.GetBool();
-            int currentHealth = message.GetInt();
-            int maxHealth = message.GetInt();
-            bool isAlive = message.GetBool();
-
-            Debug.Log($"[NetworkManager] 收到玩家状态同步: {playerName} (ID:{playerId}) HP:{currentHealth}/{maxHealth}");
-
-            var networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI != null)
-            {
-                networkUI.OnPlayerStateSyncReceived(playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
-            }
-        }
-        #endregion
-
-        #region 公共接口方法（保持兼容）
 
         /// <summary>
         /// 获取房间信息
         /// </summary>
         public string GetRoomInfo()
         {
-            if (IsHost)
+            if (PhotonNetwork.InRoom)
             {
-                return $"房间: {RoomName} | 玩家: {ConnectedPlayerCount}/{MaxPlayers} | 端口: {Port} | Host玩家ID: {hostPlayerId}";
+                return $"房间: {RoomName} | 玩家: {ConnectedPlayerCount}/{MaxPlayers} | 玩家ID: {ClientId} | Host: {IsHost}";
             }
-            else if (IsClient)
-            {
-                return $"已连接到主机 | 玩家ID: {ClientId}";
-            }
-            else
-            {
-                return "未连接";
-            }
+            return "未在房间中";
         }
 
         /// <summary>
-        /// 请求题目（客户端调用）
-        /// </summary>
-        public void RequestQuestion()
-        {
-            if (!IsClient)
-            {
-                Debug.LogWarning("未连接到服务器");
-                return;
-            }
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.RequestQuestion);
-            SendMessage(message);
-            LogDebug("请求题目...");
-        }
-
-        /// <summary>
-        /// 提交答案（客户端调用）
-        /// </summary>
-        public void SubmitAnswer(string answer)
-        {
-            if (!IsClient)
-            {
-                Debug.LogWarning("未连接到服务器");
-                return;
-            }
-
-            Message message = Message.Create(MessageSendMode.Reliable, (ushort)NetworkMessageType.SubmitAnswer);
-            message.AddString(answer);
-            SendMessage(message);
-            LogDebug($"提交答案: {answer}");
-        }
-
-        /// <summary>
-        /// 获取当前网络状态（调试用）
+        /// 获取网络状态
         /// </summary>
         public string GetNetworkStatus()
         {
-            return $"IsHost: {IsHost}, IsServer: {IsServer}, IsClient: {IsClient}, " +
-                   $"IsConnected: {IsConnected}, ClientId: {ClientId}, " +
-                   $"HostPlayerId: {hostPlayerId}, HostClientReady: {isHostClientReady}, " +
-                   $"HostInitialized: {isHostInitialized}";
+            return $"IsHost: {IsHost}, IsClient: {IsClient}, IsConnected: {IsConnected}, " +
+                   $"ClientId: {ClientId}, HostPlayerId: {hostPlayerId}, HostClientReady: {isHostClientReady}";
         }
 
         #endregion
-        #region 新增辅助方法
+
+        #region 兼容的消息发送方法
 
         /// <summary>
-        /// 判断是否应该缓冲题目
+        /// 发送消息（兼容方法）
         /// </summary>
-        private bool ShouldBufferQuestion()
+        public void SendMessage(object message)
         {
-            // 如果是Host，不需要缓冲
-            if (IsHost)
-            {
-                return false;
-            }
-
-            // 如果还没有收到任何回合变更，需要缓冲
-            if (lastTurnPlayerId == 0)
-            {
-                Debug.Log("[NetworkManager] 尚未收到回合变更，缓冲题目");
-                return true;
-            }
-
-            // 检查当前是否为Client模式且回合状态明确
-            return false;
+            LogDebug("SendMessage被调用，但Photon使用RPC系统");
         }
 
         /// <summary>
-        /// 处理待处理的题目
+        /// 广播消息（兼容方法）
         /// </summary>
-        private void ProcessPendingQuestion()
+        public void BroadcastMessage(object message)
         {
-            if (pendingQuestion.HasValue)
-            {
-                var pending = pendingQuestion.Value;
+            LogDebug("BroadcastMessage被调用，但Photon使用RPC系统");
+        }
 
-                // 检查是否超时
-                if (Time.time - pending.receivedTime > QUESTION_BUFFER_TIMEOUT)
+        /// <summary>
+        /// 发送消息给指定客户端（兼容方法）
+        /// </summary>
+        public void SendMessageToClient(ushort clientId, object message)
+        {
+            LogDebug($"SendMessageToClient被调用，但Photon使用RPC系统");
+        }
+
+        #endregion
+
+        #region 房间管理消息处理（兼容方法）
+
+        /// <summary>
+        /// 发送房间数据给指定客户端（兼容方法）
+        /// </summary>
+        public void SendRoomDataToClient(ushort clientId, RoomData roomData)
+        {
+            LogDebug($"SendRoomDataToClient被调用: 客户端{clientId}");
+        }
+
+        /// <summary>
+        /// 广播玩家加入房间（兼容方法）
+        /// </summary>
+        public void BroadcastPlayerJoinRoom(RoomPlayer player)
+        {
+            LogDebug($"BroadcastPlayerJoinRoom被调用: {player.playerName}");
+        }
+
+        /// <summary>
+        /// 广播玩家离开房间（兼容方法）
+        /// </summary>
+        public void BroadcastPlayerLeaveRoom(ushort playerId)
+        {
+            LogDebug($"BroadcastPlayerLeaveRoom被调用: 玩家{playerId}");
+        }
+
+        /// <summary>
+        /// 广播玩家准备状态更新（兼容方法）
+        /// </summary>
+        public void BroadcastPlayerReadyUpdate(ushort playerId, bool isReady)
+        {
+            LogDebug($"BroadcastPlayerReadyUpdate被调用: 玩家{playerId} -> {isReady}");
+        }
+
+        /// <summary>
+        /// 广播游戏开始命令（兼容方法）
+        /// </summary>
+        public void BroadcastGameStart()
+        {
+            LogDebug("BroadcastGameStart被调用");
+        }
+
+        /// <summary>
+        /// 请求房间信息（兼容方法）
+        /// </summary>
+        public void RequestRoomInfo()
+        {
+            LogDebug("RequestRoomInfo被调用");
+        }
+
+        /// <summary>
+        /// 请求改变准备状态（兼容方法）
+        /// </summary>
+        public void RequestReadyStateChange(bool isReady)
+        {
+            LogDebug($"RequestReadyStateChange被调用: {isReady}");
+        }
+
+        #endregion
+
+        #region RPC消息接收处理
+
+        [PunRPC]
+        void OnQuestionReceived_RPC(byte[] questionData)
+        {
+            NetworkQuestionData question = NetworkQuestionData.Deserialize(questionData);
+            if (question != null)
+            {
+                LogDebug($"收到题目: {question.questionType} - {question.questionText}");
+
+                if (!gameStartReceived)
                 {
-                    Debug.LogWarning("[NetworkManager] 待处理题目超时，丢弃");
-                    pendingQuestion = null;
+                    Debug.LogWarning("收到题目但游戏尚未开始，忽略");
                     return;
                 }
 
-                Debug.Log("[NetworkManager] 处理待处理的题目");
-                ProcessQuestionImmediate(pending.question);
-                pendingQuestion = null;
+                OnQuestionReceived?.Invoke(question);
+
+                // 直接通知NQMC
+                if (NetworkQuestionManagerController.Instance != null)
+                {
+                    var onQuestionMethod = NetworkQuestionManagerController.Instance.GetType()
+                        .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (onQuestionMethod != null)
+                    {
+                        onQuestionMethod.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
+                    }
+                }
             }
         }
 
-        /// <summary>
-        /// 立即处理题目
-        /// </summary>
-        private void ProcessQuestionImmediate(NetworkQuestionData question)
+        [PunRPC]
+        void OnAnswerResult_RPC(bool isCorrect, string correctAnswer)
         {
-            Debug.Log($"[NetworkManager] 立即处理题目: {question.questionType}");
+            LogDebug($"收到答题结果: {(isCorrect ? "正确" : "错误")} - {correctAnswer}");
+            OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
+        }
 
-            // 触发题目接收事件
-            OnQuestionReceived?.Invoke(question);
+        [PunRPC]
+        void OnHealthUpdate_RPC(int playerId, int newHealth, int maxHealth)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"收到血量更新: 玩家{playerIdUShort} {newHealth}/{maxHealth}");
+            OnHealthUpdated?.Invoke(playerIdUShort, newHealth, maxHealth);
 
-            // 直接通知NQMC
+            // 转发给NetworkUI
+            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnHealthUpdateReceived(playerIdUShort, newHealth, maxHealth);
+            }
+        }
+
+        [PunRPC]
+        void OnPlayerTurnChanged_RPC(int newTurnPlayerId)
+        {
+            ushort playerIdUShort = (ushort)newTurnPlayerId;
+            LogDebug($"收到回合变更: 玩家{playerIdUShort}");
+
+            if (lastTurnPlayerId == playerIdUShort)
+            {
+                Debug.LogWarning($"重复的回合变更消息: {playerIdUShort}");
+                return;
+            }
+
+            lastTurnPlayerId = playerIdUShort;
+            OnPlayerTurnChanged?.Invoke(playerIdUShort);
+
+            // 转发给NetworkUI
+            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnTurnChangedReceived(playerIdUShort);
+            }
+
+            // 通知NQMC
             if (NetworkQuestionManagerController.Instance != null)
             {
-                var onQuestionMethod = NetworkQuestionManagerController.Instance.GetType()
-                    .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                if (onQuestionMethod != null)
-                {
-                    onQuestionMethod.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
-                }
-                else
-                {
-                    Debug.LogWarning("[NetworkManager] 无法找到NQMC的题目接收方法");
-                }
+                NetworkQuestionManagerController.Instance.GetType()
+                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(NetworkQuestionManagerController.Instance, new object[] { playerIdUShort });
             }
         }
 
-        /// <summary>
-        /// 备用题目处理（无Instance时）
-        /// </summary>
-        private static void ProcessQuestionFallback(NetworkQuestionData question)
+        [PunRPC]
+        void OnGameStart_RPC(int totalPlayerCount, int alivePlayerCount, int firstTurnPlayerId)
         {
-            Debug.Log($"[NetworkManager] 备用处理题目: {question.questionType}");
-            OnQuestionReceived?.Invoke(question);
+            ushort firstTurnPlayerIdUShort = (ushort)firstTurnPlayerId;
+            LogDebug($"收到游戏开始: 总玩家{totalPlayerCount}, 存活{alivePlayerCount}, 首回合玩家{firstTurnPlayerIdUShort}");
+
+            gameStartReceived = true;
+            lastTurnPlayerId = 0;
+            gameProgressSequence = 0;
+            isGameInProgress = true;
+
+            // 转发给NetworkUI
+            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnGameStartReceived(totalPlayerCount, alivePlayerCount, firstTurnPlayerIdUShort);
+            }
         }
 
-        /// <summary>
-        /// 定期检查待处理消息（在Update中调用）
-        /// </summary>
-        private void CheckPendingMessages()
+        [PunRPC]
+        void OnGameProgress_RPC(int questionNumber, int alivePlayerCount, int turnPlayerId, int questionType, float timeLimit)
         {
-            if (pendingQuestion.HasValue)
-            {
-                var pending = pendingQuestion.Value;
+            ushort turnPlayerIdUShort = (ushort)turnPlayerId;
+            LogDebug($"收到游戏进度: 第{questionNumber}题, 存活{alivePlayerCount}人, 回合玩家{turnPlayerIdUShort}");
 
-                // 超时检查
-                if (Time.time - pending.receivedTime > QUESTION_BUFFER_TIMEOUT)
-                {
-                    Debug.LogWarning("[NetworkManager] 待处理题目超时，强制处理");
-                    ProcessQuestionImmediate(pending.question);
-                    pendingQuestion = null;
-                }
+            if (questionNumber < gameProgressSequence)
+            {
+                Debug.LogWarning($"收到过期的游戏进度消息: {questionNumber} < {gameProgressSequence}");
+                return;
+            }
+
+            gameProgressSequence = questionNumber;
+
+            // 转发给NetworkUI
+            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnGameProgressReceived(questionNumber, alivePlayerCount, turnPlayerIdUShort);
+            }
+        }
+
+        [PunRPC]
+        void OnPlayerStateSync_RPC(int playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"收到玩家状态同步: {playerName} (ID:{playerIdUShort}) HP:{currentHealth}/{maxHealth}");
+
+            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnPlayerStateSyncReceived(playerIdUShort, playerName, isHost, currentHealth, maxHealth, isAlive);
+            }
+        }
+
+        [PunRPC]
+        void OnPlayerAnswerResult_RPC(int playerId, bool isCorrect, string answer)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"收到玩家答题结果: 玩家{playerIdUShort} {(isCorrect ? "正确" : "错误")} - {answer}");
+
+            var networkUI = GameObject.FindObjectOfType<NetworkUI>();
+            if (networkUI != null)
+            {
+                networkUI.OnPlayerAnswerResultReceived(playerIdUShort, isCorrect, answer);
+            }
+        }
+
+        [PunRPC]
+        void OnAnswerSubmitted(int playerId, string answer)
+        {
+            // 只有Host处理答案提交
+            if (!IsHost)
+                return;
+
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"收到答案提交: 玩家{playerIdUShort} - {answer}");
+
+            // 转发给HostGameManager处理
+            if (HostGameManager.Instance != null)
+            {
+                HostGameManager.Instance.HandlePlayerAnswer(playerIdUShort, answer);
             }
         }
 
         #endregion
-        #region 客户端血量管理
+
+        #region 房间管理相关方法（简化版）
 
         /// <summary>
-        /// 处理本地玩家血量更新
+        /// 设置玩家准备状态（通过Photon自定义属性）
         /// </summary>
-        private static void ProcessLocalPlayerHealthUpdate(ushort playerId, int newHealth, int maxHealth)
+        public void SetPlayerReady(bool isReady)
         {
-            // 检查是否是本地玩家
-            if (IsLocalPlayer(playerId))
-            {
-                var healthManager = FindObjectOfType<Managers.PlayerHealthManager>();
-                if (healthManager != null)
-                {
-                    healthManager.OnNetworkHealthUpdate(newHealth, maxHealth);
-                    Debug.Log($"[NetworkManager] 更新本地玩家血量: {newHealth}/{maxHealth}");
-                }
-                else
-                {
-                    Debug.LogWarning("[NetworkManager] 未找到PlayerHealthManager组件");
-                }
-            }
+            var props = new Hashtable();
+            props["isReady"] = isReady;
+            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+            LogDebug($"设置准备状态: {isReady}");
         }
 
         /// <summary>
-        /// 检查指定玩家ID是否为本地玩家
+        /// 获取玩家准备状态
         /// </summary>
-        private static bool IsLocalPlayer(ushort playerId)
+        public bool GetPlayerReady(Player player)
         {
-            if (Instance == null) return false;
-
-            // Host模式：检查是否是Host玩家
-            if (Instance.IsHost)
+            if (player.CustomProperties.TryGetValue("isReady", out object isReady))
             {
-                return Instance.IsHostPlayer(playerId);
+                return (bool)isReady;
             }
-            // Client模式：检查是否是自己的ClientId
-            else if (Instance.IsClient)
-            {
-                return playerId == Instance.ClientId;
-            }
-
             return false;
         }
 
-        #endregion
-        #region 辅助方法
-
         /// <summary>
-        /// 调试日志
+        /// 检查所有玩家是否准备就绪
         /// </summary>
+        public bool AreAllPlayersReady()
+        {
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (!GetPlayerReady(player))
+                    return false;
+            }
+            return true;
+        }
+
+        #endregion
+
+        #region IPunObservable实现
+
+        public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+        {
+            if (stream.IsWriting)
+            {
+                // 发送游戏状态数据（如果需要的话）
+                stream.SendNext(isGameInProgress);
+                stream.SendNext(gameProgressSequence);
+            }
+            else
+            {
+                // 接收游戏状态数据
+                isGameInProgress = (bool)stream.ReceiveNext();
+                gameProgressSequence = (int)stream.ReceiveNext();
+            }
+        }
+
+        #endregion
+
+        #region 调试方法
+
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
             {
                 Debug.Log($"[NetworkManager] {message}");
             }
+        }
+
+        [ContextMenu("显示网络状态")]
+        public void ShowNetworkStatus()
+        {
+            Debug.Log($"=== 网络状态 ===\n{GetNetworkStatus()}");
+        }
+
+        [ContextMenu("显示房间信息")]
+        public void ShowRoomInfo()
+        {
+            Debug.Log($"=== 房间信息 ===\n{GetRoomInfo()}");
+        }
+
+        [ContextMenu("重置游戏状态")]
+        public void DebugResetGameState()
+        {
+            ResetGameState();
         }
 
         #endregion

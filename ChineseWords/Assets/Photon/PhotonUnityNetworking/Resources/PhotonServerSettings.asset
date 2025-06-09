@@ -39,6 +39,15 @@ MonoBehaviour:
   - DestroySpaceship
   - Fire
   - RespawnSpaceship
+  - OnAnswerResult_RPC
+  - OnAnswerSubmitted
+  - OnGameProgress_RPC
+  - OnGameStart_RPC
+  - OnHealthUpdate_RPC
+  - OnPlayerAnswerResult_RPC
+  - OnPlayerStateSync_RPC
+  - OnPlayerTurnChanged_RPC
+  - OnQuestionReceived_RPC
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

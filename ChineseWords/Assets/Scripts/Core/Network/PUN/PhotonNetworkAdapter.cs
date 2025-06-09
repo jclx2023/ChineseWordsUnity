@@ -636,52 +636,6 @@ namespace Core.Network
 
         #endregion
 
-        #region NetworkManager桥接方法
-
-        /// <summary>
-        /// 桥接到NetworkManager事件（可选）
-        /// 如果需要让PhotonNetworkAdapter的事件触发NetworkManager的事件
-        /// </summary>
-        public void EnableNetworkManagerBridge()
-        {
-            LogDebug("启用NetworkManager事件桥接");
-
-            OnPhotonConnected += () => {
-                LogDebug("桥接: Photon连接 -> NetworkManager.OnConnected");
-                // 这里可以触发NetworkManager的事件
-                // NetworkManager.OnConnected?.Invoke();
-            };
-
-            OnPhotonDisconnected += () => {
-                LogDebug("桥接: Photon断开 -> NetworkManager.OnDisconnected");
-                // 这里可以触发NetworkManager的事件
-                // NetworkManager.OnDisconnected?.Invoke();
-            };
-
-            OnPhotonPlayerJoined += (playerId) => {
-                LogDebug($"桥接: Photon玩家加入 -> NetworkManager.OnPlayerJoined ({playerId})");
-                // 这里可以触发NetworkManager的事件
-                // NetworkManager.OnPlayerJoined?.Invoke(playerId);
-            };
-
-            OnPhotonPlayerLeft += (playerId) => {
-                LogDebug($"桥接: Photon玩家离开 -> NetworkManager.OnPlayerLeft ({playerId})");
-                // 这里可以触发NetworkManager的事件
-                // NetworkManager.OnPlayerLeft?.Invoke(playerId);
-            };
-        }
-
-        /// <summary>
-        /// 禁用NetworkManager事件桥接
-        /// </summary>
-        public void DisableNetworkManagerBridge()
-        {
-            LogDebug("禁用NetworkManager事件桥接");
-            // 可以在这里移除事件订阅
-        }
-
-        #endregion
-
         #region 调试方法
 
         /// <summary>

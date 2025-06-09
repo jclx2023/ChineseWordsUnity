@@ -1,68 +1,58 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
-using Core.Network;
 
 namespace UI
 {
     /// <summary>
-    /// Ö÷²Ëµ¥¹ÜÀíÆ÷
-    /// Ìá¹©ÓÎÏ·Ä£Ê½Ñ¡Ôñ£ºµ¥»ú¡¢´´½¨·¿¼ä£¨Host£©¡¢¼ÓÈë·¿¼ä£¨Client£©
+    /// ç®€åŒ–çš„ä¸»èœå•ç®¡ç†å™¨ - ä¸“ä¸ºå¤šäººæ¸¸æˆè®¾è®¡
+    /// æµç¨‹ï¼šMainMenu â†’ LobbyScene â†’ RoomScene â†’ NetworkGameScene
     /// </summary>
     public class MainMenuManager : MonoBehaviour
     {
-        [Header("Ö÷²Ëµ¥Ãæ°å")]
+        [Header("ä¸»èœå•UI")]
         [SerializeField] private GameObject mainMenuPanel;
-        [SerializeField] private Button singlePlayerButton;
-        [SerializeField] private Button createRoomButton;
-        [SerializeField] private Button joinRoomButton;
+        [SerializeField] private Button enterLobbyButton;
+        [SerializeField] private Button settingsButton;
+        [SerializeField] private Button creditsButton;
         [SerializeField] private Button exitButton;
 
-        [Header("´´½¨·¿¼äÃæ°å")]
-        [SerializeField] private GameObject createRoomPanel;
-        [SerializeField] private TMP_InputField roomNameInput;
-        [SerializeField] private TMP_InputField hostPortInput;
-        [SerializeField] private TMP_InputField maxPlayersInput;
-        [SerializeField] private TMP_InputField hostPlayerNameInput; // ĞÂÔö£º·¿Ö÷Íæ¼ÒÃû
-        [SerializeField] private Button startHostButton;
-        [SerializeField] private Button backFromCreateButton;
-        [SerializeField] private TMP_Text hostStatusText;
 
-        [Header("¼ÓÈë·¿¼äÃæ°å")]
-        [SerializeField] private GameObject joinRoomPanel;
-        [SerializeField] private TMP_InputField hostIPInput;
-        [SerializeField] private TMP_InputField clientPortInput;
-        [SerializeField] private TMP_InputField playerNameInput;
-        [SerializeField] private Button connectToHostButton;
-        [SerializeField] private Button backFromJoinButton;
-        [SerializeField] private TMP_Text connectionStatusText;
 
-        [Header("³¡¾°Ãû³Æ")]
-        [SerializeField] private string offlineGameScene = "OfflineGameScene";
-        [SerializeField] private string networkGameScene = "NetworkGameScene";
-        [SerializeField] private string roomScene = "RoomScene"; // ĞÂÔö£º·¿¼ä³¡¾°
+        [Header("è®¾ç½®é¢æ¿")]
+        [SerializeField] private GameObject settingsPanel;
+        [SerializeField] private Button backFromSettingsButton;
+        [SerializeField] private Slider volumeSlider;
+        [SerializeField] private Toggle fullscreenToggle;
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("åˆ¶ä½œåå•é¢æ¿")]
+        [SerializeField] private GameObject creditsPanel;
+        [SerializeField] private Button backFromCreditsButton;
+        [SerializeField] private TMP_Text creditsText;
+
+        [Header("åœºæ™¯é…ç½®")]
+        [SerializeField] private string lobbyScene = "LobbyScene";
+
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // ÓÎÏ·Ä£Ê½
+        // æ¸¸æˆæ¨¡å¼æšä¸¾ï¼ˆä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨ï¼‰
         public enum GameMode
         {
-            SinglePlayer,
-            Host,
-            Client
+            SinglePlayer,  // ä¿ç•™ä½†ä¸ä½¿ç”¨
+            Host,          // ä¿ç•™ä½†ä¸ä½¿ç”¨
+            Client,        // ä¿ç•™ä½†ä¸ä½¿ç”¨
+            Multiplayer    // æ–°çš„ç»Ÿä¸€å¤šäººæ¨¡å¼
         }
 
-        public static GameMode SelectedGameMode { get; private set; }
+        // é™æ€å±æ€§ - ä¾›å…¶ä»–åœºæ™¯ä½¿ç”¨
+        public static GameMode SelectedGameMode { get; private set; } = GameMode.Multiplayer;
         public static string PlayerName { get; private set; }
-        public static string RoomName { get; private set; }
-        public static string HostIP { get; private set; }
-        public static ushort Port { get; private set; }
-        public static int MaxPlayers { get; private set; }
-
-        // ÍøÂç×´Ì¬¸ú×Ù
-        private bool isConnecting = false;
+        public static string RoomName { get; private set; }  // ä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨
+        public static string HostIP { get; private set; }    // ä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨
+        public static ushort Port { get; private set; }      // ä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨
+        public static int MaxPlayers { get; private set; }   // ä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨
 
         private void Start()
         {
@@ -72,87 +62,90 @@ namespace UI
         }
 
         /// <summary>
-        /// ³õÊ¼»¯UI×é¼şºÍÊÂ¼ş
+        /// åˆå§‹åŒ–UIç»„ä»¶å’Œäº‹ä»¶
         /// </summary>
         private void InitializeUI()
         {
-            // ÉèÖÃÄ¬ÈÏÖµ
-            if (roomNameInput != null)
-                roomNameInput.text = "ÎÒµÄ·¿¼ä";
-            if (hostPortInput != null)
-                hostPortInput.text = "7777";
-            if (maxPlayersInput != null)
-                maxPlayersInput.text = "4";
-            if (hostPlayerNameInput != null)
-                hostPlayerNameInput.text = "·¿Ö÷" + Random.Range(100, 999);
-            if (hostIPInput != null)
-                hostIPInput.text = "127.0.0.1";
-            if (clientPortInput != null)
-                clientPortInput.text = "7777";
-            if (playerNameInput != null)
-                playerNameInput.text = "Íæ¼Ò" + Random.Range(1000, 9999);
-
-            // °ó¶¨Ö÷²Ëµ¥°´Å¥ÊÂ¼ş
-            if (singlePlayerButton != null)
-                singlePlayerButton.onClick.AddListener(OnSinglePlayerClicked);
-            if (createRoomButton != null)
-                createRoomButton.onClick.AddListener(OnCreateRoomClicked);
-            if (joinRoomButton != null)
-                joinRoomButton.onClick.AddListener(OnJoinRoomClicked);
+            // ç»‘å®šä¸»èœå•æŒ‰é’®äº‹ä»¶
+            if (enterLobbyButton != null)
+                enterLobbyButton.onClick.AddListener(OnEnterLobbyClicked);
+            if (settingsButton != null)
+                settingsButton.onClick.AddListener(OnSettingsClicked);
+            if (creditsButton != null)
+                creditsButton.onClick.AddListener(OnCreditsClicked);
             if (exitButton != null)
                 exitButton.onClick.AddListener(OnExitClicked);
 
-            // °ó¶¨´´½¨·¿¼äÃæ°å°´Å¥ÊÂ¼ş
-            if (startHostButton != null)
-                startHostButton.onClick.AddListener(OnStartHostClicked);
-            if (backFromCreateButton != null)
-                backFromCreateButton.onClick.AddListener(OnBackFromCreateClicked);
+            // ç»‘å®šè®¾ç½®é¢æ¿æŒ‰é’®äº‹ä»¶
+            if (backFromSettingsButton != null)
+                backFromSettingsButton.onClick.AddListener(OnBackFromSettingsClicked);
 
-            // °ó¶¨¼ÓÈë·¿¼äÃæ°å°´Å¥ÊÂ¼ş
-            if (connectToHostButton != null)
-                connectToHostButton.onClick.AddListener(OnConnectToHostClicked);
-            if (backFromJoinButton != null)
-                backFromJoinButton.onClick.AddListener(OnBackFromJoinClicked);
+            // ç»‘å®šåˆ¶ä½œåå•é¢æ¿æŒ‰é’®äº‹ä»¶
+            if (backFromCreditsButton != null)
+                backFromCreditsButton.onClick.AddListener(OnBackFromCreditsClicked);
 
-            // Çå¿Õ×´Ì¬ÎÄ±¾
-            if (hostStatusText != null)
-                hostStatusText.text = "";
-            if (connectionStatusText != null)
-                connectionStatusText.text = "";
+            // åˆå§‹åŒ–è®¾ç½®
+            InitializeSettings();
+
+            LogDebug("MainMenuManager åˆå§‹åŒ–å®Œæˆ");
         }
 
         /// <summary>
-        /// ÏÔÊ¾Ö÷²Ëµ¥
+        /// åˆå§‹åŒ–æ¸¸æˆè®¾ç½®
+        /// </summary>
+        private void InitializeSettings()
+        {
+            // éŸ³é‡è®¾ç½®
+            if (volumeSlider != null)
+            {
+                float savedVolume = PlayerPrefs.GetFloat("MasterVolume", 0.8f);
+                volumeSlider.value = savedVolume;
+                AudioListener.volume = savedVolume;
+                volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
+            }
+
+            // å…¨å±è®¾ç½®
+            if (fullscreenToggle != null)
+            {
+                bool isFullscreen = PlayerPrefs.GetInt("Fullscreen", 1) == 1;
+                fullscreenToggle.isOn = isFullscreen;
+                Screen.fullScreen = isFullscreen;
+                fullscreenToggle.onValueChanged.AddListener(OnFullscreenToggleChanged);
+            }
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºä¸»èœå•
         /// </summary>
         private void ShowMainMenu()
         {
             SetPanelActive(mainMenuPanel, true);
-            SetPanelActive(createRoomPanel, false);
-            SetPanelActive(joinRoomPanel, false);
+            SetPanelActive(settingsPanel, false);
+            SetPanelActive(creditsPanel, false);
         }
 
         /// <summary>
-        /// ÏÔÊ¾´´½¨·¿¼äÃæ°å
+        /// æ˜¾ç¤ºè®¾ç½®é¢æ¿
         /// </summary>
-        private void ShowCreateRoomPanel()
+        private void ShowSettingsPanel()
         {
             SetPanelActive(mainMenuPanel, false);
-            SetPanelActive(createRoomPanel, true);
-            SetPanelActive(joinRoomPanel, false);
+            SetPanelActive(settingsPanel, true);
+            SetPanelActive(creditsPanel, false);
         }
 
         /// <summary>
-        /// ÏÔÊ¾¼ÓÈë·¿¼äÃæ°å
+        /// æ˜¾ç¤ºåˆ¶ä½œåå•é¢æ¿
         /// </summary>
-        private void ShowJoinRoomPanel()
+        private void ShowCreditsPanel()
         {
             SetPanelActive(mainMenuPanel, false);
-            SetPanelActive(createRoomPanel, false);
-            SetPanelActive(joinRoomPanel, true);
+            SetPanelActive(settingsPanel, false);
+            SetPanelActive(creditsPanel, true);
         }
 
         /// <summary>
-        /// °²È«ÉèÖÃÃæ°å¼¤»î×´Ì¬
+        /// å®‰å…¨è®¾ç½®é¢æ¿æ¿€æ´»çŠ¶æ€
         /// </summary>
         private void SetPanelActive(GameObject panel, bool active)
         {
@@ -160,509 +153,258 @@ namespace UI
                 panel.SetActive(active);
         }
 
-        #region Ö÷²Ëµ¥°´Å¥ÊÂ¼ş
+        #region æŒ‰é’®äº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// µ¥»úÓÎÏ·°´Å¥µã»÷
+        /// è¿›å…¥å¤§å…æŒ‰é’®ç‚¹å‡»
         /// </summary>
-        private void OnSinglePlayerClicked()
+        private void OnEnterLobbyClicked()
         {
-            LogDebug("Ñ¡Ôñµ¥»úÓÎÏ·");
-            SelectedGameMode = GameMode.SinglePlayer;
+            // è®¾ç½®æ¸¸æˆæ¨¡å¼ï¼ˆä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨ï¼‰
+            SelectedGameMode = GameMode.Multiplayer;
 
-            // ¼ÓÔØµ¥»úÓÎÏ·³¡¾°
-            LoadScene(offlineGameScene);
+            LogDebug("è¿›å…¥å¤§å…");
+
+            // è¿›å…¥å¤§å…åœºæ™¯
+            LoadLobbyScene();
         }
 
         /// <summary>
-        /// ´´½¨·¿¼ä°´Å¥µã»÷
+        /// è®¾ç½®æŒ‰é’®ç‚¹å‡»
         /// </summary>
-        private void OnCreateRoomClicked()
+        private void OnSettingsClicked()
         {
-            LogDebug("Ñ¡Ôñ´´½¨·¿¼ä");
-            ShowCreateRoomPanel();
+            LogDebug("æ‰“å¼€è®¾ç½®é¢æ¿");
+            ShowSettingsPanel();
         }
 
         /// <summary>
-        /// ¼ÓÈë·¿¼ä°´Å¥µã»÷
+        /// åˆ¶ä½œåå•æŒ‰é’®ç‚¹å‡»
         /// </summary>
-        private void OnJoinRoomClicked()
+        private void OnCreditsClicked()
         {
-            LogDebug("Ñ¡Ôñ¼ÓÈë·¿¼ä");
-            ShowJoinRoomPanel();
+            LogDebug("æ‰“å¼€åˆ¶ä½œåå•");
+            ShowCreditsPanel();
+            LoadCreditsContent();
         }
 
         /// <summary>
-        /// ÍË³öÓÎÏ·°´Å¥µã»÷
+        /// é€€å‡ºæ¸¸æˆæŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnExitClicked()
         {
-            LogDebug("ÍË³öÓÎÏ·");
+            LogDebug("é€€å‡ºæ¸¸æˆ");
 
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
 #else
-                Application.Quit();
+            Application.Quit();
 #endif
         }
 
-        #region ÍøÂçÊÂ¼ş´¦Àí
-
-        #region ´´½¨·¿¼äÃæ°åÊÂ¼ş
-
         /// <summary>
-        /// ¿ªÊ¼×÷ÎªÖ÷»ú°´Å¥µã»÷
+        /// ä»è®¾ç½®è¿”å›æŒ‰é’®ç‚¹å‡»
         /// </summary>
-        private void OnStartHostClicked()
+        private void OnBackFromSettingsClicked()
         {
-            if (isConnecting)
-            {
-                LogDebug("ÕıÔÚÁ¬½ÓÖĞ£¬ÇëÉÔºò");
-                return;
-            }
-
-            // ÑéÖ¤ÊäÈë
-            if (!ValidateHostInputs())
-                return;
-
-            // ÉèÖÃHostÄ£Ê½²ÎÊı
-            SelectedGameMode = GameMode.Host;
-            RoomName = roomNameInput.text.Trim();
-            PlayerName = hostPlayerNameInput?.text.Trim() ?? "·¿Ö÷";
-
-            if (ushort.TryParse(hostPortInput.text, out ushort port))
-                Port = port;
-            else
-                Port = 7777;
-
-            if (int.TryParse(maxPlayersInput.text, out int maxPlayers))
-                MaxPlayers = Mathf.Clamp(maxPlayers, 2, 8);
-            else
-                MaxPlayers = 4;
-
-            LogDebug($"´´½¨·¿¼ä: {RoomName}, Íæ¼Ò: {PlayerName}, ¶Ë¿Ú: {Port}, ×î´óÍæ¼ÒÊı: {MaxPlayers}");
-
-            // ÏÔÊ¾×´Ì¬
-            UpdateHostStatusText("ÕıÔÚÆô¶¯Ö÷»ú...");
-            isConnecting = true;
-
-            // È·±£NetworkManager´æÔÚ
-            if (EnsureNetworkManager())
-            {
-                // ¶©ÔÄHostÆô¶¯ÊÂ¼ş
-                NetworkManager.OnHostStarted += OnHostStartedForRoom;
-
-                // Æô¶¯Host
-                NetworkManager.Instance.StartAsHost(Port, RoomName, MaxPlayers);
-            }
-            else
-            {
-                LogDebug("ÎŞ·¨´´½¨»òÕÒµ½NetworkManager");
-                UpdateHostStatusText("ÍøÂç³õÊ¼»¯Ê§°Ü");
-                isConnecting = false;
-            }
-        }
-
-        /// <summary>
-        /// ´Ó´´½¨·¿¼äÃæ°å·µ»Ø
-        /// </summary>
-        private void OnBackFromCreateClicked()
-        {
-            LogDebug("´Ó´´½¨·¿¼ä·µ»ØÖ÷²Ëµ¥");
-
-            // È¡ÏûÁ¬½Ó×´Ì¬
-            isConnecting = false;
-
-            // ÇåÀíÍøÂçÊÂ¼ş¶©ÔÄ
-            CleanupNetworkEvents();
-
+            LogDebug("ä»è®¾ç½®è¿”å›ä¸»èœå•");
             ShowMainMenu();
         }
 
         /// <summary>
-        /// ÑéÖ¤HostÊäÈë
+        /// ä»åˆ¶ä½œåå•è¿”å›æŒ‰é’®ç‚¹å‡»
         /// </summary>
-        private bool ValidateHostInputs()
+        private void OnBackFromCreditsClicked()
         {
-            if (roomNameInput != null && string.IsNullOrWhiteSpace(roomNameInput.text))
-            {
-                UpdateHostStatusText("ÇëÊäÈë·¿¼äÃû³Æ");
-                return false;
-            }
-
-            if (hostPlayerNameInput != null && string.IsNullOrWhiteSpace(hostPlayerNameInput.text))
-            {
-                UpdateHostStatusText("ÇëÊäÈëÍæ¼ÒÃû³Æ");
-                return false;
-            }
-
-            // ÑéÖ¤¶Ë¿ÚºÅ
-            ushort port = 7777; // Ä¬ÈÏÖµ
-            if (hostPortInput != null && !ushort.TryParse(hostPortInput.text, out port))
-            {
-                UpdateHostStatusText("¶Ë¿ÚºÅ¸ñÊ½´íÎó");
-                return false;
-            }
-
-            if (port < 1024 || port > 65535)
-            {
-                UpdateHostStatusText("¶Ë¿ÚºÅ·¶Î§: 1024-65535");
-                return false;
-            }
-
-            // ÑéÖ¤×î´óÍæ¼ÒÊı
-            int maxPlayers = 4; // Ä¬ÈÏÖµ
-            if (maxPlayersInput != null && !int.TryParse(maxPlayersInput.text, out maxPlayers))
-            {
-                UpdateHostStatusText("×î´óÍæ¼ÒÊı¸ñÊ½´íÎó");
-                return false;
-            }
-
-            if (maxPlayers < 2 || maxPlayers > 8)
-            {
-                UpdateHostStatusText("Íæ¼ÒÊı·¶Î§: 2-8");
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// ¸üĞÂHost×´Ì¬ÎÄ±¾
-        /// </summary>
-        private void UpdateHostStatusText(string text)
-        {
-            if (hostStatusText != null)
-                hostStatusText.text = text;
-        }
-
-        #endregion
-
-        #region ¼ÓÈë·¿¼äÃæ°åÊÂ¼ş
-
-        /// <summary>
-        /// Á¬½Óµ½Ö÷»ú°´Å¥µã»÷
-        /// </summary>
-        private void OnConnectToHostClicked()
-        {
-            if (isConnecting)
-            {
-                LogDebug("ÕıÔÚÁ¬½ÓÖĞ£¬ÇëÉÔºò");
-                return;
-            }
-
-            // ÑéÖ¤ÊäÈë
-            if (!ValidateClientInputs())
-                return;
-
-            // ÉèÖÃClientÄ£Ê½²ÎÊı
-            SelectedGameMode = GameMode.Client;
-            HostIP = hostIPInput.text.Trim();
-            PlayerName = playerNameInput.text.Trim();
-
-            if (ushort.TryParse(clientPortInput.text, out ushort port))
-                Port = port;
-            else
-                Port = 7777;
-
-            LogDebug($"Á¬½Óµ½Ö÷»ú: {HostIP}:{Port}, Íæ¼ÒÃû: {PlayerName}");
-
-            // ÏÔÊ¾×´Ì¬
-            UpdateConnectionStatusText("ÕıÔÚÁ¬½Óµ½Ö÷»ú...");
-            isConnecting = true;
-
-            // È·±£NetworkManager´æÔÚ
-            if (EnsureNetworkManager())
-            {
-                // ¶©ÔÄÁ¬½ÓÊÂ¼ş
-                NetworkManager.OnConnected += OnConnectedForRoom;
-
-                // Á¬½Óµ½Host
-                NetworkManager.Instance.ConnectAsClient(HostIP, Port);
-            }
-            else
-            {
-                LogDebug("ÎŞ·¨´´½¨»òÕÒµ½NetworkManager");
-                UpdateConnectionStatusText("ÍøÂç³õÊ¼»¯Ê§°Ü");
-                isConnecting = false;
-            }
-        }
-
-        /// <summary>
-        /// ´Ó¼ÓÈë·¿¼äÃæ°å·µ»Ø
-        /// </summary>
-        private void OnBackFromJoinClicked()
-        {
-            LogDebug("´Ó¼ÓÈë·¿¼ä·µ»ØÖ÷²Ëµ¥");
-
-            // È¡ÏûÁ¬½Ó×´Ì¬
-            isConnecting = false;
-
-            // ÇåÀíÍøÂçÊÂ¼ş¶©ÔÄ
-            CleanupNetworkEvents();
-
+            LogDebug("ä»åˆ¶ä½œåå•è¿”å›ä¸»èœå•");
             ShowMainMenu();
         }
 
+        #endregion
+
+        #region è¾“å…¥äº‹ä»¶å¤„ç†
+
         /// <summary>
-        /// ÑéÖ¤ClientÊäÈë
+        /// éŸ³é‡æ»‘æ¡å˜æ›´
         /// </summary>
-        private bool ValidateClientInputs()
+        private void OnVolumeChanged(float volume)
         {
-            if (hostIPInput != null && string.IsNullOrWhiteSpace(hostIPInput.text))
-            {
-                UpdateConnectionStatusText("ÇëÊäÈëÖ÷»úIPµØÖ·");
-                return false;
-            }
-
-            if (playerNameInput != null && string.IsNullOrWhiteSpace(playerNameInput.text))
-            {
-                UpdateConnectionStatusText("ÇëÊäÈëÍæ¼ÒÃû³Æ");
-                return false;
-            }
-
-            // ÑéÖ¤¶Ë¿ÚºÅ
-            ushort port = 7777; // Ä¬ÈÏÖµ
-            if (clientPortInput != null && !ushort.TryParse(clientPortInput.text, out port))
-            {
-                UpdateConnectionStatusText("¶Ë¿ÚºÅ¸ñÊ½´íÎó");
-                return false;
-            }
-
-            if (port < 1 || port > 65535)
-            {
-                UpdateConnectionStatusText("¶Ë¿ÚºÅ·¶Î§: 1-65535");
-                return false;
-            }
-
-            return true;
+            AudioListener.volume = volume;
+            PlayerPrefs.SetFloat("MasterVolume", volume);
+            LogDebug($"éŸ³é‡è®¾ç½®ä¸º: {volume:F2}");
         }
 
         /// <summary>
-        /// ¸üĞÂÁ¬½Ó×´Ì¬ÎÄ±¾
+        /// å…¨å±åˆ‡æ¢
         /// </summary>
-        private void UpdateConnectionStatusText(string text)
+        private void OnFullscreenToggleChanged(bool isFullscreen)
         {
-            if (connectionStatusText != null)
-                connectionStatusText.text = text;
+            Screen.fullScreen = isFullscreen;
+            PlayerPrefs.SetInt("Fullscreen", isFullscreen ? 1 : 0);
+            LogDebug($"å…¨å±æ¨¡å¼: {isFullscreen}");
         }
 
         #endregion
 
-        #region ÍøÂç¹ÜÀíÆ÷È·±£
+        #region è¾…åŠ©æ–¹æ³•
+
+
 
         /// <summary>
-        /// È·±£NetworkManagerºÍRoomManager´æÔÚ²¢ÇÒÕıÈ·³õÊ¼»¯
+        /// åŠ è½½å¤§å…åœºæ™¯
         /// </summary>
-        private bool EnsureNetworkManager()
+        private void LoadLobbyScene()
         {
-            // 1. ¼ì²éNetworkManagerÊÇ·ñ´æÔÚ
-            if (NetworkManager.Instance == null)
+            if (string.IsNullOrEmpty(lobbyScene))
             {
-                LogDebug("NetworkManager²»´æÔÚ£¬³¢ÊÔ²éÕÒ»ò´´½¨");
-
-                // ³¢ÊÔÔÚ³¡¾°ÖĞ²éÕÒ
-                NetworkManager existingNetworkManager = FindObjectOfType<NetworkManager>();
-                if (existingNetworkManager == null)
-                {
-                    // ³¢ÊÔ´´½¨NetworkManager
-                    if (!CreateNetworkManager())
-                    {
-                        LogDebug("´´½¨NetworkManagerÊ§°Ü");
-                        return false;
-                    }
-                }
-                else
-                {
-                    LogDebug("ÔÚ³¡¾°ÖĞÕÒµ½ÁËNetworkManager");
-                }
-            }
-
-            // 2. ¼ì²éRoomManagerÊÇ·ñ´æÔÚ
-            if (RoomManager.Instance == null)
-            {
-                LogDebug("RoomManager²»´æÔÚ£¬³¢ÊÔ²éÕÒ»ò´´½¨");
-
-                // ³¢ÊÔÔÚ³¡¾°ÖĞ²éÕÒ
-                RoomManager existingRoomManager = FindObjectOfType<RoomManager>();
-                if (existingRoomManager == null)
-                {
-                    // ³¢ÊÔ´´½¨RoomManager
-                    if (!CreateRoomManager())
-                    {
-                        LogDebug("´´½¨RoomManagerÊ§°Ü");
-                        return false;
-                    }
-                }
-                else
-                {
-                    LogDebug("ÔÚ³¡¾°ÖĞÕÒµ½ÁËRoomManager");
-                }
-            }
-
-            // 3. ÊÖ¶¯³õÊ¼»¯NetworkManager£¨ÖØÒª£ºÕâÑùËü²»»áÔÚÖ÷²Ëµ¥×Ô¶¯Æô¶¯£©
-            if (NetworkManager.Instance != null)
-            {
-                // µ÷ÓÃÊÖ¶¯³õÊ¼»¯·½·¨£¬ÕâÑùNetworkManagerÖªµÀÏÖÔÚÓ¦¸ÃÆô¶¯ÍøÂçÁË
-                NetworkManager.Instance.ManualInitializeNetwork();
-            }
-
-            return NetworkManager.Instance != null && RoomManager.Instance != null;
-        }
-
-        /// <summary>
-        /// ´´½¨NetworkManager
-        /// </summary>
-        private bool CreateNetworkManager()
-        {
-            try
-            {
-                // ´´½¨NetworkManager GameObject
-                GameObject networkManagerObj = new GameObject("NetworkManager");
-                DontDestroyOnLoad(networkManagerObj);
-
-                // Ìí¼ÓNetworkManager×é¼ş
-                NetworkManager networkManager = networkManagerObj.AddComponent<NetworkManager>();
-
-                LogDebug("NetworkManager´´½¨³É¹¦");
-                return true;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"´´½¨NetworkManagerÊ§°Ü: {e.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// ´´½¨RoomManager
-        /// </summary>
-        private bool CreateRoomManager()
-        {
-            try
-            {
-                // ´´½¨RoomManager GameObject
-                GameObject roomManagerObj = new GameObject("RoomManager");
-                DontDestroyOnLoad(roomManagerObj);
-
-                // Ìí¼ÓRoomManager×é¼ş
-                RoomManager roomManager = roomManagerObj.AddComponent<RoomManager>();
-
-                LogDebug("RoomManager´´½¨³É¹¦");
-                return true;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"´´½¨RoomManagerÊ§°Ü: {e.Message}");
-                return false;
-            }
-        }
-
-        #endregion
-
-        /// <summary>
-        /// HostÆô¶¯³É¹¦ºóµÄ´¦Àí
-        /// </summary>
-        private void OnHostStartedForRoom()
-        {
-            LogDebug("HostÆô¶¯³É¹¦£¬´´½¨·¿¼ä²¢ÇĞ»»³¡¾°");
-
-            // È¡Ïû¶©ÔÄ
-            NetworkManager.OnHostStarted -= OnHostStartedForRoom;
-            isConnecting = false;
-
-            // ´´½¨·¿¼ä
-            if (RoomManager.Instance != null)
-            {
-                bool success = RoomManager.Instance.CreateRoom(RoomName, PlayerName);
-                if (success)
-                {
-                    LogDebug("·¿¼ä´´½¨³É¹¦£¬ÇĞ»»µ½·¿¼ä³¡¾°");
-                    // ÇĞ»»µ½·¿¼ä³¡¾°
-                    LoadScene(roomScene);
-                }
-                else
-                {
-                    LogDebug("´´½¨·¿¼äÊ§°Ü");
-                    UpdateHostStatusText("´´½¨·¿¼äÊ§°Ü");
-                }
-            }
-            else
-            {
-                LogDebug("RoomManager ÊµÀı²»´æÔÚ");
-                UpdateHostStatusText("·¿¼ä¹ÜÀíÆ÷Î´ÕÒµ½");
-            }
-        }
-
-        /// <summary>
-        /// ¿Í»§¶ËÁ¬½Ó³É¹¦ºóµÄ´¦Àí
-        /// </summary>
-        private void OnConnectedForRoom()
-        {
-            LogDebug("Á¬½Ó³É¹¦£¬¼ÓÈë·¿¼ä²¢ÇĞ»»³¡¾°");
-
-            // È¡Ïû¶©ÔÄ
-            NetworkManager.OnConnected -= OnConnectedForRoom;
-            isConnecting = false;
-
-            // ¼ÓÈë·¿¼ä
-            if (RoomManager.Instance != null)
-            {
-                bool success = RoomManager.Instance.JoinRoom(PlayerName);
-                if (success)
-                {
-                    LogDebug("¼ÓÈë·¿¼ä³É¹¦£¬ÇĞ»»µ½·¿¼ä³¡¾°");
-                    // ÇĞ»»µ½·¿¼ä³¡¾°
-                    LoadScene(roomScene);
-                }
-                else
-                {
-                    LogDebug("¼ÓÈë·¿¼äÊ§°Ü");
-                    UpdateConnectionStatusText("¼ÓÈë·¿¼äÊ§°Ü");
-                }
-            }
-            else
-            {
-                LogDebug("RoomManager ÊµÀı²»´æÔÚ");
-                UpdateConnectionStatusText("·¿¼ä¹ÜÀíÆ÷Î´ÕÒµ½");
-            }
-        }
-
-        /// <summary>
-        /// ÇåÀíÍøÂçÊÂ¼ş¶©ÔÄ
-        /// </summary>
-        private void CleanupNetworkEvents()
-        {
-            NetworkManager.OnHostStarted -= OnHostStartedForRoom;
-            NetworkManager.OnConnected -= OnConnectedForRoom;
-        }
-
-        #endregion
-
-        /// <summary>
-        /// ¼ÓÔØ³¡¾°
-        /// </summary>
-        private void LoadScene(string sceneName)
-        {
-            if (string.IsNullOrEmpty(sceneName))
-            {
-                Debug.LogError("³¡¾°Ãû³ÆÎª¿Õ");
+                Debug.LogError("å¤§å…åœºæ™¯åç§°æœªè®¾ç½®");
                 return;
             }
 
             try
             {
-                LogDebug($"¼ÓÔØ³¡¾°: {sceneName}");
-                SceneManager.LoadScene(sceneName);
+                LogDebug($"åŠ è½½å¤§å…åœºæ™¯: {lobbyScene}");
+                SceneManager.LoadScene(lobbyScene);
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"¼ÓÔØ³¡¾°Ê§°Ü: {sceneName}, ´íÎó: {e.Message}");
+                Debug.LogError($"åŠ è½½å¤§å…åœºæ™¯å¤±è´¥: {lobbyScene}, é”™è¯¯: {e.Message}");
             }
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// åŠ è½½åˆ¶ä½œåå•å†…å®¹
+        /// </summary>
+        private void LoadCreditsContent()
+        {
+            if (creditsText != null)
+            {
+                string credits = GetCreditsContent();
+                creditsText.text = credits;
+            }
+        }
+
+        /// <summary>
+        /// è·å–åˆ¶ä½œåå•å†…å®¹
+        /// </summary>
+        private string GetCreditsContent()
+        {
+            return @"ã€Šä¸­æ–‡è¯æ±‡é‡å¤§æŒ‘æˆ˜ã€‹
+
+å¼€å‘å›¢é˜Ÿï¼š
+ç­–åˆ’: Alexa
+ç¨‹åº: [å¼€å‘è€…åç§°]
+ç¾æœ¯: [ç¾æœ¯å¸ˆåç§°]
+éŸ³æ•ˆ: [éŸ³æ•ˆå¸ˆåç§°]
+
+ç‰¹åˆ«æ„Ÿè°¢ï¼š
+Unity Technologies
+Photon Network
+æ‰€æœ‰æµ‹è¯•ç©å®¶
+
+æŠ€æœ¯æ”¯æŒï¼š
+Unity 2022.3 LTS
+Photon PUN2
+TextMeshPro
+
+ç‰ˆæœ¬ä¿¡æ¯ï¼š
+ç‰ˆæœ¬å·: " + Application.version + @"
+æ„å»ºæ—¥æœŸ: " + System.DateTime.Now.ToString("yyyy-MM-dd") + @"
+
+Â© 2025 ä¸­æ–‡è¯æ±‡é‡å¤§æŒ‘æˆ˜å¼€å‘å›¢é˜Ÿ
+ä¿ç•™æ‰€æœ‰æƒåˆ©";
+        }
+
+
+
+        #endregion
+
+        #region å…¼å®¹æ€§æ–¹æ³•ï¼ˆä¿ç•™ä»¥é˜²å…¶ä»–è„šæœ¬å¼•ç”¨ï¼‰
+
+        /// <summary>
+        /// å…¼å®¹æ–¹æ³•ï¼šå•æœºæ¸¸æˆï¼ˆå·²åºŸå¼ƒï¼‰
+        /// </summary>
+        [System.Obsolete("å•æœºæ¨¡å¼å·²ç§»é™¤ï¼Œè¯·ä½¿ç”¨è¿›å…¥å¤§å…")]
+        public void OnSinglePlayerClicked()
+        {
+            LogDebug("å•æœºæ¨¡å¼å·²ç§»é™¤ï¼Œè½¬å‘è¿›å…¥å¤§å…");
+            OnEnterLobbyClicked();
+        }
+
+        /// <summary>
+        /// å…¼å®¹æ–¹æ³•ï¼šå¼€å§‹æ¸¸æˆï¼ˆå·²åºŸå¼ƒï¼‰
+        /// </summary>
+        [System.Obsolete("è¯·ä½¿ç”¨è¿›å…¥å¤§å…")]
+        public void OnStartGameClicked()
+        {
+            LogDebug("å¼€å§‹æ¸¸æˆå·²æ”¹ä¸ºè¿›å…¥å¤§å…");
+            OnEnterLobbyClicked();
+        }
+
+        /// <summary>
+        /// å…¼å®¹æ–¹æ³•ï¼šåˆ›å»ºæˆ¿é—´ï¼ˆå·²åºŸå¼ƒï¼‰
+        /// </summary>
+        [System.Obsolete("è¯·åœ¨å¤§å…åœºæ™¯ä¸­åˆ›å»ºæˆ¿é—´")]
+        public void OnCreateRoomClicked()
+        {
+            LogDebug("è¯·åœ¨å¤§å…åœºæ™¯ä¸­åˆ›å»ºæˆ¿é—´");
+            OnEnterLobbyClicked();
+        }
+
+        /// <summary>
+        /// å…¼å®¹æ–¹æ³•ï¼šåŠ å…¥æˆ¿é—´ï¼ˆå·²åºŸå¼ƒï¼‰
+        /// </summary>
+        [System.Obsolete("è¯·åœ¨å¤§å…åœºæ™¯ä¸­åŠ å…¥æˆ¿é—´")]
+        public void OnJoinRoomClicked()
+        {
+            LogDebug("è¯·åœ¨å¤§å…åœºæ™¯ä¸­åŠ å…¥æˆ¿é—´");
+            OnEnterLobbyClicked();
+        }
+
+        #endregion
+
+        #region Unityç”Ÿå‘½å‘¨æœŸ
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus)
+            {
+                // ä¿å­˜å½“å‰è®¾ç½®
+                PlayerPrefs.Save();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            // æ¸…ç†æŒ‰é’®äº‹ä»¶ç›‘å¬
+            if (enterLobbyButton != null)
+                enterLobbyButton.onClick.RemoveAllListeners();
+            if (settingsButton != null)
+                settingsButton.onClick.RemoveAllListeners();
+            if (creditsButton != null)
+                creditsButton.onClick.RemoveAllListeners();
+            if (exitButton != null)
+                exitButton.onClick.RemoveAllListeners();
+            if (backFromSettingsButton != null)
+                backFromSettingsButton.onClick.RemoveAllListeners();
+            if (backFromCreditsButton != null)
+                backFromCreditsButton.onClick.RemoveAllListeners();
+
+            // æ¸…ç†è¾“å…¥äº‹ä»¶ç›‘å¬
+            if (volumeSlider != null)
+                volumeSlider.onValueChanged.RemoveAllListeners();
+            if (fullscreenToggle != null)
+                fullscreenToggle.onValueChanged.RemoveAllListeners();
+
+            LogDebug("MainMenuManager èµ„æºå·²æ¸…ç†");
+        }
+
+        #endregion
+
+        #region è°ƒè¯•æ–¹æ³•
+
+        /// <summary>
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -672,32 +414,37 @@ namespace UI
             }
         }
 
-        /// <summary>
-        /// ÇåÀí×ÊÔ´
-        /// </summary>
-        private void OnDestroy()
+        [ContextMenu("æ˜¾ç¤ºå½“å‰çŠ¶æ€")]
+        public void ShowCurrentStatus()
         {
-            // ÇåÀíÍøÂçÊÂ¼ş¶©ÔÄ
-            CleanupNetworkEvents();
+            string status = "=== MainMenuManager çŠ¶æ€ ===\n";
+            status += $"æ¸¸æˆæ¨¡å¼: {SelectedGameMode}\n";
+            status += $"å¤§å…åœºæ™¯: {lobbyScene}\n";
+            status += $"ä¸»éŸ³é‡: {AudioListener.volume:F2}\n";
+            status += $"å…¨å±æ¨¡å¼: {Screen.fullScreen}\n";
 
-            // ÇåÀíËùÓĞ°´Å¥ÊÂ¼ş¼àÌı
-            if (singlePlayerButton != null)
-                singlePlayerButton.onClick.RemoveAllListeners();
-            if (createRoomButton != null)
-                createRoomButton.onClick.RemoveAllListeners();
-            if (joinRoomButton != null)
-                joinRoomButton.onClick.RemoveAllListeners();
-            if (exitButton != null)
-                exitButton.onClick.RemoveAllListeners();
-            if (startHostButton != null)
-                startHostButton.onClick.RemoveAllListeners();
-            if (backFromCreateButton != null)
-                backFromCreateButton.onClick.RemoveAllListeners();
-            if (connectToHostButton != null)
-                connectToHostButton.onClick.RemoveAllListeners();
-            if (backFromJoinButton != null)
-                backFromJoinButton.onClick.RemoveAllListeners();
+            Debug.Log(status);
         }
+
+        [ContextMenu("é‡ç½®æ¸¸æˆè®¾ç½®")]
+        public void ResetGameSettings()
+        {
+            PlayerPrefs.DeleteKey("MasterVolume");
+            PlayerPrefs.DeleteKey("Fullscreen");
+            PlayerPrefs.Save();
+
+            LogDebug("æ¸¸æˆè®¾ç½®å·²é‡ç½®");
+        }
+
+        [ContextMenu("æµ‹è¯•è¿›å…¥å¤§å…")]
+        public void TestEnterLobby()
+        {
+            if (Application.isPlaying)
+            {
+                OnEnterLobbyClicked();
+            }
+        }
+
+        #endregion
     }
 }
-#endregion
