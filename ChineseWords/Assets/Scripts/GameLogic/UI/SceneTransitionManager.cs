@@ -40,10 +40,6 @@ namespace Core
         /// <summary>
         /// 安全的场景切换方法 - 防止重复切换
         /// </summary>
-        /// <param name="sceneName">目标场景名称</param>
-        /// <param name="delay">切换延迟（秒）</param>
-        /// <param name="caller">调用者名称（用于调试）</param>
-        /// <returns>是否成功开始切换</returns>
         public bool TransitionToScene(string sceneName, float delay = 0f, string caller = "Unknown")
         {
             // 检查是否已在切换中

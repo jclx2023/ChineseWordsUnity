@@ -4534,7 +4534,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1705679476}
-  - component: {fileID: 1705679475}
+  - component: {fileID: 1705679478}
   - component: {fileID: 1705679474}
   - component: {fileID: 1705679477}
   m_Layer: 0
@@ -4559,21 +4559,6 @@ MonoBehaviour:
   autoConnectOnStart: 1
   roomListRefreshInterval: 5
   connectionTimeout: 10
-  enableDebugLogs: 1
---- !u!114 &1705679475
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1705679473}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 54e7e190bd12f7d4e8267d84f5f53eb0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  mainMenuSceneName: MainMenuScene
-  roomSceneName: RoomScene
   enableDebugLogs: 1
 --- !u!4 &1705679476
 Transform:
@@ -4603,6 +4588,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gameVersion: 0.4.2.1
+  enableDebugLogs: 1
+--- !u!114 &1705679478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1705679473}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54e7e190bd12f7d4e8267d84f5f53eb0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mainMenuSceneName: MainMenuScene
+  roomSceneName: RoomScene
+  roomJoinTransitionDelay: 1
+  persistPlayerData: 1
+  autoSavePlayerPrefs: 1
   enableDebugLogs: 1
 --- !u!1 &1728284884
 GameObject:

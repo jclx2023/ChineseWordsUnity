@@ -288,7 +288,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0.00053065014}
+  m_AnchoredPosition: {x: 0, y: 0.00023764558}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &31117885
@@ -495,7 +495,6 @@ GameObject:
   m_Component:
   - component: {fileID: 119549038}
   - component: {fileID: 119549037}
-  - component: {fileID: 119549036}
   m_Layer: 0
   m_Name: ConfigSystem
   m_TagString: Untagged
@@ -503,29 +502,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &119549036
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 119549035}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: de56a3f60d0faa64d99d371f07e5d7e5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  configUIKey: 282
-  debugInfoKey: 283
-  playerListKey: 284
-  validScenes:
-  - RoomScene
-  - MainMenuScene
-  - DontDestroyOnLoad
-  onlyInValidScenes: 1
-  requireHostForConfig: 1
-  showInputHints: 1
-  enableDebugLogs: 1
 --- !u!114 &119549037
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -926,38 +902,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 155778228}
   m_CullTransparentMesh: 1
---- !u!1 &235643689
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 235643690}
-  m_Layer: 0
-  m_Name: Debug
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &235643690
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 235643689}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1438.5475, y: 524.556, z: 368894.97}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1103260020}
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &284344094
 GameObject:
   m_ObjectHideFlags: 0
@@ -2023,53 +1967,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1061369647}
   m_CullTransparentMesh: 1
---- !u!1 &1103260019
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1103260020}
-  - component: {fileID: 1103260021}
-  m_Layer: 0
-  m_Name: HostID
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1103260020
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1103260019}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 235643690}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1103260021
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1103260019}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: df1098fd9daa16245a3af5385be3bc79, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  autoValidateOnStart: 0
-  autoValidateInterval: 5
-  enableDebugLogs: 1
 --- !u!1 &1184340808
 GameObject:
   m_ObjectHideFlags: 0
@@ -2819,6 +2716,9 @@ MonoBehaviour:
   loadingText: {fileID: 0}
   errorPanel: {fileID: 1188430539}
   errorText: {fileID: 0}
+  initializationTimeout: 10
+  dataRecoveryTimeout: 5
+  allowDirectRoomStart: 0
   enableDebugLogs: 1
   autoFindUIController: 1
 --- !u!1 &1671159642
@@ -3576,6 +3476,5 @@ SceneRoots:
   - {fileID: 1555618100}
   - {fileID: 469692676}
   - {fileID: 1443983244}
-  - {fileID: 235643690}
   - {fileID: 119549038}
   - {fileID: 1671159646}

@@ -1,108 +1,604 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
+using System.Collections;
 using Core.Network;
 using Core;
+using Lobby.Core;
+using Lobby.Data;
 using Photon.Pun;
 using Photon.Realtime;
 
 namespace UI
 {
     /// <summary>
-    /// ·¿¼ä³¡¾°¿ØÖÆÆ÷ - ÍêÈ«ÊÊÅäPhoton°æ±¾
-    /// ×¨×¢ÓÚ³¡¾°¿ØÖÆºÍÒµÎñÂß¼­£¬UIË¢ĞÂÎ¯ÍĞ¸øRoomUIController
-    /// ÍêÈ«»ùÓÚÄãÏÖÓĞµÄRoomManager¡¢SceneTransitionManager¼Ü¹¹
+    /// æˆ¿é—´åœºæ™¯æ§åˆ¶å™¨ - å®Œå–„ç‰ˆ
+    /// é›†æˆåœºæ™¯ç®¡ç†ã€æ•°æ®è·å–ã€UIæ§åˆ¶çš„å®Œæ•´åŠŸèƒ½
+    /// é€‚é…LobbySceneManageræ•°æ®ä¼ é€’å’Œå®Œæ•´çš„åˆå§‹åŒ–æµç¨‹
     /// </summary>
-    public class RoomSceneController : MonoBehaviourPun, IInRoomCallbacks
+    public class RoomSceneController : MonoBehaviourPun, IInRoomCallbacks, IConnectionCallbacks
     {
-        [Header("UI¿ØÖÆÆ÷ÒıÓÃ")]
+        [Header("UIæ§åˆ¶å™¨å¼•ç”¨")]
         [SerializeField] private RoomUIController roomUIController;
 
-        [Header("¿ØÖÆ°´Å¥")]
+        [Header("æ§åˆ¶æŒ‰é’®")]
         [SerializeField] private Button readyButton;
         [SerializeField] private Button startGameButton;
         [SerializeField] private Button leaveRoomButton;
         [SerializeField] private Button refreshButton;
 
-        [Header("×´Ì¬ÏÔÊ¾")]
+        [Header("çŠ¶æ€æ˜¾ç¤º")]
         [SerializeField] private GameObject loadingPanel;
         [SerializeField] private TMP_Text loadingText;
         [SerializeField] private GameObject errorPanel;
         [SerializeField] private TMP_Text errorText;
 
-        [Header("ÉèÖÃ")]
+        [Header("åˆå§‹åŒ–è®¾ç½®")]
+        [SerializeField] private float initializationTimeout = 10f;
+        [SerializeField] private float dataRecoveryTimeout = 5f;
+        [SerializeField] private bool allowDirectRoomStart = false; // å…è®¸ç›´æ¥å¯åŠ¨RoomSceneï¼ˆè°ƒè¯•ç”¨ï¼‰
+
+        [Header("è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
         [SerializeField] private bool autoFindUIController = true;
 
-        // ×´Ì¬¹ÜÀí
+        // æ•°æ®çŠ¶æ€
+        private LobbyPlayerData currentPlayerData;
+        private LobbyRoomData currentRoomData;
+        private bool hasValidData = false;
+
+        // çŠ¶æ€ç®¡ç†
         private bool isInitialized = false;
+        private bool isInitializing = false;
         private bool hasHandledGameStart = false;
         private bool isLeavingRoom = false;
+        private bool hasSubscribedToEvents = false;
+
+        // äº‹ä»¶
+        public static System.Action OnRoomSceneInitialized;
+        public static System.Action<string> OnRoomSceneError;
+
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Start()
         {
-            InitializeRoomScene();
+            StartCoroutine(InitializeRoomSceneCoroutine());
         }
 
         private void OnEnable()
         {
-            // ×¢²áPhoton»Øµ÷
+            // æ³¨å†ŒPhotonå›è°ƒ
             PhotonNetwork.AddCallbackTarget(this);
         }
 
         private void OnDisable()
         {
-            // È¡Ïû×¢²áPhoton»Øµ÷
+            // å–æ¶ˆæ³¨å†ŒPhotonå›è°ƒ
             PhotonNetwork.RemoveCallbackTarget(this);
         }
 
-        /// <summary>
-        /// ³õÊ¼»¯·¿¼ä³¡¾°
-        /// </summary>
-        private void InitializeRoomScene()
+        private void OnDestroy()
         {
-            LogDebug("³õÊ¼»¯·¿¼ä³¡¾°");
+            // å–æ¶ˆæ‰€æœ‰å»¶è¿Ÿè°ƒç”¨
+            CancelInvoke();
 
-            // ÏÔÊ¾¼ÓÔØ½çÃæ
-            ShowLoadingPanel("ÕıÔÚ¼ÓÔØ·¿¼äĞÅÏ¢...");
+            // å–æ¶ˆäº‹ä»¶è®¢é˜…
+            UnsubscribeFromRoomEvents();
 
-            // ²éÕÒUI¿ØÖÆÆ÷
-            if (autoFindUIController && roomUIController == null)
+            LogDebug("æˆ¿é—´åœºæ™¯æ§åˆ¶å™¨é”€æ¯");
+        }
+
+        #endregion
+
+        #region å®Œæ•´çš„åˆå§‹åŒ–æµç¨‹
+
+        /// <summary>
+        /// æˆ¿é—´åœºæ™¯åˆå§‹åŒ–åç¨‹ - å®Œæ•´ç‰ˆ
+        /// </summary>
+        private IEnumerator InitializeRoomSceneCoroutine()
+        {
+            if (isInitializing)
             {
-                roomUIController = FindObjectOfType<RoomUIController>();
-                if (roomUIController != null)
-                {
-                    LogDebug("×Ô¶¯ÕÒµ½RoomUIController");
-                }
-                else
-                {
-                    LogDebug("¾¯¸æ: Î´ÕÒµ½RoomUIController£¬²¿·ÖUI¹¦ÄÜ¿ÉÄÜ²»¿ÉÓÃ");
-                }
+                LogDebug("å·²åœ¨åˆå§‹åŒ–ä¸­ï¼Œè·³è¿‡é‡å¤åˆå§‹åŒ–");
+                yield break;
             }
 
-            // °ó¶¨UIÊÂ¼ş
-            BindUIEvents();
+            isInitializing = true;
+            LogDebug("=== å¼€å§‹RoomSceneå®Œæ•´åˆå§‹åŒ– ===");
 
-            // ¶©ÔÄ·¿¼äÊÂ¼ş
+            // æ˜¾ç¤ºåŠ è½½ç•Œé¢
+            ShowLoadingPanel("æ­£åœ¨åˆå§‹åŒ–æˆ¿é—´...");
+
+            // æ­¥éª¤1: éªŒè¯Photonè¿æ¥çŠ¶æ€
+            yield return StartCoroutine(ValidatePhotonConnectionCoroutine());
+
+            // æ­¥éª¤2: è·å–åœºæ™¯æ•°æ®
+            yield return StartCoroutine(AcquireSceneDataCoroutine());
+
+            // æ­¥éª¤3: ç­‰å¾…æ ¸å¿ƒç»„ä»¶å‡†å¤‡å°±ç»ª
+            yield return StartCoroutine(WaitForCoreComponentsCoroutine());
+
+            // æ­¥éª¤4: åˆå§‹åŒ–UIç»„ä»¶
+            InitializeUIComponents();
+
+            // æ­¥éª¤5: è®¢é˜…äº‹ä»¶
             SubscribeToRoomEvents();
 
-            // ÑéÖ¤×´Ì¬
-            if (!ValidateRoomStatus())
+            // æ­¥éª¤6: ç¡®ä¿SceneTransitionManagerå­˜åœ¨
+            EnsureSceneTransitionManager();
+
+            // æ­¥éª¤7: æœ€ç»ˆéªŒè¯å’Œå®Œæˆ
+            if (ValidateFinalState())
             {
-                ShowError("·¿¼ä×´Ì¬Òì³££¬Çë·µ»Ø´óÌüÖØÊÔ");
-                return;
+                isInitialized = true;
+                HideLoadingPanel();
+                LogDebug("=== RoomSceneåˆå§‹åŒ–å®Œæˆ ===");
+                OnRoomSceneInitialized?.Invoke();
+            }
+            else
+            {
+                Debug.LogError("[RoomSceneController] åˆå§‹åŒ–æœ€ç»ˆéªŒè¯å¤±è´¥");
+                HandleInitializationFailure("æœ€ç»ˆçŠ¶æ€éªŒè¯å¤±è´¥");
             }
 
-            // ±ê¼ÇÎªÒÑ³õÊ¼»¯
-            isInitialized = true;
-            HideLoadingPanel();
-
-            LogDebug("·¿¼ä³¡¾°³õÊ¼»¯Íê³É");
+            isInitializing = false;
         }
 
         /// <summary>
-        /// °ó¶¨UIÊÂ¼ş
+        /// éªŒè¯Photonè¿æ¥çŠ¶æ€åç¨‹
+        /// </summary>
+        private IEnumerator ValidatePhotonConnectionCoroutine()
+        {
+            LogDebug("éªŒè¯Photonè¿æ¥çŠ¶æ€...");
+            ShowLoadingPanel("éªŒè¯ç½‘ç»œè¿æ¥...");
+
+            float elapsed = 0f;
+            while (elapsed < initializationTimeout)
+            {
+                if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom)
+                {
+                    LogDebug($"âœ“ Photonè¿æ¥æ­£å¸¸ - æˆ¿é—´: {PhotonNetwork.CurrentRoom.Name}");
+                    yield break;
+                }
+
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
+            }
+
+            // Photonè¿æ¥éªŒè¯å¤±è´¥
+            if (!allowDirectRoomStart)
+            {
+                Debug.LogError("[RoomSceneController] Photonè¿æ¥éªŒè¯å¤±è´¥ - ä¸åœ¨æˆ¿é—´ä¸­");
+                HandleInitializationFailure("ç½‘ç»œè¿æ¥éªŒè¯å¤±è´¥");
+                yield break;
+            }
+            else
+            {
+                LogDebug("âš  Photonè¿æ¥å¤±è´¥ï¼Œä½†å…è®¸ç›´æ¥å¯åŠ¨ï¼ˆè°ƒè¯•æ¨¡å¼ï¼‰");
+            }
+        }
+
+        /// <summary>
+        /// è·å–åœºæ™¯æ•°æ®åç¨‹
+        /// </summary>
+        private IEnumerator AcquireSceneDataCoroutine()
+        {
+            LogDebug("è·å–åœºæ™¯æ•°æ®...");
+            ShowLoadingPanel("è·å–æˆ¿é—´æ•°æ®...");
+
+            // å°è¯•ä»LobbySceneManagerè·å–æ•°æ®
+            if (TryGetDataFromLobbyScene())
+            {
+                hasValidData = true;
+                LogDebug("âœ“ ä»LobbySceneManagerè·å–æ•°æ®æˆåŠŸ");
+                yield break;
+            }
+
+            // å°è¯•ä»Photonæ¢å¤æ•°æ®
+            if (PhotonNetwork.InRoom && TryRecoverDataFromPhoton())
+            {
+                hasValidData = true;
+                LogDebug("âœ“ ä»Photonæ¢å¤æ•°æ®æˆåŠŸ");
+                yield break;
+            }
+
+            // ç­‰å¾…ä¸€æ®µæ—¶é—´çœ‹æ˜¯å¦èƒ½æ¢å¤æ•°æ®
+            LogDebug("ç­‰å¾…æ•°æ®æ¢å¤...");
+            ShowLoadingPanel("å°è¯•æ¢å¤æ•°æ®...");
+
+            float elapsed = 0f;
+            while (elapsed < dataRecoveryTimeout && !hasValidData)
+            {
+                if (TryGetDataFromLobbyScene() || (PhotonNetwork.InRoom && TryRecoverDataFromPhoton()))
+                {
+                    hasValidData = true;
+                    LogDebug("âœ“ å»¶è¿Ÿæ•°æ®æ¢å¤æˆåŠŸ");
+                    yield break;
+                }
+
+                yield return new WaitForSeconds(0.2f);
+                elapsed += 0.2f;
+            }
+
+            // æ•°æ®è·å–å¤±è´¥å¤„ç†
+            if (!hasValidData)
+            {
+                if (allowDirectRoomStart)
+                {
+                    CreateFallbackData();
+                    hasValidData = true;
+                    LogDebug("âš  ä½¿ç”¨å¤‡ç”¨æ•°æ®ï¼ˆè°ƒè¯•æ¨¡å¼ï¼‰");
+                }
+                else
+                {
+                    Debug.LogError("[RoomSceneController] æ— æ³•è·å–åœºæ™¯æ•°æ®");
+                    HandleInitializationFailure("æ•°æ®è·å–å¤±è´¥");
+                }
+            }
+        }
+
+        /// <summary>
+        /// ç­‰å¾…æ ¸å¿ƒç»„ä»¶å‡†å¤‡å°±ç»ªåç¨‹
+        /// </summary>
+        private IEnumerator WaitForCoreComponentsCoroutine()
+        {
+            LogDebug("ç­‰å¾…æ ¸å¿ƒç»„ä»¶å‡†å¤‡å°±ç»ª...");
+            ShowLoadingPanel("ç­‰å¾…æˆ¿é—´ç®¡ç†å™¨...");
+
+            // ç­‰å¾…RoomManager
+            float elapsed = 0f;
+            while (RoomManager.Instance == null && elapsed < initializationTimeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
+            }
+
+            if (RoomManager.Instance == null)
+            {
+                Debug.LogError("[RoomSceneController] RoomManageræœªæ‰¾åˆ°");
+                HandleInitializationFailure("æˆ¿é—´ç®¡ç†å™¨æœªæ‰¾åˆ°");
+                yield break;
+            }
+
+            LogDebug("âœ“ RoomManagerå·²æ‰¾åˆ°");
+
+            // ç­‰å¾…RoomManageråˆå§‹åŒ–
+            ShowLoadingPanel("ç­‰å¾…æˆ¿é—´ç®¡ç†å™¨åˆå§‹åŒ–...");
+            elapsed = 0f;
+            while (!RoomManager.Instance.IsInitialized && elapsed < initializationTimeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
+            }
+
+            if (!RoomManager.Instance.IsInitialized)
+            {
+                Debug.LogError("[RoomSceneController] RoomManageråˆå§‹åŒ–è¶…æ—¶");
+                HandleInitializationFailure("æˆ¿é—´ç®¡ç†å™¨åˆå§‹åŒ–è¶…æ—¶");
+                yield break;
+            }
+
+            LogDebug("âœ“ RoomManageråˆå§‹åŒ–å®Œæˆ");
+
+            // æŸ¥æ‰¾RoomUIController
+            if (autoFindUIController && roomUIController == null)
+            {
+                roomUIController = FindObjectOfType<RoomUIController>();
+            }
+
+            if (roomUIController != null)
+            {
+                LogDebug("âœ“ RoomUIControllerå·²æ‰¾åˆ°");
+            }
+            else
+            {
+                Debug.LogWarning("[RoomSceneController] RoomUIControlleræœªæ‰¾åˆ°ï¼ŒUIåŠŸèƒ½å¯èƒ½å—é™");
+            }
+        }
+
+        /// <summary>
+        /// åˆå§‹åŒ–UIç»„ä»¶
+        /// </summary>
+        private void InitializeUIComponents()
+        {
+            LogDebug("åˆå§‹åŒ–UIç»„ä»¶...");
+
+            // ç»‘å®šUIäº‹ä»¶
+            BindUIEvents();
+
+            // å‘RoomUIControlleræä¾›æ•°æ®ï¼ˆå¦‚æœå­˜åœ¨ï¼‰
+            if (roomUIController != null && hasValidData)
+            {
+                LogDebug("UIæ§åˆ¶å™¨å°†é€šè¿‡äº‹ä»¶ç³»ç»Ÿè‡ªåŠ¨æ›´æ–°");
+            }
+
+            LogDebug("âœ“ UIç»„ä»¶åˆå§‹åŒ–å®Œæˆ");
+        }
+
+        #endregion
+
+        #region æ•°æ®è·å–å’Œæ¢å¤
+
+        /// <summary>
+        /// å°è¯•ä»LobbySceneManagerè·å–æ•°æ®
+        /// </summary>
+        private bool TryGetDataFromLobbyScene()
+        {
+            if (LobbySceneManager.Instance == null)
+            {
+                LogDebug("LobbySceneManagerå®ä¾‹ä¸å­˜åœ¨");
+                return false;
+            }
+
+            // è·å–ç©å®¶æ•°æ®
+            currentPlayerData = LobbySceneManager.Instance.GetCurrentPlayerData();
+            if (currentPlayerData == null)
+            {
+                LogDebug("æ— æ³•ä»LobbySceneManagerè·å–ç©å®¶æ•°æ®");
+                return false;
+            }
+
+            // è·å–æˆ¿é—´æ•°æ®
+            currentRoomData = LobbySceneManager.Instance.GetLastJoinedRoomData();
+            if (currentRoomData == null)
+            {
+                LogDebug("æ— æ³•ä»LobbySceneManagerè·å–æˆ¿é—´æ•°æ®");
+                return false;
+            }
+
+            LogDebug($"ä»LobbySceneManagerè·å–æ•°æ® - ç©å®¶: {currentPlayerData.playerName}, æˆ¿é—´: {currentRoomData.roomName}");
+            return true;
+        }
+
+        /// <summary>
+        /// å°è¯•ä»Photonæ¢å¤æ•°æ®
+        /// </summary>
+        private bool TryRecoverDataFromPhoton()
+        {
+            if (!PhotonNetwork.InRoom)
+            {
+                LogDebug("ä¸åœ¨Photonæˆ¿é—´ä¸­ï¼Œæ— æ³•æ¢å¤æ•°æ®");
+                return false;
+            }
+
+            LogDebug("å°è¯•ä»Photonæ¢å¤æ•°æ®...");
+
+            // æ¢å¤æˆ¿é—´æ•°æ®
+            var photonRoom = PhotonNetwork.CurrentRoom;
+            currentRoomData = LobbyRoomData.FromPhotonRoom(photonRoom);
+            if (currentRoomData == null)
+            {
+                LogDebug("ä»Photonæˆ¿é—´æ¢å¤æ•°æ®å¤±è´¥");
+                return false;
+            }
+
+            // æ¢å¤ç©å®¶æ•°æ®
+            var localPlayer = PhotonNetwork.LocalPlayer;
+            currentPlayerData = new LobbyPlayerData();
+
+            if (localPlayer.CustomProperties.TryGetValue("playerName", out object playerName))
+            {
+                currentPlayerData.playerName = (string)playerName;
+            }
+            else
+            {
+                currentPlayerData.playerName = localPlayer.NickName ?? "æ¢å¤çš„ç©å®¶";
+            }
+
+            if (localPlayer.CustomProperties.TryGetValue("playerId", out object playerId))
+            {
+                currentPlayerData.playerId = (string)playerId;
+            }
+            else
+            {
+                currentPlayerData.playerId = System.Guid.NewGuid().ToString();
+            }
+
+            LogDebug($"ä»Photonæ¢å¤æ•°æ® - ç©å®¶: {currentPlayerData.playerName}, æˆ¿é—´: {currentRoomData.roomName}");
+            return true;
+        }
+
+        /// <summary>
+        /// åˆ›å»ºå¤‡ç”¨æ•°æ®ï¼ˆè°ƒè¯•æ¨¡å¼ï¼‰
+        /// </summary>
+        private void CreateFallbackData()
+        {
+            LogDebug("åˆ›å»ºå¤‡ç”¨æ•°æ®ï¼ˆè°ƒè¯•æ¨¡å¼ï¼‰");
+
+            // åˆ›å»ºå¤‡ç”¨ç©å®¶æ•°æ®
+            currentPlayerData = new LobbyPlayerData();
+            currentPlayerData.playerName = "è°ƒè¯•ç©å®¶";
+            currentPlayerData.playerId = System.Guid.NewGuid().ToString();
+
+            // åˆ›å»ºå¤‡ç”¨æˆ¿é—´æ•°æ®
+            currentRoomData = new LobbyRoomData();
+            currentRoomData.roomName = "è°ƒè¯•æˆ¿é—´";
+            currentRoomData.roomId = System.Guid.NewGuid().ToString();
+            currentRoomData.hostPlayerName = currentPlayerData.playerName;
+            currentRoomData.maxPlayers = 4;
+            currentRoomData.currentPlayers = 1;
+            currentRoomData.Initialize();
+
+            LogDebug("å¤‡ç”¨æ•°æ®åˆ›å»ºå®Œæˆ");
+        }
+
+        #endregion
+
+        #region éªŒè¯å’Œè¾…åŠ©æ–¹æ³•
+
+        /// <summary>
+        /// éªŒè¯æˆ¿é—´çŠ¶æ€ - å®Œå–„ç‰ˆ
+        /// </summary>
+        private bool ValidateRoomStatus()
+        {
+            // éªŒè¯PhotonçŠ¶æ€ï¼ˆå¦‚æœä¸æ˜¯è°ƒè¯•æ¨¡å¼ï¼‰
+            if (!allowDirectRoomStart)
+            {
+                if (!PhotonNetwork.InRoom)
+                {
+                    LogDebug("æœªåœ¨Photonæˆ¿é—´ä¸­");
+                    return false;
+                }
+            }
+
+            // éªŒè¯RoomManager
+            if (RoomManager.Instance == null)
+            {
+                LogDebug("RoomManagerå®ä¾‹ä¸å­˜åœ¨");
+                return false;
+            }
+
+            if (!RoomManager.Instance.IsInitialized)
+            {
+                LogDebug("RoomManageræœªåˆå§‹åŒ–");
+                return false;
+            }
+
+            // éªŒè¯æ•°æ®
+            if (!hasValidData)
+            {
+                LogDebug("ç¼ºå°‘æœ‰æ•ˆçš„åœºæ™¯æ•°æ®");
+                return false;
+            }
+
+            LogDebug($"æˆ¿é—´çŠ¶æ€éªŒè¯é€šè¿‡ - æˆ¿é—´: {RoomManager.Instance.RoomName}, ç©å®¶æ•°: {RoomManager.Instance.PlayerCount}");
+            return true;
+        }
+
+        /// <summary>
+        /// éªŒè¯æœ€ç»ˆçŠ¶æ€
+        /// </summary>
+        private bool ValidateFinalState()
+        {
+            bool isValid = true;
+
+            // éªŒè¯æ•°æ®çŠ¶æ€
+            if (!hasValidData)
+            {
+                Debug.LogError("[RoomSceneController] æ•°æ®çŠ¶æ€æ— æ•ˆ");
+                isValid = false;
+            }
+
+            // éªŒè¯æ ¸å¿ƒç»„ä»¶
+            if (RoomManager.Instance == null || !RoomManager.Instance.IsInitialized)
+            {
+                Debug.LogError("[RoomSceneController] RoomManagerçŠ¶æ€æ— æ•ˆ");
+                isValid = false;
+            }
+
+            // éªŒè¯PhotonçŠ¶æ€ï¼ˆå¦‚æœä¸æ˜¯è°ƒè¯•æ¨¡å¼ï¼‰
+            if (!allowDirectRoomStart && (!PhotonNetwork.IsConnected || !PhotonNetwork.InRoom))
+            {
+                Debug.LogError("[RoomSceneController] Photonè¿æ¥çŠ¶æ€æ— æ•ˆ");
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        /// <summary>
+        /// ç¡®ä¿SceneTransitionManagerå­˜åœ¨
+        /// </summary>
+        private void EnsureSceneTransitionManager()
+        {
+            if (SceneTransitionManager.Instance == null)
+            {
+                LogDebug("SceneTransitionManagerä¸å­˜åœ¨ï¼Œå°è¯•åˆ›å»º");
+
+                // å°è¯•ä»ResourcesåŠ è½½
+                GameObject stmPrefab = Resources.Load<GameObject>("SceneTransitionManager");
+                if (stmPrefab != null)
+                {
+                    Instantiate(stmPrefab);
+                    LogDebug("ä»Resourcesåˆ›å»ºäº†SceneTransitionManager");
+                }
+                else
+                {
+                    // æ‰‹åŠ¨åˆ›å»º
+                    GameObject stmObject = new GameObject("SceneTransitionManager");
+                    stmObject.AddComponent<SceneTransitionManager>();
+                    LogDebug("æ‰‹åŠ¨åˆ›å»ºäº†SceneTransitionManager");
+                }
+            }
+            else
+            {
+                LogDebug("âœ“ SceneTransitionManagerå·²å­˜åœ¨");
+            }
+        }
+
+        /// <summary>
+        /// å¤„ç†åˆå§‹åŒ–å¤±è´¥
+        /// </summary>
+        private void HandleInitializationFailure(string reason)
+        {
+            Debug.LogError($"[RoomSceneController] åˆå§‹åŒ–å¤±è´¥: {reason}");
+
+            ShowError($"æˆ¿é—´åˆå§‹åŒ–å¤±è´¥: {reason}");
+            OnRoomSceneError?.Invoke(reason);
+
+            // å»¶è¿Ÿè¿”å›å¤§å…
+            Invoke(nameof(ReturnToLobbyDelayed), 3f);
+        }
+
+        #endregion
+
+        #region UIæ˜¾ç¤ºæ§åˆ¶
+
+        /// <summary>
+        /// æ˜¾ç¤ºåŠ è½½é¢æ¿
+        /// </summary>
+        private void ShowLoadingPanel(string message)
+        {
+            if (loadingPanel != null)
+            {
+                loadingPanel.SetActive(true);
+                if (loadingText != null)
+                    loadingText.text = message;
+            }
+        }
+
+        /// <summary>
+        /// éšè—åŠ è½½é¢æ¿
+        /// </summary>
+        private void HideLoadingPanel()
+        {
+            if (loadingPanel != null)
+                loadingPanel.SetActive(false);
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºé”™è¯¯ä¿¡æ¯
+        /// </summary>
+        private void ShowError(string message)
+        {
+            LogDebug($"æ˜¾ç¤ºé”™è¯¯: {message}");
+
+            HideLoadingPanel();
+
+            if (errorPanel != null)
+            {
+                errorPanel.SetActive(true);
+                if (errorText != null)
+                    errorText.text = message;
+            }
+        }
+
+        /// <summary>
+        /// éšè—é”™è¯¯é¢æ¿
+        /// </summary>
+        private void HideErrorPanel()
+        {
+            if (errorPanel != null)
+                errorPanel.SetActive(false);
+        }
+
+        #endregion
+
+        #region äº‹ä»¶ç®¡ç†
+
+        /// <summary>
+        /// ç»‘å®šUIäº‹ä»¶
         /// </summary>
         private void BindUIEvents()
         {
@@ -117,228 +613,165 @@ namespace UI
 
             if (refreshButton != null)
                 refreshButton.onClick.AddListener(OnRefreshButtonClicked);
+
+            LogDebug("âœ“ UIäº‹ä»¶ç»‘å®šå®Œæˆ");
         }
 
         /// <summary>
-        /// ¶©ÔÄ·¿¼äÊÂ¼ş - »ùÓÚÄãµÄRoomManager¼Ü¹¹
+        /// è®¢é˜…æˆ¿é—´äº‹ä»¶ - å®Œå–„ç‰ˆ
         /// </summary>
         private void SubscribeToRoomEvents()
         {
-            // ¶©ÔÄRoomManagerÊÂ¼ş£¨³¡¾°¿ØÖÆÏà¹Ø£©
+            if (hasSubscribedToEvents)
+            {
+                LogDebug("å·²è®¢é˜…äº‹ä»¶ï¼Œè·³è¿‡é‡å¤è®¢é˜…");
+                return;
+            }
+
+            LogDebug("è®¢é˜…æˆ¿é—´å’Œåœºæ™¯äº‹ä»¶...");
+
+            // è®¢é˜…RoomManageräº‹ä»¶ï¼ˆåœºæ™¯æ§åˆ¶ç›¸å…³ï¼‰
             RoomManager.OnGameStarting += OnGameStarting;
             RoomManager.OnReturnToLobby += OnReturnToLobby;
 
-            // ¶©ÔÄSceneTransitionManagerÊÂ¼ş
+            // è®¢é˜…SceneTransitionManageräº‹ä»¶
             SceneTransitionManager.OnSceneTransitionStarted += OnSceneTransitionStarted;
 
-            LogDebug("ÒÑ¶©ÔÄ·¿¼äºÍ³¡¾°ÇĞ»»ÊÂ¼ş");
+            hasSubscribedToEvents = true;
+            LogDebug("âœ“ äº‹ä»¶è®¢é˜…å®Œæˆ");
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄ·¿¼äÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…æˆ¿é—´äº‹ä»¶
         /// </summary>
         private void UnsubscribeFromRoomEvents()
         {
+            if (!hasSubscribedToEvents) return;
+
+            LogDebug("å–æ¶ˆè®¢é˜…äº‹ä»¶...");
+
             RoomManager.OnGameStarting -= OnGameStarting;
             RoomManager.OnReturnToLobby -= OnReturnToLobby;
             SceneTransitionManager.OnSceneTransitionStarted -= OnSceneTransitionStarted;
-        }
 
-        #region ÑéÖ¤·½·¨
-
-        /// <summary>
-        /// ÑéÖ¤·¿¼ä×´Ì¬
-        /// </summary>
-        private bool ValidateRoomStatus()
-        {
-            if (!PhotonNetwork.InRoom)
-            {
-                LogDebug("Î´ÔÚPhoton·¿¼äÖĞ");
-                return false;
-            }
-
-            if (RoomManager.Instance == null)
-            {
-                LogDebug("RoomManagerÊµÀı²»´æÔÚ");
-                return false;
-            }
-
-            if (!RoomManager.Instance.IsInitialized)
-            {
-                LogDebug("RoomManagerÎ´³õÊ¼»¯");
-                return false;
-            }
-
-            LogDebug($"·¿¼ä×´Ì¬ÑéÖ¤Í¨¹ı - ·¿¼ä: {RoomManager.Instance.RoomName}, Íæ¼ÒÊı: {RoomManager.Instance.PlayerCount}");
-            return true;
+            hasSubscribedToEvents = false;
+            LogDebug("âœ“ äº‹ä»¶å–æ¶ˆè®¢é˜…å®Œæˆ");
         }
 
         #endregion
 
-        #region UIÏÔÊ¾¿ØÖÆ
+        #region æˆ¿é—´äº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// ÏÔÊ¾¼ÓÔØÃæ°å
-        /// </summary>
-        private void ShowLoadingPanel(string message)
-        {
-            if (loadingPanel != null)
-            {
-                loadingPanel.SetActive(true);
-                if (loadingText != null)
-                    loadingText.text = message;
-            }
-        }
-
-        /// <summary>
-        /// Òş²Ø¼ÓÔØÃæ°å
-        /// </summary>
-        private void HideLoadingPanel()
-        {
-            if (loadingPanel != null)
-                loadingPanel.SetActive(false);
-        }
-
-        /// <summary>
-        /// ÏÔÊ¾´íÎóĞÅÏ¢
-        /// </summary>
-        private void ShowError(string message)
-        {
-            LogDebug($"ÏÔÊ¾´íÎó: {message}");
-
-            HideLoadingPanel();
-
-            if (errorPanel != null)
-            {
-                errorPanel.SetActive(true);
-                if (errorText != null)
-                    errorText.text = message;
-            }
-        }
-
-        /// <summary>
-        /// Òş²Ø´íÎóÃæ°å
-        /// </summary>
-        private void HideErrorPanel()
-        {
-            if (errorPanel != null)
-                errorPanel.SetActive(false);
-        }
-
-        #endregion
-
-        #region ·¿¼äÊÂ¼ş´¦Àí - »ùÓÚÄãµÄ¼Ü¹¹
-
-        /// <summary>
-        /// ÓÎÏ·¿ªÊ¼ÊÂ¼ş´¦Àí - Î¨Ò»µÄ³¡¾°ÇĞ»»Ö´ĞĞµã
+        /// æ¸¸æˆå¼€å§‹äº‹ä»¶å¤„ç† - å®Œå–„ç‰ˆ
         /// </summary>
         private void OnGameStarting()
         {
-            // ·ÀÖ¹ÖØ¸´´¦Àí
+            // é˜²æ­¢é‡å¤å¤„ç†
             if (hasHandledGameStart)
             {
-                LogDebug("ÓÎÏ·¿ªÊ¼ÊÂ¼şÒÑ´¦Àí£¬ºöÂÔÖØ¸´µ÷ÓÃ");
+                LogDebug("æ¸¸æˆå¼€å§‹äº‹ä»¶å·²å¤„ç†ï¼Œå¿½ç•¥é‡å¤è°ƒç”¨");
                 return;
             }
 
             hasHandledGameStart = true;
-            LogDebug("ÊÕµ½ÓÎÏ·¿ªÊ¼ÊÂ¼ş - ¿ªÊ¼³¡¾°ÇĞ»»Á÷³Ì");
+            LogDebug("æ”¶åˆ°æ¸¸æˆå¼€å§‹äº‹ä»¶ - å¼€å§‹åœºæ™¯åˆ‡æ¢æµç¨‹");
 
-            ShowLoadingPanel("ÓÎÏ·Æô¶¯ÖĞ£¬ÇëÉÔºò...");
+            ShowLoadingPanel("æ¸¸æˆå¯åŠ¨ä¸­ï¼Œè¯·ç¨å€™...");
 
-            // ´¥·¢HostGameManager¿ªÊ¼ÓÎÏ·£¨½öHost¶Ë£©
+            // è§¦å‘HostGameManagerå¼€å§‹æ¸¸æˆï¼ˆä»…Hostç«¯ï¼‰
             if (RoomManager.Instance?.IsHost == true)
             {
                 if (HostGameManager.Instance != null)
                 {
-                    LogDebug("´¥·¢HostGameManager¿ªÊ¼ÓÎÏ·");
+                    LogDebug("è§¦å‘HostGameManagerå¼€å§‹æ¸¸æˆ");
                     HostGameManager.Instance.StartGameFromRoom();
                 }
                 else
                 {
-                    LogDebug("HostGameManagerÊµÀı²»´æÔÚ");
+                    LogDebug("HostGameManagerå®ä¾‹ä¸å­˜åœ¨");
                 }
             }
 
-            // Ê¹ÓÃÄãµÄSceneTransitionManagerÖ´ĞĞ³¡¾°ÇĞ»»
+            // ä½¿ç”¨SceneTransitionManageræ‰§è¡Œåœºæ™¯åˆ‡æ¢
             bool switchSuccess = SceneTransitionManager.SwitchToGameScene("RoomSceneController");
 
             if (!switchSuccess)
             {
-                LogDebug("³¡¾°ÇĞ»»ÇëÇóÊ§°Ü£¬¿ÉÄÜÒÑÔÚÇĞ»»ÖĞ");
-                // Èç¹ûÇĞ»»Ê§°Ü£¬ÖØÖÃ´¦Àí±êÖ¾
+                LogDebug("åœºæ™¯åˆ‡æ¢è¯·æ±‚å¤±è´¥ï¼Œå¯èƒ½å·²åœ¨åˆ‡æ¢ä¸­");
+                // å¦‚æœåˆ‡æ¢å¤±è´¥ï¼Œé‡ç½®å¤„ç†æ ‡å¿—
                 hasHandledGameStart = false;
                 HideLoadingPanel();
             }
         }
 
         /// <summary>
-        /// ·µ»Ø´óÌüÊÂ¼ş´¦Àí
+        /// è¿”å›å¤§å…äº‹ä»¶å¤„ç†
         /// </summary>
         private void OnReturnToLobby()
         {
-            LogDebug("ÊÕµ½·µ»Ø´óÌüÊÂ¼ş");
-            SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
+            LogDebug("æ”¶åˆ°è¿”å›å¤§å…äº‹ä»¶");
+            ReturnToLobbyDelayed();
         }
 
         /// <summary>
-        /// ³¡¾°ÇĞ»»¿ªÊ¼ÊÂ¼ş
+        /// åœºæ™¯åˆ‡æ¢å¼€å§‹äº‹ä»¶
         /// </summary>
         private void OnSceneTransitionStarted(string sceneName)
         {
-            LogDebug($"³¡¾°ÇĞ»»¿ªÊ¼: {sceneName}");
-            ShowLoadingPanel($"ÕıÔÚÇĞ»»µ½ {sceneName}...");
+            LogDebug($"åœºæ™¯åˆ‡æ¢å¼€å§‹: {sceneName}");
+            ShowLoadingPanel($"æ­£åœ¨åˆ‡æ¢åˆ° {sceneName}...");
         }
 
         #endregion
 
-        #region °´Å¥ÊÂ¼ş´¦Àí - Î¯ÍĞ¸øRoomManager
+        #region æŒ‰é’®äº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// ×¼±¸°´Å¥µã»÷
+        /// å‡†å¤‡æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnReadyButtonClicked()
         {
-            if (RoomManager.Instance == null || RoomManager.Instance.IsHost)
+            if (!isInitialized || RoomManager.Instance == null || RoomManager.Instance.IsHost)
                 return;
 
             bool currentReady = RoomManager.Instance.GetMyReadyState();
             bool newReady = !currentReady;
 
-            LogDebug($"ÇĞ»»×¼±¸×´Ì¬: {currentReady} -> {newReady}");
+            LogDebug($"åˆ‡æ¢å‡†å¤‡çŠ¶æ€: {currentReady} -> {newReady}");
             RoomManager.Instance.SetPlayerReady(newReady);
         }
 
         /// <summary>
-        /// ¿ªÊ¼ÓÎÏ·°´Å¥µã»÷
+        /// å¼€å§‹æ¸¸æˆæŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnStartGameButtonClicked()
         {
-            if (RoomManager.Instance == null || !RoomManager.Instance.IsHost)
+            if (!isInitialized || RoomManager.Instance == null || !RoomManager.Instance.IsHost)
                 return;
 
             if (!RoomManager.Instance.CanStartGame())
             {
                 string conditions = RoomManager.Instance.GetGameStartConditions();
-                ShowError($"ÎŞ·¨¿ªÊ¼ÓÎÏ·: {conditions}");
+                ShowError($"æ— æ³•å¼€å§‹æ¸¸æˆ: {conditions}");
                 Invoke(nameof(HideErrorPanel), 3f);
                 return;
             }
 
-            LogDebug("·¿Ö÷Æô¶¯ÓÎÏ·");
+            LogDebug("æˆ¿ä¸»å¯åŠ¨æ¸¸æˆ");
 
-            // Ö±½Óµ÷ÓÃRoomManagerµÄStartGame·½·¨
+            // ç›´æ¥è°ƒç”¨RoomManagerçš„StartGameæ–¹æ³•
             RoomManager.Instance.StartGame();
         }
 
         /// <summary>
-        /// Àë¿ª·¿¼ä°´Å¥µã»÷
+        /// ç¦»å¼€æˆ¿é—´æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnLeaveRoomButtonClicked()
         {
-            LogDebug("ÓÃ»§µã»÷Àë¿ª·¿¼ä");
+            LogDebug("ç”¨æˆ·ç‚¹å‡»ç¦»å¼€æˆ¿é—´");
 
-            // ±ê¼ÇÎªÖ÷¶¯Àë¿ª
+            // æ ‡è®°ä¸ºä¸»åŠ¨ç¦»å¼€
             isLeavingRoom = true;
 
             if (RoomManager.Instance != null)
@@ -347,56 +780,55 @@ namespace UI
             }
             else
             {
-                // ±¸ÓÃ·½°¸£ºÖ±½ÓÊ¹ÓÃSceneTransitionManager
-                SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
+                // å¤‡ç”¨æ–¹æ¡ˆï¼šç›´æ¥ä½¿ç”¨SceneTransitionManager
+                ReturnToLobbyDelayed();
             }
         }
 
         /// <summary>
-        /// Ë¢ĞÂ°´Å¥µã»÷
+        /// åˆ·æ–°æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnRefreshButtonClicked()
         {
-            LogDebug("ÊÖ¶¯Ë¢ĞÂÇëÇó");
+            LogDebug("æ‰‹åŠ¨åˆ·æ–°è¯·æ±‚");
 
-            // Î¯ÍĞ¸øRoomUIController´¦ÀíUIË¢ĞÂ
+            // å§”æ‰˜ç»™RoomUIControllerå¤„ç†UIåˆ·æ–°
             if (roomUIController != null)
             {
-                roomUIController.RefreshAllUI(); // Ê¹ÓÃÄãµÄRefreshAllUI·½·¨
-                LogDebug("ÒÑÇëÇóRoomUIControllerÇ¿ÖÆË¢ĞÂ");
+                roomUIController.RefreshAllUI();
+                LogDebug("å·²è¯·æ±‚RoomUIControllerå¼ºåˆ¶åˆ·æ–°");
             }
             else
             {
-                LogDebug("RoomUIController²»´æÔÚ£¬ÎŞ·¨Ö´ĞĞË¢ĞÂ");
+                LogDebug("RoomUIControllerä¸å­˜åœ¨ï¼Œæ— æ³•æ‰§è¡Œåˆ·æ–°");
             }
         }
 
         #endregion
 
-        #region IInRoomCallbacksÊµÏÖ - ×îĞ¡»¯´¦Àí
+        #region Photonå›è°ƒå®ç°
 
+        // IInRoomCallbackså®ç°
         void IInRoomCallbacks.OnPlayerEnteredRoom(Player newPlayer)
         {
-            LogDebug($"Photon: Íæ¼Ò¼ÓÈë·¿¼ä - {newPlayer.NickName} (ID: {newPlayer.ActorNumber})");
-            // UI¸üĞÂ½»¸øRoomUIController´¦Àí
+            LogDebug($"Photon: ç©å®¶åŠ å…¥æˆ¿é—´ - {newPlayer.NickName} (ID: {newPlayer.ActorNumber})");
         }
 
         void IInRoomCallbacks.OnPlayerLeftRoom(Player otherPlayer)
         {
-            LogDebug($"Photon: Íæ¼ÒÀë¿ª·¿¼ä - {otherPlayer.NickName} (ID: {otherPlayer.ActorNumber})");
-            // UI¸üĞÂ½»¸øRoomUIController´¦Àí
+            LogDebug($"Photon: ç©å®¶ç¦»å¼€æˆ¿é—´ - {otherPlayer.NickName} (ID: {otherPlayer.ActorNumber})");
         }
 
         void IInRoomCallbacks.OnPlayerPropertiesUpdate(Player targetPlayer, ExitGames.Client.Photon.Hashtable changedProps)
         {
-            // ×¼±¸×´Ì¬±ä¸üµÈÓÉRoomManagerºÍRoomUIController´¦Àí
+            // å‡†å¤‡çŠ¶æ€å˜æ›´ç­‰ç”±RoomManagerå’ŒRoomUIControllerå¤„ç†
         }
 
         void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient)
         {
-            LogDebug($"Photon: ·¿Ö÷ÇĞ»»µ½ {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+            LogDebug($"Photon: æˆ¿ä¸»åˆ‡æ¢åˆ° {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
 
-            // Ç¿ÖÆË¢ĞÂUIÒÔ·´Ó³ĞÂµÄ·¿Ö÷×´Ì¬
+            // å¼ºåˆ¶åˆ·æ–°UIä»¥åæ˜ æ–°çš„æˆ¿ä¸»çŠ¶æ€
             if (roomUIController != null)
             {
                 roomUIController.RefreshAllUI();
@@ -405,73 +837,141 @@ namespace UI
 
         void IInRoomCallbacks.OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
         {
-            // ·¿¼äÊôĞÔ±ä¸üÓÉRoomManager´¦Àí
+            // æˆ¿é—´å±æ€§å˜æ›´ç”±RoomManagerå¤„ç†
         }
+
+        // IConnectionCallbackså®ç°
+        void IConnectionCallbacks.OnConnected()
+        {
+            LogDebug("Photon: è¿æ¥åˆ°æœåŠ¡å™¨");
+        }
+
+        void IConnectionCallbacks.OnConnectedToMaster()
+        {
+            LogDebug("Photon: è¿æ¥åˆ°ä¸»æœåŠ¡å™¨");
+        }
+
+        void IConnectionCallbacks.OnDisconnected(DisconnectCause cause)
+        {
+            LogDebug($"Photon: è¿æ¥æ–­å¼€ - {cause}");
+
+            // ç½‘ç»œæ–­å¼€æ—¶çš„å¤„ç†
+            if (isInitialized && !isLeavingRoom)
+            {
+                HandleDisconnection($"ç½‘ç»œæ–­å¼€: {cause}");
+            }
+        }
+
+        void IConnectionCallbacks.OnRegionListReceived(RegionHandler regionHandler) { }
+        void IConnectionCallbacks.OnCustomAuthenticationResponse(System.Collections.Generic.Dictionary<string, object> data) { }
+        void IConnectionCallbacks.OnCustomAuthenticationFailed(string debugMessage) { }
 
         #endregion
 
-        #region PhotonÁ¬½Ó×´Ì¬¼à¿Ø
+        #region Photonè¿æ¥çŠ¶æ€ç›‘æ§
 
         /// <summary>
-        /// ¼à¿ØPhotonÁ¬½Ó×´Ì¬£¨Í¨¹ıUpdate¼ì²é£©
+        /// ç›‘æ§Photonè¿æ¥çŠ¶æ€ï¼ˆé€šè¿‡Updateæ£€æŸ¥ï¼‰
         /// </summary>
         private void Update()
         {
-            if (!isInitialized) return;
+            if (!isInitialized || allowDirectRoomStart) return;
 
-            // ¼ì²éÊÇ·ñÒâÍâ¶Ï¿ªÁ¬½Ó
+            // æ£€æŸ¥æ˜¯å¦æ„å¤–æ–­å¼€è¿æ¥
             if (!PhotonNetwork.IsConnected)
             {
-                HandleDisconnection("Á¬½Ó¶ªÊ§");
+                HandleDisconnection("è¿æ¥ä¸¢å¤±");
             }
-            // ¼ì²éÊÇ·ñÒâÍâÀë¿ª·¿¼ä
+            // æ£€æŸ¥æ˜¯å¦æ„å¤–ç¦»å¼€æˆ¿é—´
             else if (!PhotonNetwork.InRoom && !isLeavingRoom)
             {
-                HandleRoomLeft("ÒâÍâÀë¿ª·¿¼ä");
+                HandleRoomLeft("æ„å¤–ç¦»å¼€æˆ¿é—´");
             }
         }
 
         /// <summary>
-        /// ´¦ÀíÁ¬½Ó¶Ï¿ª
+        /// å¤„ç†è¿æ¥æ–­å¼€
         /// </summary>
         private void HandleDisconnection(string reason)
         {
             if (isLeavingRoom) return;
 
-            LogDebug($"¼ì²âµ½Á¬½Ó¶Ï¿ª: {reason}");
-            ShowError($"ÍøÂçÁ¬½Ó¶Ï¿ª: {reason}");
+            LogDebug($"æ£€æµ‹åˆ°è¿æ¥æ–­å¼€: {reason}");
+            ShowError($"ç½‘ç»œè¿æ¥æ–­å¼€: {reason}");
             Invoke(nameof(ReturnToLobbyDelayed), 3f);
         }
 
         /// <summary>
-        /// ´¦ÀíÀë¿ª·¿¼ä
+        /// å¤„ç†ç¦»å¼€æˆ¿é—´
         /// </summary>
         private void HandleRoomLeft(string reason)
         {
-            LogDebug($"¼ì²âµ½Àë¿ª·¿¼ä: {reason}");
+            LogDebug($"æ£€æµ‹åˆ°ç¦»å¼€æˆ¿é—´: {reason}");
 
-            // ´¥·¢·µ»Ø´óÌüÊÂ¼ş
+            // è§¦å‘è¿”å›å¤§å…äº‹ä»¶
             OnReturnToLobby();
         }
 
         #endregion
 
-        #region ³¡¾°¿ØÖÆ
+        #region åœºæ™¯æ§åˆ¶
 
         /// <summary>
-        /// ÑÓ³Ù·µ»Ø´óÌü
+        /// å»¶è¿Ÿè¿”å›å¤§å…
         /// </summary>
         private void ReturnToLobbyDelayed()
         {
-            SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
+            LogDebug("æ‰§è¡Œè¿”å›å¤§å…");
+            isLeavingRoom = true;
+
+            bool switchSuccess = SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
+
+            if (!switchSuccess)
+            {
+                // å¤‡ç”¨æ–¹æ¡ˆï¼šç›´æ¥åˆ‡æ¢åœºæ™¯
+                Debug.LogWarning("[RoomSceneController] SceneTransitionManagerè¿”å›å¤±è´¥ï¼Œä½¿ç”¨å¤‡ç”¨æ–¹æ¡ˆ");
+                SceneManager.LoadScene("LobbyScene");
+            }
         }
 
         #endregion
 
-        #region ¹«¹²½Ó¿Ú
+        #region å…¬å…±æ¥å£
 
         /// <summary>
-        /// »ñÈ¡UI¿ØÖÆÆ÷ÒıÓÃ
+        /// è·å–å½“å‰ç©å®¶æ•°æ®
+        /// </summary>
+        public LobbyPlayerData GetCurrentPlayerData()
+        {
+            return currentPlayerData;
+        }
+
+        /// <summary>
+        /// è·å–å½“å‰æˆ¿é—´æ•°æ®
+        /// </summary>
+        public LobbyRoomData GetCurrentRoomData()
+        {
+            return currentRoomData;
+        }
+
+        /// <summary>
+        /// æ£€æŸ¥æ˜¯å¦å·²åˆå§‹åŒ–
+        /// </summary>
+        public bool IsInitialized()
+        {
+            return isInitialized;
+        }
+
+        /// <summary>
+        /// æ£€æŸ¥æ˜¯å¦æœ‰æœ‰æ•ˆæ•°æ®
+        /// </summary>
+        public bool HasValidData()
+        {
+            return hasValidData;
+        }
+
+        /// <summary>
+        /// è·å–UIæ§åˆ¶å™¨å¼•ç”¨
         /// </summary>
         public RoomUIController GetUIController()
         {
@@ -479,43 +979,80 @@ namespace UI
         }
 
         /// <summary>
-        /// ÉèÖÃUI¿ØÖÆÆ÷ÒıÓÃ
+        /// è®¾ç½®UIæ§åˆ¶å™¨å¼•ç”¨
         /// </summary>
         public void SetUIController(RoomUIController controller)
         {
             roomUIController = controller;
-            LogDebug("UI¿ØÖÆÆ÷ÒıÓÃÒÑÉèÖÃ");
+            LogDebug("UIæ§åˆ¶å™¨å¼•ç”¨å·²è®¾ç½®");
         }
 
         /// <summary>
-        /// Ç¿ÖÆË¢ĞÂUI£¨Í¨¹ıUI¿ØÖÆÆ÷£©
+        /// å¼ºåˆ¶åˆ·æ–°UIï¼ˆé€šè¿‡UIæ§åˆ¶å™¨ï¼‰
         /// </summary>
         public void ForceRefreshUI()
         {
             if (roomUIController != null)
             {
-                roomUIController.RefreshAllUI(); // Ê¹ÓÃÕıÈ·µÄ·½·¨Ãû
+                roomUIController.RefreshAllUI();
             }
             else
             {
-                LogDebug("ÎŞ·¨Ë¢ĞÂUI£ºRoomUIControllerÎ´ÉèÖÃ");
+                LogDebug("æ— æ³•åˆ·æ–°UIï¼šRoomUIControlleræœªè®¾ç½®");
             }
         }
 
         /// <summary>
-        /// »ñÈ¡UI×´Ì¬ĞÅÏ¢ - ÊÊÅäÄãµÄ¼Ü¹¹
+        /// æ‰‹åŠ¨è§¦å‘è¿”å›å¤§å…
+        /// </summary>
+        public void ReturnToLobby()
+        {
+            LogDebug("æ‰‹åŠ¨è§¦å‘è¿”å›å¤§å…");
+            OnReturnToLobby();
+        }
+
+        /// <summary>
+        /// å¼ºåˆ¶é‡æ–°åˆå§‹åŒ–ï¼ˆè°ƒè¯•ç”¨ï¼‰
+        /// </summary>
+        public void ForceReinitialize()
+        {
+            LogDebug("å¼ºåˆ¶é‡æ–°åˆå§‹åŒ–");
+            isInitialized = false;
+            isInitializing = false;
+            hasValidData = false;
+            hasHandledGameStart = false;
+            StartCoroutine(InitializeRoomSceneCoroutine());
+        }
+
+        /// <summary>
+        /// è·å–åœºæ™¯çŠ¶æ€ä¿¡æ¯
+        /// </summary>
+        public string GetSceneStatusInfo()
+        {
+            return $"åˆå§‹åŒ–: {isInitialized}, " +
+                   $"åˆå§‹åŒ–ä¸­: {isInitializing}, " +
+                   $"æœ‰æ•ˆæ•°æ®: {hasValidData}, " +
+                   $"äº‹ä»¶è®¢é˜…: {hasSubscribedToEvents}, " +
+                   $"ç©å®¶: {currentPlayerData?.playerName ?? "æ— "}, " +
+                   $"æˆ¿é—´: {currentRoomData?.roomName ?? "æ— "}, " +
+                   $"æ¸¸æˆå¼€å§‹å¤„ç†: {hasHandledGameStart}, " +
+                   $"ç¦»å¼€ä¸­: {isLeavingRoom}";
+        }
+
+        /// <summary>
+        /// è·å–UIçŠ¶æ€ä¿¡æ¯
         /// </summary>
         public string GetUIStatusInfo()
         {
             if (roomUIController != null)
             {
-                return roomUIController.GetUIStatusInfo(); // Ê¹ÓÃÄãµÄ·½·¨
+                return roomUIController.GetUIStatusInfo();
             }
-            return "RoomUIController: Î´ÉèÖÃ";
+            return "RoomUIController: æœªè®¾ç½®";
         }
 
         /// <summary>
-        /// »ñÈ¡·¿¼äÏêÏ¸ĞÅÏ¢ - Ê¹ÓÃÄãµÄRoomManager
+        /// è·å–æˆ¿é—´è¯¦ç»†ä¿¡æ¯
         /// </summary>
         public string GetDetailedDebugInfo()
         {
@@ -524,15 +1061,15 @@ namespace UI
                 return RoomManager.Instance.GetRoomStatusInfo() + "\n" +
                        RoomManager.Instance.GetPlayerListInfo();
             }
-            return "RoomManager: Î´³õÊ¼»¯";
+            return "RoomManager: æœªåˆå§‹åŒ–";
         }
 
         #endregion
 
-        #region ¸¨Öú·½·¨
+        #region è¾…åŠ©æ–¹æ³•
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -544,30 +1081,70 @@ namespace UI
 
         #endregion
 
-        #region µ÷ÊÔ·½·¨ - ÊÊÅäÄãµÄ¼Ü¹¹
+        #region è°ƒè¯•æ–¹æ³•
 
         /// <summary>
-        /// ÏÔÊ¾·¿¼äÏêÏ¸ĞÅÏ¢
+        /// æ˜¾ç¤ºåœºæ™¯è¯¦ç»†çŠ¶æ€
         /// </summary>
-        [ContextMenu("ÏÔÊ¾·¿¼äÏêÏ¸ĞÅÏ¢")]
+        [ContextMenu("æ˜¾ç¤ºåœºæ™¯è¯¦ç»†çŠ¶æ€")]
+        public void ShowSceneDetailedStatus()
+        {
+            Debug.Log("=== RoomSceneè¯¦ç»†çŠ¶æ€ ===");
+            Debug.Log($"åœºæ™¯çŠ¶æ€: {GetSceneStatusInfo()}");
+            Debug.Log($"UIçŠ¶æ€: {GetUIStatusInfo()}");
+            Debug.Log($"æˆ¿é—´ä¿¡æ¯: {GetDetailedDebugInfo()}");
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºæˆ¿é—´è¯¦ç»†ä¿¡æ¯
+        /// </summary>
+        [ContextMenu("æ˜¾ç¤ºæˆ¿é—´è¯¦ç»†ä¿¡æ¯")]
         public void ShowRoomDetailedInfo()
         {
-            Debug.Log("=== ·¿¼äÏêÏ¸ĞÅÏ¢ ===\n" + GetDetailedDebugInfo());
+            Debug.Log("=== æˆ¿é—´è¯¦ç»†ä¿¡æ¯ ===\n" + GetDetailedDebugInfo());
         }
 
         /// <summary>
-        /// ÏÔÊ¾UI¿ØÖÆÆ÷×´Ì¬
+        /// æ˜¾ç¤ºUIæ§åˆ¶å™¨çŠ¶æ€
         /// </summary>
-        [ContextMenu("ÏÔÊ¾UI¿ØÖÆÆ÷×´Ì¬")]
+        [ContextMenu("æ˜¾ç¤ºUIæ§åˆ¶å™¨çŠ¶æ€")]
         public void ShowUIControllerStatus()
         {
-            Debug.Log($"=== UI¿ØÖÆÆ÷×´Ì¬ ===\n{GetUIStatusInfo()}");
+            Debug.Log($"=== UIæ§åˆ¶å™¨çŠ¶æ€ ===\n{GetUIStatusInfo()}");
         }
 
         /// <summary>
-        /// ²âÊÔ¿ªÊ¼ÓÎÏ·
+        /// æ˜¾ç¤ºæ•°æ®çŠ¶æ€
         /// </summary>
-        [ContextMenu("²âÊÔ¿ªÊ¼ÓÎÏ·")]
+        [ContextMenu("æ˜¾ç¤ºæ•°æ®çŠ¶æ€")]
+        public void ShowDataStatus()
+        {
+            Debug.Log("=== æ•°æ®çŠ¶æ€ ===");
+            Debug.Log($"æœ‰æ•ˆæ•°æ®: {hasValidData}");
+
+            if (currentPlayerData != null)
+            {
+                Debug.Log($"ç©å®¶æ•°æ®: {currentPlayerData.playerName} (ID: {currentPlayerData.playerId})");
+            }
+            else
+            {
+                Debug.Log("ç©å®¶æ•°æ®: æ— ");
+            }
+
+            if (currentRoomData != null)
+            {
+                Debug.Log($"æˆ¿é—´æ•°æ®: {currentRoomData.GetDetailedInfo()}");
+            }
+            else
+            {
+                Debug.Log("æˆ¿é—´æ•°æ®: æ— ");
+            }
+        }
+
+        /// <summary>
+        /// æµ‹è¯•å¼€å§‹æ¸¸æˆ
+        /// </summary>
+        [ContextMenu("æµ‹è¯•å¼€å§‹æ¸¸æˆ")]
         public void TestStartGame()
         {
             if (Application.isPlaying && RoomManager.Instance?.IsHost == true)
@@ -576,14 +1153,14 @@ namespace UI
             }
             else
             {
-                Debug.Log("ĞèÒªÔÚÓÎÏ·ÔËĞĞÊ±ÇÒÎª·¿Ö÷²ÅÄÜ²âÊÔ");
+                Debug.Log("éœ€è¦åœ¨æ¸¸æˆè¿è¡Œæ—¶ä¸”ä¸ºæˆ¿ä¸»æ‰èƒ½æµ‹è¯•");
             }
         }
 
         /// <summary>
-        /// ²âÊÔ×¼±¸×´Ì¬ÇĞ»»
+        /// æµ‹è¯•å‡†å¤‡çŠ¶æ€åˆ‡æ¢
         /// </summary>
-        [ContextMenu("²âÊÔ×¼±¸×´Ì¬ÇĞ»»")]
+        [ContextMenu("æµ‹è¯•å‡†å¤‡çŠ¶æ€åˆ‡æ¢")]
         public void TestReadyToggle()
         {
             if (Application.isPlaying && RoomManager.Instance?.IsHost == false)
@@ -592,14 +1169,14 @@ namespace UI
             }
             else
             {
-                Debug.Log("ĞèÒªÔÚÓÎÏ·ÔËĞĞÊ±ÇÒÎª·Ç·¿Ö÷²ÅÄÜ²âÊÔ");
+                Debug.Log("éœ€è¦åœ¨æ¸¸æˆè¿è¡Œæ—¶ä¸”ä¸ºéæˆ¿ä¸»æ‰èƒ½æµ‹è¯•");
             }
         }
 
         /// <summary>
-        /// ²âÊÔÇ¿ÖÆË¢ĞÂUI
+        /// æµ‹è¯•å¼ºåˆ¶åˆ·æ–°UI
         /// </summary>
-        [ContextMenu("²âÊÔÇ¿ÖÆË¢ĞÂUI")]
+        [ContextMenu("æµ‹è¯•å¼ºåˆ¶åˆ·æ–°UI")]
         public void TestForceRefreshUI()
         {
             if (Application.isPlaying)
@@ -609,9 +1186,33 @@ namespace UI
         }
 
         /// <summary>
-        /// ÏÔÊ¾SceneTransitionManager×´Ì¬
+        /// æµ‹è¯•è¿”å›å¤§å…
         /// </summary>
-        [ContextMenu("ÏÔÊ¾³¡¾°ÇĞ»»×´Ì¬")]
+        [ContextMenu("æµ‹è¯•è¿”å›å¤§å…")]
+        public void TestReturnToLobby()
+        {
+            if (Application.isPlaying)
+            {
+                ReturnToLobby();
+            }
+        }
+
+        /// <summary>
+        /// æµ‹è¯•é‡æ–°åˆå§‹åŒ–
+        /// </summary>
+        [ContextMenu("æµ‹è¯•é‡æ–°åˆå§‹åŒ–")]
+        public void TestReinitialize()
+        {
+            if (Application.isPlaying)
+            {
+                ForceReinitialize();
+            }
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºSceneTransitionManagerçŠ¶æ€
+        /// </summary>
+        [ContextMenu("æ˜¾ç¤ºåœºæ™¯åˆ‡æ¢çŠ¶æ€")]
         public void ShowSceneTransitionStatus()
         {
             if (SceneTransitionManager.Instance != null)
@@ -620,41 +1221,34 @@ namespace UI
             }
             else
             {
-                Debug.Log("SceneTransitionManagerÊµÀı²»´æÔÚ");
+                Debug.Log("SceneTransitionManagerå®ä¾‹ä¸å­˜åœ¨");
+            }
+        }
+
+        /// <summary>
+        /// æµ‹è¯•è·å–æ•°æ®
+        /// </summary>
+        [ContextMenu("æµ‹è¯•è·å–æ•°æ®")]
+        public void TestDataAcquisition()
+        {
+            if (Application.isPlaying)
+            {
+                LogDebug("=== æµ‹è¯•æ•°æ®è·å– ===");
+
+                bool fromLobby = TryGetDataFromLobbyScene();
+                LogDebug($"ä»LobbySceneè·å–æ•°æ®: {fromLobby}");
+
+                if (PhotonNetwork.InRoom)
+                {
+                    bool fromPhoton = TryRecoverDataFromPhoton();
+                    LogDebug($"ä»Photonæ¢å¤æ•°æ®: {fromPhoton}");
+                }
+
+                LogDebug($"æœ€ç»ˆæ•°æ®çŠ¶æ€: {hasValidData}");
             }
         }
 
         #endregion
 
-        #region UnityÉúÃüÖÜÆÚ
-
-        private void OnDestroy()
-        {
-            // È¡ÏûËùÓĞÑÓ³Ùµ÷ÓÃ
-            CancelInvoke();
-
-            // È¡ÏûÊÂ¼ş¶©ÔÄ
-            UnsubscribeFromRoomEvents();
-
-            LogDebug("·¿¼ä³¡¾°¿ØÖÆÆ÷Ïú»Ù");
-        }
-
-        private void OnApplicationPause(bool pauseStatus)
-        {
-            if (pauseStatus && isInitialized)
-            {
-                LogDebug("Ó¦ÓÃÔİÍ£");
-            }
-        }
-
-        private void OnApplicationFocus(bool hasFocus)
-        {
-            if (!hasFocus && isInitialized)
-            {
-                LogDebug("Ó¦ÓÃÊ§È¥½¹µã");
-            }
-        }
-
-        #endregion
     }
 }

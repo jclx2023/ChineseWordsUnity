@@ -12,7 +12,6 @@ namespace Core.Network
     /// <summary>
     /// Photon网络适配器
     /// 作为NetworkManager的补充，处理Photon特定功能
-    /// 渐进式迁移策略：先并存，后整合
     /// </summary>
     public class PhotonNetworkAdapter : MonoBehaviourPun, IConnectionCallbacks, IMatchmakingCallbacks, ILobbyCallbacks
     {
