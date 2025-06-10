@@ -29,6 +29,8 @@ namespace Lobby.Core
         private bool isConnected = false;
         private bool isConnecting = false;
         private bool isInLobby = false;
+        private bool hasTriggeredRoomJoined = false;
+        private string lastJoinedRoomName = "";
 
         // 房间数据
         private List<LobbyRoomData> cachedRoomList = new List<LobbyRoomData>();
@@ -37,9 +39,9 @@ namespace Lobby.Core
         // 事件
         public System.Action<bool> OnConnectionStatusChanged;
         public System.Action<List<LobbyRoomData>> OnRoomListUpdated;
-        public System.Action<string, bool> OnRoomCreated; // roomName, success
-        public System.Action<string, bool> OnRoomJoined; // roomName, success
-        public System.Action<bool> OnLobbyStatusChanged; // inLobby
+        public System.Action<string, bool> OnRoomCreated;
+        public System.Action<string, bool> OnRoomJoined;
+        public System.Action<bool> OnLobbyStatusChanged;
 
         #region Unity生命周期
 
@@ -65,6 +67,9 @@ namespace Lobby.Core
         {
             // 修复2：先检查当前状态，再决定是否需要连接
             CheckAndSyncCurrentState();
+
+            // 强制重新订阅事件，确保不会丢失
+            Invoke(nameof(ForceResubscribeEvents), 1f);
 
             if (autoConnectOnStart && !GetRealConnectionStatus())
             {
@@ -96,14 +101,14 @@ namespace Lobby.Core
         {
             LogDebug("检查并同步当前Photon状态...");
 
-            // 获取真实的Photon状态
             bool realConnected = GetRealConnectionStatus();
             bool realInLobby = GetRealLobbyStatus();
+            bool realInRoom = PhotonNetwork.InRoom;
 
-            LogDebug($"真实状态检查 - 连接: {realConnected}, 大厅: {realInLobby}");
+            LogDebug($"真实状态检查 - 连接: {realConnected}, 大厅: {realInLobby}, 房间: {realInRoom}");
             LogDebug($"内部状态 - 连接: {isConnected}, 大厅: {isInLobby}");
 
-            // 同步状态
+            // 同步连接状态
             if (realConnected != isConnected)
             {
                 LogDebug($"同步连接状态: {isConnected} -> {realConnected}");
@@ -111,21 +116,27 @@ namespace Lobby.Core
                 OnConnectionStatusChanged?.Invoke(isConnected);
             }
 
+            // 同步大厅状态
             if (realInLobby != isInLobby)
             {
                 LogDebug($"同步大厅状态: {isInLobby} -> {realInLobby}");
                 isInLobby = realInLobby;
                 OnLobbyStatusChanged?.Invoke(isInLobby);
 
-                // 如果已经在大厅中，立即刷新房间列表
                 if (isInLobby)
                 {
                     LogDebug("检测到已在大厅中，立即刷新房间列表");
                     RefreshRoomList();
                 }
             }
-        }
 
+            // 移除手动触发房间加入事件的代码，避免重复
+        }
+        private void ForceResubscribeEvents()
+        {
+            LogDebug("强制重新订阅Photon事件");
+            SubscribeToPhotonEvents();
+        }
         /// <summary>
         /// 获取真实的连接状态（直接查询Photon）
         /// </summary>
@@ -637,20 +648,85 @@ namespace Lobby.Core
 
         private void OnPhotonRoomJoined()
         {
+            LogDebug("=== OnPhotonRoomJoined 被调用 ===");
+
+            // 防重复检查
+            string roomName = PhotonNetwork.CurrentRoom?.Name ?? "";
+            if (hasTriggeredRoomJoined && lastJoinedRoomName == roomName)
+            {
+                LogDebug($"房间加入事件已触发过，跳过重复调用: {roomName}");
+                return;
+            }
+
             LogDebug("成功加入Photon房间");
 
-            // 获取当前房间信息
-            if (PhotonNetworkAdapter.Instance.IsInPhotonRoom)
+            bool isInRoom = PhotonNetwork.InRoom;
+
+            LogDebug($"房间状态检查 - PhotonNetwork.InRoom: {isInRoom}, RoomName: '{roomName}'");
+
+            if (isInRoom && !string.IsNullOrEmpty(roomName))
             {
-                string roomName = PhotonNetworkAdapter.Instance.CurrentRoomName;
-                OnRoomJoined?.Invoke(roomName, true);
                 LogDebug($"房间加入成功: {roomName}");
+
+                // 设置防重复标记
+                hasTriggeredRoomJoined = true;
+                lastJoinedRoomName = roomName;
+
+                OnRoomJoined?.Invoke(roomName, true);
+                LogDebug("OnRoomJoined事件已触发");
+            }
+            else
+            {
+                LogDebug("房间状态未就绪，延迟0.5秒后重新检查");
+                StartCoroutine(DelayedRoomJoinedCheck());
+            }
+        }
+
+        /// <summary>
+        /// 延迟检查房间加入状态
+        /// </summary>
+        private System.Collections.IEnumerator DelayedRoomJoinedCheck()
+        {
+            yield return new WaitForSeconds(0.5f);
+
+            string roomName = PhotonNetwork.CurrentRoom?.Name ?? "";
+
+            // 防重复检查
+            if (hasTriggeredRoomJoined && lastJoinedRoomName == roomName)
+            {
+                LogDebug($"延迟检查：房间加入事件已触发过，跳过: {roomName}");
+                yield break;
+            }
+
+            bool isInRoom = PhotonNetwork.InRoom;
+            LogDebug($"延迟检查 - PhotonNetwork.InRoom: {isInRoom}, RoomName: '{roomName}'");
+
+            if (isInRoom && !string.IsNullOrEmpty(roomName))
+            {
+                LogDebug($"延迟检查成功 - 房间加入成功: {roomName}");
+
+                // 设置防重复标记
+                hasTriggeredRoomJoined = true;
+                lastJoinedRoomName = roomName;
+
+                OnRoomJoined?.Invoke(roomName, true);
+                LogDebug("OnRoomJoined事件已触发（延迟检查）");
+            }
+            else
+            {
+                Debug.LogError($"[LobbyNetworkManager] 房间加入失败 - InRoom: {isInRoom}, RoomName: '{roomName}'");
+                OnRoomJoined?.Invoke("Unknown", false);
             }
         }
 
         private void OnPhotonRoomLeft()
         {
             LogDebug("离开Photon房间");
+
+            // 重置防重复标记
+            hasTriggeredRoomJoined = false;
+            lastJoinedRoomName = "";
+
             // 重新加入大厅以继续浏览房间
             if (GetRealConnectionStatus() && !GetRealLobbyStatus())
             {

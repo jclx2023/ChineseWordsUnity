@@ -288,7 +288,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0.00023764558}
+  m_AnchoredPosition: {x: 0, y: 0.00012775607}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &31117885
@@ -374,7 +374,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 756589972}
   m_Direction: 2
   m_Value: 0
-  m_Size: 1
+  m_Size: 0.9999892
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -2512,7 +2512,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gameStartDelay: 1
-  minPlayersToStart: 2
+  minPlayersToStart: 1
   enableDebugLogs: 1
 --- !u!114 &1443983243
 MonoBehaviour:
@@ -2721,92 +2721,6 @@ MonoBehaviour:
   allowDirectRoomStart: 0
   enableDebugLogs: 1
   autoFindUIController: 1
---- !u!1 &1671159642
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1671159646}
-  - component: {fileID: 1671159645}
-  - component: {fileID: 1671159644}
-  - component: {fileID: 1671159643}
-  m_Layer: 0
-  m_Name: PUN
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1671159643
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1671159642}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5056ec0aab501c4da85e1dde93f98b5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  testRoomName: TestRoom
-  maxPlayers: 4
-  autoTestHost: 0
-  autoTestClient: 0
-  hostKey: 290
-  clientKey: 291
-  leaveKey: 292
-  statusKey: 293
---- !u!114 &1671159644
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1671159642}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3b5aafc696ea0cd4386f443ee29d3ca2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  gameVersion: 0.4.0.1
-  enableDebugLogs: 1
---- !u!114 &1671159645
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1671159642}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 05398f3ac044f9649a31c5c2b9b01d00, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  enableEventBridge: 1
-  enableMethodBridge: 1
-  debugBridgeCalls: 1
-  usePhotonForHost: 1
-  usePhotonForClient: 1
-  allowFallbackToRiptide: 1
---- !u!4 &1671159646
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1671159642}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 335.76654, y: 782.27167, z: 0.77986}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1821847271
 GameObject:
   m_ObjectHideFlags: 0
@@ -3477,4 +3391,3 @@ SceneRoots:
   - {fileID: 469692676}
   - {fileID: 1443983244}
   - {fileID: 119549038}
-  - {fileID: 1671159646}

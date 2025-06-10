@@ -10,31 +10,40 @@ using Core.Network;
 namespace Core.Network
 {
     /// <summary>
-    /// Photon网络适配器
-    /// 作为NetworkManager的补充，处理Photon特定功能
+    /// 修复后的Photon网络适配器
+    /// 主要修复：事件触发逻辑、连接状态管理、Lobby场景支持
     /// </summary>
     public class PhotonNetworkAdapter : MonoBehaviourPun, IConnectionCallbacks, IMatchmakingCallbacks, ILobbyCallbacks
     {
         [Header("Photon配置")]
-        [SerializeField] private string gameVersion = "1.0";
+        [SerializeField] private string gameVersion = "0.4.4";
         [SerializeField] private bool enableDebugLogs = true;
 
         public static PhotonNetworkAdapter Instance { get; private set; }
 
-        #region 适配器专用事件（避免与NetworkManager冲突）
+        #region 事件系统
 
-        // 使用不同的事件名称避免冲突
-        public static event System.Action OnPhotonConnected;
-        public static event System.Action OnPhotonDisconnected;
-        public static event System.Action OnPhotonHostStarted;
-        public static event System.Action OnPhotonHostStopped;
-        public static event System.Action<ushort> OnPhotonPlayerJoined;
-        public static event System.Action<ushort> OnPhotonPlayerLeft;
-        public static event System.Action OnPhotonRoomJoined;
-        public static event System.Action OnPhotonRoomLeft;
-        public static event System.Action OnPhotonJoinedLobby;
-        public static event System.Action OnPhotonLeftLobby;
-        public static event System.Action<List<RoomInfo>> OnPhotonRoomListUpdate;
+        // 连接相关事件
+        public static event System.Action OnPhotonConnected;        // 连接到Photon服务器成功
+        public static event System.Action OnPhotonDisconnected;     // 断开Photon连接
+
+        // 房间相关事件
+        public static event System.Action OnPhotonRoomCreated;      // 房间创建成功
+        public static event System.Action OnPhotonRoomJoined;       // 加入房间成功
+        public static event System.Action OnPhotonRoomLeft;         // 离开房间
+
+        // Host相关事件
+        public static event System.Action OnPhotonHostStarted;      // 成为Host
+        public static event System.Action OnPhotonHostStopped;      // 不再是Host
+
+        // 玩家相关事件
+        public static event System.Action<ushort> OnPhotonPlayerJoined;  // 其他玩家加入
+        public static event System.Action<ushort> OnPhotonPlayerLeft;    // 其他玩家离开
+
+        // Lobby相关事件
+        public static event System.Action OnPhotonJoinedLobby;      // 加入大厅成功
+        public static event System.Action OnPhotonLeftLobby;       // 离开大厅
+        public static event System.Action<List<RoomInfo>> OnPhotonRoomListUpdate;  // 房间列表更新
 
         #endregion
 
@@ -60,6 +69,10 @@ namespace Core.Network
         private string pendingRoomName = "";
         private int pendingMaxPlayers = 4;
         private bool isPendingClient = false;
+
+        // 修复：添加连接状态跟踪
+        private bool hasTriggeredConnectedEvent = false;
+        private bool isWaitingForRoomOperation = false;
 
         private List<RoomInfo> cachedRoomList = new List<RoomInfo>();
 
@@ -117,10 +130,45 @@ namespace Core.Network
 
                 isInitialized = true;
                 LogDebug("Photon适配器初始化完成");
+
+                // 修复：检查当前连接状态
+                CheckAndSyncConnectionStatus();
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"Photon适配器初始化失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 修复：检查并同步连接状态
+        /// </summary>
+        private void CheckAndSyncConnectionStatus()
+        {
+            if (PhotonNetwork.IsConnected && !hasTriggeredConnectedEvent)
+            {
+                LogDebug("检测到已连接到Photon，同步连接状态");
+                hasTriggeredConnectedEvent = true;
+                OnPhotonConnected?.Invoke();
+
+                // 如果已经在房间中，也触发房间事件
+                if (PhotonNetwork.InRoom)
+                {
+                    LogDebug("检测到已在房间中，同步房间状态");
+                    OnPhotonRoomJoined?.Invoke();
+
+                    if (PhotonNetwork.IsMasterClient)
+                    {
+                        OnPhotonHostStarted?.Invoke();
+                    }
+                }
+
+                // 如果已经在大厅中，也触发大厅事件
+                if (PhotonNetwork.InLobby)
+                {
+                    LogDebug("检测到已在大厅中，同步大厅状态");
+                    OnPhotonJoinedLobby?.Invoke();
+                }
             }
         }
 
@@ -150,15 +198,21 @@ namespace Core.Network
             pendingRoomName = roomName;
             pendingMaxPlayers = maxPlayers;
             isPendingClient = false;
+            isWaitingForRoomOperation = true;
 
             if (!PhotonNetwork.IsConnected)
             {
                 LogDebug("连接到Photon服务器...");
                 PhotonNetwork.ConnectUsingSettings();
             }
+            else if (!PhotonNetwork.InLobby)
+            {
+                LogDebug("已连接但未在大厅，加入大厅...");
+                PhotonNetwork.JoinLobby();
+            }
             else
             {
-                LogDebug("已连接，直接创建房间");
+                LogDebug("已连接且在大厅，直接创建房间");
                 CreateRoom();
             }
         }
@@ -168,20 +222,87 @@ namespace Core.Network
         /// </summary>
         public void JoinPhotonRoom()
         {
-            LogDebug("加入Photon房间");
+            LogDebug("加入随机Photon房间");
 
             isPendingClient = true;
+            isWaitingForRoomOperation = true;
 
             if (!PhotonNetwork.IsConnected)
             {
                 LogDebug("连接到Photon服务器...");
                 PhotonNetwork.ConnectUsingSettings();
             }
+            else if (!PhotonNetwork.InLobby)
+            {
+                LogDebug("已连接但未在大厅，加入大厅...");
+                PhotonNetwork.JoinLobby();
+            }
             else
             {
-                LogDebug("已连接，直接加入房间");
+                LogDebug("已连接且在大厅，直接加入随机房间");
                 JoinRandomRoom();
             }
+        }
+
+        /// <summary>
+        /// 修复：按房间名称加入房间（Lobby场景专用）
+        /// </summary>
+        public void JoinPhotonRoomByName(string roomName)
+        {
+            if (string.IsNullOrEmpty(roomName))
+            {
+                LogDebug("房间名称为空，无法加入");
+                return;
+            }
+
+            LogDebug($"按名称加入房间: {roomName}");
+
+            // 修复：标记正在进行房间操作
+            isWaitingForRoomOperation = true;
+
+            if (!PhotonNetwork.IsConnected)
+            {
+                LogDebug("未连接到Photon，无法加入房间");
+                // 触发失败事件
+                InvokeRoomJoinFailed(roomName);
+                return;
+            }
+
+            if (PhotonNetwork.InRoom)
+            {
+                LogDebug("已在其他房间中，先离开当前房间");
+                PhotonNetwork.LeaveRoom();
+                // 延迟加入新房间
+                StartCoroutine(DelayedJoinRoom(roomName, 1f));
+                return;
+            }
+
+            // 直接加入指定房间
+            PhotonNetwork.JoinRoom(roomName);
+        }
+
+        /// <summary>
+        /// 延迟加入房间协程
+        /// </summary>
+        private IEnumerator DelayedJoinRoom(string roomName, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+
+            if (!PhotonNetwork.InRoom)
+            {
+                LogDebug($"延迟加入房间: {roomName}");
+                PhotonNetwork.JoinRoom(roomName);
+            }
+        }
+
+        /// <summary>
+        /// 触发房间加入失败事件
+        /// </summary>
+        private void InvokeRoomJoinFailed(string roomName)
+        {
+            isWaitingForRoomOperation = false;
+            // 这里可以添加失败事件，暂时用日志
+            LogDebug($"房间加入失败: {roomName}");
         }
 
         /// <summary>
@@ -208,6 +329,7 @@ namespace Core.Network
             if (PhotonNetwork.IsConnected)
             {
                 LogDebug("断开Photon连接");
+                hasTriggeredConnectedEvent = false;  // 重置连接状态
                 PhotonNetwork.Disconnect();
             }
             else
@@ -229,6 +351,7 @@ namespace Core.Network
         #endregion
 
         #region Lobby方法
+
         /// <summary>
         /// 加入Photon大厅
         /// </summary>
@@ -243,6 +366,8 @@ namespace Core.Network
             if (PhotonNetwork.InLobby)
             {
                 LogDebug("已在大厅中");
+                // 修复：即使已在大厅，也确保触发事件
+                OnPhotonJoinedLobby?.Invoke();
                 return;
             }
 
@@ -279,10 +404,12 @@ namespace Core.Network
             // 返回缓存的房间列表副本
             return new List<RoomInfo>(cachedRoomList);
         }
+
         public int GetPhotonRoomCount()
         {
             return cachedRoomList.Count;
         }
+
         public RoomInfo FindRoomByName(string roomName)
         {
             if (string.IsNullOrEmpty(roomName))
@@ -296,11 +423,13 @@ namespace Core.Network
 
             return null;
         }
+
         public void ClearRoomListCache()
         {
             cachedRoomList.Clear();
             LogDebug("房间列表缓存已清空");
         }
+
         /// <summary>
         /// 更新缓存的房间列表
         /// </summary>
@@ -324,6 +453,7 @@ namespace Core.Network
 
             LogDebug($"房间列表缓存更新完成，当前有 {cachedRoomList.Count} 个房间");
         }
+
         /// <summary>
         /// 从缓存中移除房间
         /// </summary>
@@ -362,6 +492,7 @@ namespace Core.Network
                 cachedRoomList.Add(roomUpdate);
             }
         }
+
         #endregion
 
         #region 房间查询方法
@@ -436,7 +567,9 @@ namespace Core.Network
                 CustomRoomProperties = new ExitGames.Client.Photon.Hashtable()
                 {
                     { "gameMode", "ChineseWords" },
-                    { "version", gameVersion }
+                    { "version", gameVersion },
+                    { "hostName", PhotonNetwork.LocalPlayer.NickName ?? "Host" },
+                    { "createTime", Time.time }
                 }
             };
 
@@ -460,7 +593,7 @@ namespace Core.Network
 
         #endregion
 
-        #region Photon回调实现
+        #region 修复后的Photon回调实现
 
         #region IConnectionCallbacks
 
@@ -472,7 +605,43 @@ namespace Core.Network
         public void OnConnectedToMaster()
         {
             LogDebug("已连接到Photon主服务器");
-            PhotonNetwork.JoinLobby();
+
+            // 修复：在连接到主服务器时触发连接事件
+            if (!hasTriggeredConnectedEvent)
+            {
+                hasTriggeredConnectedEvent = true;
+                OnPhotonConnected?.Invoke();
+                LogDebug("触发Photon连接成功事件");
+            }
+
+            // 根据pending状态决定下一步操作
+            if (isWaitingForRoomOperation)
+            {
+                if (!PhotonNetwork.InLobby)
+                {
+                    LogDebug("连接成功，加入大厅以进行房间操作");
+                    PhotonNetwork.JoinLobby();
+                }
+                else
+                {
+                    ProcessPendingRoomOperation();
+                }
+            }
+            else
+            {
+                // 如果没有待处理的房间操作，默认加入大厅
+                if (!PhotonNetwork.InLobby)
+                {
+                    PhotonNetwork.JoinLobby();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 处理待处理的房间操作
+        /// </summary>
+        private void ProcessPendingRoomOperation()
+        {
             if (isPendingClient)
             {
                 JoinRandomRoom();
@@ -483,11 +652,20 @@ namespace Core.Network
                 CreateRoom();
                 pendingRoomName = "";
             }
+
+            isWaitingForRoomOperation = false;
         }
 
         public void OnDisconnected(DisconnectCause cause)
         {
             LogDebug($"与Photon服务器断开连接: {cause}");
+
+            // 修复：重置状态
+            hasTriggeredConnectedEvent = false;
+            isWaitingForRoomOperation = false;
+            isPendingClient = false;
+            pendingRoomName = "";
+
             OnPhotonDisconnected?.Invoke();
         }
 
@@ -518,11 +696,22 @@ namespace Core.Network
         public void OnCreatedRoom()
         {
             LogDebug($"Photon房间创建成功: {PhotonNetwork.CurrentRoom.Name}");
+
+            // 修复：触发房间创建事件
+            OnPhotonRoomCreated?.Invoke();
+
+            // 清理pending状态
+            pendingRoomName = "";
+            isWaitingForRoomOperation = false;
         }
 
         public void OnCreateRoomFailed(short returnCode, string message)
         {
             Debug.LogError($"Photon房间创建失败: {message} (代码: {returnCode})");
+
+            // 清理pending状态
+            pendingRoomName = "";
+            isWaitingForRoomOperation = false;
         }
 
         public void OnJoinedRoom()
@@ -531,45 +720,66 @@ namespace Core.Network
             LogDebug($"我的ActorNumber: {PhotonNetwork.LocalPlayer.ActorNumber}");
             LogDebug($"是否为Master Client: {PhotonNetwork.IsMasterClient}");
 
+            // 修复：只触发房间相关事件，不触发连接事件
             OnPhotonRoomJoined?.Invoke();
+            LogDebug("触发Photon房间加入成功事件");
 
             if (PhotonNetwork.IsMasterClient)
             {
                 OnPhotonHostStarted?.Invoke();
+                LogDebug("触发Host开始事件");
             }
 
-            OnPhotonConnected?.Invoke();
+            // 清理pending状态
+            isPendingClient = false;
+            isWaitingForRoomOperation = false;
         }
 
         public void OnJoinRoomFailed(short returnCode, string message)
         {
             Debug.LogError($"加入Photon房间失败: {message} (代码: {returnCode})");
+
+            // 清理pending状态
+            isPendingClient = false;
+            isWaitingForRoomOperation = false;
         }
 
         public void OnJoinRandomFailed(short returnCode, string message)
         {
             Debug.LogError($"加入随机Photon房间失败: {message} (代码: {returnCode})");
+
+            // 清理pending状态
+            isPendingClient = false;
+            isWaitingForRoomOperation = false;
         }
 
         public void OnLeftRoom()
         {
             LogDebug("离开Photon房间");
             OnPhotonRoomLeft?.Invoke();
-            OnPhotonDisconnected?.Invoke();
+
+            // 如果之前是Host，触发Host停止事件
+            OnPhotonHostStopped?.Invoke();
         }
 
         public void OnJoinedLobby()
         {
             LogDebug("成功加入Photon大厅");
             OnPhotonJoinedLobby?.Invoke();
+
+            // 如果有待处理的房间操作，现在执行
+            if (isWaitingForRoomOperation)
+            {
+                ProcessPendingRoomOperation();
+            }
         }
 
         public void OnLeftLobby()
         {
             LogDebug("离开Photon大厅");
-
             cachedRoomList.Clear();
             OnPhotonLeftLobby?.Invoke();
+
             // 如果是为了刷新而离开，自动重新加入
             if (shouldRejoinLobby)
             {
@@ -584,6 +794,7 @@ namespace Core.Network
             UpdateCachedRoomList(roomList);
             OnPhotonRoomListUpdate?.Invoke(roomList);
         }
+
         public void OnLobbyStatisticsUpdate(List<TypedLobbyInfo> lobbyStatistics)
         {
             LogDebug($"大厅统计更新，收到 {lobbyStatistics.Count} 个大厅信息");
@@ -592,7 +803,6 @@ namespace Core.Network
             {
                 LogDebug($"大厅: {lobby.Name} (类型: {lobby.Type}) - 房间数: {lobby.RoomCount}, 玩家数: {lobby.PlayerCount}");
             }
-
         }
 
         #endregion
@@ -629,105 +839,19 @@ namespace Core.Network
             {
                 OnPhotonHostStarted?.Invoke();
             }
-        }
-
-        #endregion
-
-        #endregion
-
-        #region 调试方法
-
-        /// <summary>
-        /// 调试日志
-        /// </summary>
-        private void LogDebug(string message)
-        {
-            if (enableDebugLogs)
+            else
             {
-                Debug.Log($"[PhotonNetworkAdapter] {message}");
+                OnPhotonHostStopped?.Invoke();
             }
         }
 
-        [ContextMenu("显示Photon状态")]
-        public void ShowPhotonStatus()
-        {
-            Debug.Log($"=== Photon状态 ===\n{GetPhotonStatus()}");
-        }
-
-        [ContextMenu("测试创建房间")]
-        public void TestCreateRoom()
-        {
-            CreatePhotonRoom("TestRoom", 4);
-        }
-
-        [ContextMenu("测试加入房间")]
-        public void TestJoinRoom()
-        {
-            JoinPhotonRoom();
-        }
-
-        [ContextMenu("离开房间")]
-        public void TestLeaveRoom()
-        {
-            LeavePhotonRoom();
-        }
-        [ContextMenu("显示房间列表调试信息")]
-        public void ShowRoomListDebugInfo()
-        {
-            Debug.Log(GetRoomListDebugInfo());
-        }
-        /// <summary>
-        /// 获取房间列表的详细调试信息
-        /// </summary>
-        public string GetRoomListDebugInfo()
-        {
-            var info = new System.Text.StringBuilder();
-            info.AppendLine($"=== Photon房间列表调试信息 ===");
-            info.AppendLine($"大厅状态: {(PhotonNetwork.InLobby ? "已连接" : "未连接")}");
-            info.AppendLine($"缓存房间数: {cachedRoomList.Count}");
-            info.AppendLine($"Photon统计房间数: {PhotonNetwork.CountOfRooms}");
-            info.AppendLine($"可加入房间数: {GetJoinableRooms().Count}");
-
-            if (cachedRoomList.Count > 0)
-            {
-                info.AppendLine("\n房间详情:");
-                for (int i = 0; i < cachedRoomList.Count; i++)
-                {
-                    var room = cachedRoomList[i];
-                    info.AppendLine($"  {i + 1}. {room.Name} ({room.PlayerCount}/{room.MaxPlayers}) " +
-                                  $"开放:{room.IsOpen} 可见:{room.IsVisible}");
-                }
-            }
-
-            return info.ToString();
-        }
+        #endregion
 
         #endregion
 
         #region Lobby支持方法
 
         private bool shouldRejoinLobby = false;
-
-        /// <summary>
-        /// 按房间名称加入房间
-        /// </summary>
-        public void JoinPhotonRoomByName(string roomName)
-        {
-            if (string.IsNullOrEmpty(roomName))
-            {
-                LogDebug("房间名称为空，无法加入");
-                return;
-            }
-
-            if (!PhotonNetwork.IsConnected)
-            {
-                LogDebug("未连接到Photon，无法加入房间");
-                return;
-            }
-
-            LogDebug($"按名称加入房间: {roomName}");
-            PhotonNetwork.JoinRoom(roomName);
-        }
 
         /// <summary>
         /// 设置玩家自定义属性
@@ -873,6 +997,8 @@ namespace Core.Network
             status += $"网络状态: {PhotonNetwork.NetworkClientState}\n";
             status += $"服务器时间: {PhotonNetwork.ServerTimestamp}\n";
             status += $"延迟: {PhotonNetwork.GetPing()}ms\n";
+            status += $"连接事件已触发: {hasTriggeredConnectedEvent}\n";
+            status += $"等待房间操作: {isWaitingForRoomOperation}\n";
 
             if (PhotonNetwork.InLobby)
             {
@@ -890,6 +1016,111 @@ namespace Core.Network
             }
 
             return status;
+        }
+
+        #endregion
+
+        #region 调试方法
+
+        /// <summary>
+        /// 调试日志
+        /// </summary>
+        private void LogDebug(string message)
+        {
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PhotonNetworkAdapter] {message}");
+            }
+        }
+
+        [ContextMenu("显示Photon状态")]
+        public void ShowPhotonStatus()
+        {
+            Debug.Log($"=== Photon状态 ===\n{GetPhotonStatus()}");
+        }
+
+        [ContextMenu("显示详细Photon状态")]
+        public void ShowDetailedPhotonStatus()
+        {
+            Debug.Log(GetDetailedPhotonStatus());
+        }
+
+        [ContextMenu("测试创建房间")]
+        public void TestCreateRoom()
+        {
+            CreatePhotonRoom("TestRoom", 4);
+        }
+
+        [ContextMenu("测试加入房间")]
+        public void TestJoinRoom()
+        {
+            JoinPhotonRoom();
+        }
+
+        [ContextMenu("离开房间")]
+        public void TestLeaveRoom()
+        {
+            LeavePhotonRoom();
+        }
+
+        [ContextMenu("显示房间列表调试信息")]
+        public void ShowRoomListDebugInfo()
+        {
+            Debug.Log(GetRoomListDebugInfo());
+        }
+
+        /// <summary>
+        /// 获取房间列表的详细调试信息
+        /// </summary>
+        public string GetRoomListDebugInfo()
+        {
+            var info = new System.Text.StringBuilder();
+            info.AppendLine($"=== Photon房间列表调试信息 ===");
+            info.AppendLine($"大厅状态: {(PhotonNetwork.InLobby ? "已连接" : "未连接")}");
+            info.AppendLine($"缓存房间数: {cachedRoomList.Count}");
+            info.AppendLine($"Photon统计房间数: {PhotonNetwork.CountOfRooms}");
+            info.AppendLine($"可加入房间数: {GetJoinableRooms().Count}");
+
+            if (cachedRoomList.Count > 0)
+            {
+                info.AppendLine("\n房间详情:");
+                for (int i = 0; i < cachedRoomList.Count; i++)
+                {
+                    var room = cachedRoomList[i];
+                    info.AppendLine($"  {i + 1}. {room.Name} ({room.PlayerCount}/{room.MaxPlayers}) " +
+                                  $"开放:{room.IsOpen} 可见:{room.IsVisible}");
+                }
+            }
+
+            return info.ToString();
+        }
+
+        [ContextMenu("强制触发连接事件")]
+        public void ForceTriggeredConnectedEvent()
+        {
+            if (PhotonNetwork.IsConnected && !hasTriggeredConnectedEvent)
+            {
+                hasTriggeredConnectedEvent = true;
+                OnPhotonConnected?.Invoke();
+                LogDebug("手动触发连接事件");
+            }
+        }
+
+        [ContextMenu("重置连接状态")]
+        public void ResetConnectionState()
+        {
+            hasTriggeredConnectedEvent = false;
+            isWaitingForRoomOperation = false;
+            isPendingClient = false;
+            pendingRoomName = "";
+            LogDebug("连接状态已重置");
+        }
+
+        [ContextMenu("检查并同步状态")]
+        public void ForceCheckAndSyncStatus()
+        {
+            LogDebug("手动检查并同步状态");
+            CheckAndSyncConnectionStatus();
         }
 
         #endregion

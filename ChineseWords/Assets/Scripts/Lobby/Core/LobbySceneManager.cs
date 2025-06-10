@@ -66,6 +66,16 @@ namespace Lobby.Core
 
         private void Start()
         {
+            // 临时调试：验证事件订阅
+            if (LobbyNetworkManager.Instance != null)
+            {
+                LobbyNetworkManager.Instance.OnRoomJoined += OnRoomJoinedHandler;
+                LogDebug("已订阅LobbyNetworkManager.OnRoomJoined事件");
+            }
+            else
+            {
+                LogDebug("LobbyNetworkManager.Instance为空！");
+            }
             StartCoroutine(InitializeSceneCoroutine());
         }
 
