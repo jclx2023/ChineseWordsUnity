@@ -10,8 +10,9 @@ using Photon.Pun;
 namespace Lobby.Core
 {
     /// <summary>
-    /// 修复后的 Lobby网络管理器
-    /// 主要修复：状态同步问题、事件订阅时机、状态检查逻辑
+    /// 持久化Lobby网络管理器
+    /// 移除DontDestroyOnLoad，改为由PersistentNetworkManager管理
+    /// 专注于房间管理和Lobby功能，不再负责生命周期管理
     /// </summary>
     public class LobbyNetworkManager : MonoBehaviour
     {
@@ -23,9 +24,10 @@ namespace Lobby.Core
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        public static LobbyNetworkManager Instance { get; private set; }
+        // 移除单例模式，改为通过PersistentNetworkManager访问
+        public static LobbyNetworkManager Instance => PersistentNetworkManager.Instance?.LobbyNetwork;
 
-        // 网络状态 - 修复：增加状态验证方法
+        // 网络状态
         private bool isConnected = false;
         private bool isConnecting = false;
         private bool isInLobby = false;
@@ -47,35 +49,22 @@ namespace Lobby.Core
 
         private void Awake()
         {
-            if (Instance == null)
-            {
-                Instance = this;
-                LogDebug("LobbyNetworkManager 实例已创建");
+            // 移除单例逻辑，改为由PersistentNetworkManager管理
+            LogDebug("LobbyNetworkManager 已初始化（持久化版本）");
 
-                // 修复1：在 Awake 中就订阅事件，确保不会错过早期事件
-                SubscribeToPhotonEvents();
-            }
-            else
-            {
-                LogDebug("销毁重复的LobbyNetworkManager实例");
-                Destroy(gameObject);
-                return;
-            }
+            // 立即订阅事件
+            SubscribeToPhotonEvents();
         }
 
         private void Start()
         {
-            // 修复2：先检查当前状态，再决定是否需要连接
+            // 检查当前状态并同步
             CheckAndSyncCurrentState();
 
             // 强制重新订阅事件，确保不会丢失
             Invoke(nameof(ForceResubscribeEvents), 1f);
 
-            if (autoConnectOnStart && !GetRealConnectionStatus())
-            {
-                StartCoroutine(ConnectToPhotonCoroutine());
-            }
-
+            // 启动监控协程
             StartCoroutine(MonitorPhotonStatus());
         }
 
@@ -83,16 +72,12 @@ namespace Lobby.Core
         {
             StopAllCoroutines();
             UnsubscribeFromPhotonEvents();
-
-            if (Instance == this)
-            {
-                Instance = null;
-            }
+            LogDebug("LobbyNetworkManager 已销毁");
         }
 
         #endregion
 
-        #region 修复：状态检查和同步方法
+        #region 状态检查和同步方法
 
         /// <summary>
         /// 检查并同步当前真实状态
@@ -129,14 +114,14 @@ namespace Lobby.Core
                     RefreshRoomList();
                 }
             }
-
-            // 移除手动触发房间加入事件的代码，避免重复
         }
+
         private void ForceResubscribeEvents()
         {
             LogDebug("强制重新订阅Photon事件");
             SubscribeToPhotonEvents();
         }
+
         /// <summary>
         /// 获取真实的连接状态（直接查询Photon）
         /// </summary>
@@ -158,39 +143,34 @@ namespace Lobby.Core
         /// </summary>
         private bool CheckNetworkStatus(string operation)
         {
-            // 修复3：使用真实状态进行检查，而不是内部缓存状态
             bool realConnected = GetRealConnectionStatus();
             bool realInLobby = GetRealLobbyStatus();
 
             LogDebug($"检查网络状态用于 {operation}:");
             LogDebug($"  真实连接状态: {realConnected}");
             LogDebug($"  真实大厅状态: {realInLobby}");
-            LogDebug($"  内部连接状态: {isConnected}");
-            LogDebug($"  内部大厅状态: {isInLobby}");
 
             if (!realConnected)
             {
-                LogDebug($"无法执行 {operation}：未连接到网络（真实状态检查）");
+                LogDebug($"无法执行 {operation}：未连接到网络");
                 return false;
             }
 
             if (!realInLobby)
             {
-                LogDebug($"无法执行 {operation}：未在大厅中（真实状态检查）");
+                LogDebug($"无法执行 {operation}：未在大厅中");
                 return false;
             }
 
             // 同步内部状态
             if (isConnected != realConnected)
             {
-                LogDebug("同步内部连接状态");
                 isConnected = realConnected;
                 OnConnectionStatusChanged?.Invoke(isConnected);
             }
 
             if (isInLobby != realInLobby)
             {
-                LogDebug("同步内部大厅状态");
                 isInLobby = realInLobby;
                 OnLobbyStatusChanged?.Invoke(isInLobby);
             }
@@ -200,7 +180,7 @@ namespace Lobby.Core
 
         #endregion
 
-        #region 连接管理（保持原有逻辑，但增加状态同步）
+        #region 连接管理
 
         /// <summary>
         /// 连接到Photon的协程
@@ -209,17 +189,14 @@ namespace Lobby.Core
         {
             LogDebug("=== 开始Photon连接流程 ===");
 
-            // 1. 检查PhotonNetworkAdapter
+            // 检查PhotonNetworkAdapter
             if (PhotonNetworkAdapter.Instance == null)
             {
                 Debug.LogError("[LobbyNetworkManager] PhotonNetworkAdapter.Instance 为空！");
-                Debug.LogError("请检查场景中是否有PhotonNetworkAdapter组件");
                 yield break;
             }
 
-            LogDebug("✓ PhotonNetworkAdapter.Instance 存在");
-
-            // 2. 检查当前真实状态
+            // 检查当前真实状态
             if (GetRealConnectionStatus())
             {
                 LogDebug("检测到已连接到Photon，同步状态并尝试加入大厅");
@@ -240,11 +217,10 @@ namespace Lobby.Core
                 yield break;
             }
 
-            // 3. 开始连接流程
+            // 开始连接流程
             isConnecting = true;
             OnConnectionStatusChanged?.Invoke(false);
 
-            // 4. 尝试连接
             LogDebug("开始连接到Photon服务器...");
 
             try
@@ -272,10 +248,10 @@ namespace Lobby.Core
                 yield break;
             }
 
-            // 5. 开始连接超时计时
+            // 开始连接超时计时
             connectionTimeoutCoroutine = StartCoroutine(ConnectionTimeoutCoroutine());
 
-            // 6. 等待连接完成
+            // 等待连接完成
             float waitTime = 0f;
             while (isConnecting && !GetRealConnectionStatus() && waitTime < connectionTimeout)
             {
@@ -284,14 +260,14 @@ namespace Lobby.Core
                 waitTime += 1f;
             }
 
-            // 7. 停止超时计时
+            // 停止超时计时
             if (connectionTimeoutCoroutine != null)
             {
                 StopCoroutine(connectionTimeoutCoroutine);
                 connectionTimeoutCoroutine = null;
             }
 
-            // 8. 连接结果
+            // 连接结果
             bool finalConnected = GetRealConnectionStatus();
             if (finalConnected)
             {
@@ -309,7 +285,7 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// 监控Photon状态的协程（增强版）
+        /// 监控Photon状态的协程
         /// </summary>
         private IEnumerator MonitorPhotonStatus()
         {
@@ -323,15 +299,13 @@ namespace Lobby.Core
                             $"连接: {PhotonNetwork.IsConnected}, " +
                             $"大厅: {PhotonNetwork.InLobby}");
 
-                    // 修复4：定期检查状态一致性
+                    // 定期检查状态一致性
                     bool realConnected = GetRealConnectionStatus();
                     bool realInLobby = GetRealLobbyStatus();
 
                     if (realConnected != isConnected || realInLobby != isInLobby)
                     {
                         LogDebug($"[状态监控] 检测到状态不一致，进行同步");
-                        LogDebug($"  内部状态: 连接={isConnected}, 大厅={isInLobby}");
-                        LogDebug($"  真实状态: 连接={realConnected}, 大厅={realInLobby}");
                         CheckAndSyncCurrentState();
                     }
                 }
@@ -408,13 +382,12 @@ namespace Lobby.Core
 
         #endregion
 
-        #region 房间管理（修复状态检查）
+        #region 房间管理
 
         public void CreateRoom(string roomName, int maxPlayers, string password = "")
         {
             LogDebug($"尝试创建房间: {roomName}, 最大人数: {maxPlayers}");
 
-            // 修复5：使用修复后的状态检查方法
             if (!CheckNetworkStatus("创建房间"))
             {
                 OnRoomCreated?.Invoke(roomName, false);
@@ -481,11 +454,9 @@ namespace Lobby.Core
             // 设置玩家属性
             SetPlayerProperties();
 
-            // TODO: 如果房间有密码，这里需要处理密码验证
             if (roomData.hasPassword)
             {
                 LogDebug("房间需要密码，但暂未实现密码验证");
-                // 在阶段3可以扩展密码输入功能
             }
 
             // 调用PhotonNetworkAdapter加入房间
@@ -533,18 +504,11 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// 刷新房间列表（修复版）
+        /// 刷新房间列表
         /// </summary>
         public void RefreshRoomList()
         {
             LogDebug("尝试刷新房间列表");
-
-            // 修复6：使用修复后的状态检查，并增加详细日志
-            LogDebug($"刷新房间列表状态检查:");
-            LogDebug($"  GetRealConnectionStatus(): {GetRealConnectionStatus()}");
-            LogDebug($"  GetRealLobbyStatus(): {GetRealLobbyStatus()}");
-            LogDebug($"  内部 isConnected: {isConnected}");
-            LogDebug($"  内部 isInLobby: {isInLobby}");
 
             if (!CheckNetworkStatus("刷新房间列表"))
             {
@@ -585,7 +549,7 @@ namespace Lobby.Core
 
         #endregion
 
-        #region Photon事件处理（保持原有逻辑）
+        #region Photon事件处理
 
         private void OnPhotonConnected()
         {
@@ -736,28 +700,31 @@ namespace Lobby.Core
 
         #endregion
 
-        #region 辅助方法（保持不变）
+        #region 辅助方法
 
         /// <summary>
         /// 设置玩家属性
         /// </summary>
         private void SetPlayerProperties()
         {
-            if (LobbySceneManager.Instance == null)
-                return;
-
-            var playerData = LobbySceneManager.Instance.GetCurrentPlayerData();
-            if (playerData == null)
-                return;
-
-            // 创建玩家自定义属性
-            var playerProps = PhotonLobbyDataConverter.CreatePlayerProperties(playerData);
-
-            // 设置到Photon
-            if (PhotonNetworkAdapter.Instance != null)
+            // 如果有LobbySceneManager，从那里获取玩家数据
+            var lobbySceneManager = FindObjectOfType<LobbySceneManager>();
+            if (lobbySceneManager != null)
             {
-                PhotonNetworkAdapter.Instance.SetPlayerProperties(playerProps);
+                var playerData = lobbySceneManager.GetCurrentPlayerData();
+                if (playerData != null)
+                {
+                    var playerProps = PhotonLobbyDataConverter.CreatePlayerProperties(playerData);
+                    if (PhotonNetworkAdapter.Instance != null)
+                    {
+                        PhotonNetworkAdapter.Instance.SetPlayerProperties(playerProps);
+                    }
+                    return;
+                }
             }
+
+            // 备用方案：使用默认玩家数据
+            LogDebug("使用默认玩家数据");
         }
 
         /// <summary>
@@ -765,9 +732,10 @@ namespace Lobby.Core
         /// </summary>
         private string GetCurrentPlayerName()
         {
-            if (LobbySceneManager.Instance != null)
+            var lobbySceneManager = FindObjectOfType<LobbySceneManager>();
+            if (lobbySceneManager != null)
             {
-                var playerData = LobbySceneManager.Instance.GetCurrentPlayerData();
+                var playerData = lobbySceneManager.GetCurrentPlayerData();
                 if (playerData != null && !string.IsNullOrEmpty(playerData.playerName))
                 {
                     return playerData.playerName;
@@ -778,7 +746,7 @@ namespace Lobby.Core
 
         #endregion
 
-        #region 公共接口（增强版）
+        #region 公共接口
 
         /// <summary>
         /// 获取连接状态（使用真实状态）
@@ -848,7 +816,7 @@ namespace Lobby.Core
         }
 
         /// <summary>
-        /// 获取网络统计信息（增强版）
+        /// 获取网络统计信息
         /// </summary>
         public string GetNetworkStats()
         {
@@ -878,6 +846,18 @@ namespace Lobby.Core
         {
             LogDebug("强制同步状态");
             CheckAndSyncCurrentState();
+        }
+
+        /// <summary>
+        /// 启动自动连接
+        /// </summary>
+        public void StartAutoConnect()
+        {
+            if (autoConnectOnStart && !GetRealConnectionStatus())
+            {
+                LogDebug("启动自动连接流程");
+                StartCoroutine(ConnectToPhotonCoroutine());
+            }
         }
 
         #endregion
@@ -933,38 +913,6 @@ namespace Lobby.Core
             {
                 var room = cachedRoomList[i];
                 LogDebug($"{i + 1}. {room.roomName} ({room.currentPlayers}/{room.maxPlayers}) - {room.status}");
-            }
-        }
-
-        [ContextMenu("详细状态诊断")]
-        public void DetailedStatusDiagnosis()
-        {
-            LogDebug("=== 详细状态诊断 ===");
-            LogDebug($"PhotonNetworkAdapter.Instance: {(PhotonNetworkAdapter.Instance != null ? "存在" : "为空")}");
-
-            if (PhotonNetworkAdapter.Instance != null)
-            {
-                LogDebug($"PhotonNetworkAdapter.IsPhotonConnected: {PhotonNetworkAdapter.Instance.IsPhotonConnected}");
-                LogDebug($"PhotonNetworkAdapter.IsInPhotonLobby: {PhotonNetworkAdapter.Instance.IsInPhotonLobby}");
-            }
-
-            LogDebug($"PhotonNetwork.IsConnected: {PhotonNetwork.IsConnected}");
-            LogDebug($"PhotonNetwork.InLobby: {PhotonNetwork.InLobby}");
-            LogDebug($"PhotonNetwork.NetworkClientState: {PhotonNetwork.NetworkClientState}");
-
-            LogDebug($"LobbyNetworkManager.isConnected: {isConnected}");
-            LogDebug($"LobbyNetworkManager.isInLobby: {isInLobby}");
-            LogDebug($"LobbyNetworkManager.isConnecting: {isConnecting}");
-
-            LogDebug($"GetRealConnectionStatus(): {GetRealConnectionStatus()}");
-            LogDebug($"GetRealLobbyStatus(): {GetRealLobbyStatus()}");
-
-            LogDebug($"缓存房间数量: {cachedRoomList.Count}");
-
-            if (PhotonNetworkAdapter.Instance != null)
-            {
-                var photonRooms = PhotonNetworkAdapter.Instance.GetPhotonRoomList();
-                LogDebug($"PhotonAdapter房间数量: {photonRooms.Count}");
             }
         }
 

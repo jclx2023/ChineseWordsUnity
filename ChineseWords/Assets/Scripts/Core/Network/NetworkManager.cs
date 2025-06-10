@@ -8,7 +8,8 @@ using Hashtable = ExitGames.Client.Photon.Hashtable;
 namespace Core.Network
 {
     /// <summary>
-    /// 优化的网络管理器 - 专注于游戏内RPC通信
+    /// 持久化网络管理器 - 专注于游戏内RPC通信
+    /// 移除单例模式，改为由PersistentNetworkManager管理
     /// 适用场景：RoomScene 和 NetworkGameScene
     /// 职责：玩家状态同步、游戏内RPC消息处理
     /// </summary>
@@ -17,7 +18,8 @@ namespace Core.Network
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        public static NetworkManager Instance { get; private set; }
+        // 移除单例模式，改为通过PersistentNetworkManager访问
+        public static NetworkManager Instance => PersistentNetworkManager.Instance?.GameNetwork;
 
         #region 核心状态属性
 
@@ -57,18 +59,8 @@ namespace Core.Network
 
         private void Awake()
         {
-            // 简化的单例模式 - 不使用DontDestroyOnLoad
-            if (Instance == null)
-            {
-                Instance = this;
-                LogDebug("NetworkManager 实例已创建");
-            }
-            else
-            {
-                LogDebug("销毁重复的NetworkManager实例");
-                Destroy(gameObject);
-                return;
-            }
+            // 移除单例逻辑，改为由PersistentNetworkManager管理
+            LogDebug("NetworkManager 已初始化（持久化版本）");
         }
 
         private void Start()
@@ -79,11 +71,12 @@ namespace Core.Network
             // 验证网络状态
             if (!PhotonNetwork.InRoom)
             {
-                Debug.LogError("[NetworkManager] 启动时未在Photon房间中！");
-                return;
+                LogDebug("启动时未在Photon房间中，这是正常的（可能在其他场景）");
             }
-
-            LogDebug($"NetworkManager已启动 - 房间: {RoomName}, 玩家ID: {ClientId}, 是否Host: {IsHost}");
+            else
+            {
+                LogDebug($"NetworkManager已启动 - 房间: {RoomName}, 玩家ID: {ClientId}, 是否Host: {IsHost}");
+            }
         }
 
         private void OnDestroy()
@@ -92,11 +85,6 @@ namespace Core.Network
             if (PhotonNetwork.NetworkingClient != null)
             {
                 PhotonNetwork.RemoveCallbackTarget(this);
-            }
-
-            if (Instance == this)
-            {
-                Instance = null;
             }
 
             LogDebug("NetworkManager已销毁");
@@ -234,8 +222,17 @@ namespace Core.Network
                 return;
             }
 
-            photonView.RPC("OnAnswerSubmitted", RpcTarget.MasterClient, (int)ClientId, answer);
-            LogDebug($"提交答案: {answer}");
+            // 使用PersistentNetworkManager的PhotonView发送RPC
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnAnswerSubmitted", RpcTarget.MasterClient, (int)ClientId, answer);
+                LogDebug($"提交答案: {answer}");
+            }
+            else
+            {
+                Debug.LogError("[NetworkManager] 无法发送RPC，PersistentNetworkManager或PhotonView不可用");
+            }
         }
 
         [PunRPC]
@@ -355,9 +352,17 @@ namespace Core.Network
                 return;
             }
 
-            byte[] questionData = question.Serialize();
-            photonView.RPC("OnQuestionReceived_RPC", RpcTarget.Others, questionData);
-            LogDebug($"广播题目: {question.questionType}");
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                byte[] questionData = question.Serialize();
+                persistentManager.photonView.RPC("OnQuestionReceived_RPC", RpcTarget.Others, questionData);
+                LogDebug($"广播题目: {question.questionType}");
+            }
+            else
+            {
+                Debug.LogError("[NetworkManager] 无法广播题目，PersistentNetworkManager或PhotonView不可用");
+            }
         }
 
         /// <summary>
@@ -366,8 +371,13 @@ namespace Core.Network
         public void BroadcastAnswerResult(bool isCorrect, string correctAnswer)
         {
             if (!IsHost) return;
-            photonView.RPC("OnAnswerResult_RPC", RpcTarget.Others, isCorrect, correctAnswer);
-            LogDebug($"广播答题结果: {(isCorrect ? "正确" : "错误")}");
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnAnswerResult_RPC", RpcTarget.Others, isCorrect, correctAnswer);
+                LogDebug($"广播答题结果: {(isCorrect ? "正确" : "错误")}");
+            }
         }
 
         /// <summary>
@@ -376,8 +386,13 @@ namespace Core.Network
         public void BroadcastHealthUpdate(ushort playerId, int newHealth, int maxHealth)
         {
             if (!IsHost) return;
-            photonView.RPC("OnHealthUpdate_RPC", RpcTarget.Others, (int)playerId, newHealth, maxHealth);
-            LogDebug($"广播血量更新: 玩家{playerId} {newHealth}/{maxHealth}");
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnHealthUpdate_RPC", RpcTarget.Others, (int)playerId, newHealth, maxHealth);
+                LogDebug($"广播血量更新: 玩家{playerId} {newHealth}/{maxHealth}");
+            }
         }
 
         /// <summary>
@@ -386,8 +401,13 @@ namespace Core.Network
         public void BroadcastPlayerTurnChanged(ushort newTurnPlayerId)
         {
             if (!IsHost) return;
-            photonView.RPC("OnPlayerTurnChanged_RPC", RpcTarget.Others, (int)newTurnPlayerId);
-            LogDebug($"广播回合变更: 玩家{newTurnPlayerId}");
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnPlayerTurnChanged_RPC", RpcTarget.Others, (int)newTurnPlayerId);
+                LogDebug($"广播回合变更: 玩家{newTurnPlayerId}");
+            }
         }
 
         /// <summary>
@@ -396,8 +416,13 @@ namespace Core.Network
         public void BroadcastGameStart(int totalPlayerCount, int alivePlayerCount, ushort firstTurnPlayerId)
         {
             if (!IsHost) return;
-            photonView.RPC("OnGameStart_RPC", RpcTarget.Others, totalPlayerCount, alivePlayerCount, (int)firstTurnPlayerId);
-            LogDebug($"广播游戏开始: 总玩家{totalPlayerCount}, 首回合玩家{firstTurnPlayerId}");
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnGameStart_RPC", RpcTarget.Others, totalPlayerCount, alivePlayerCount, (int)firstTurnPlayerId);
+                LogDebug($"广播游戏开始: 总玩家{totalPlayerCount}, 首回合玩家{firstTurnPlayerId}");
+            }
         }
 
         /// <summary>
@@ -406,7 +431,12 @@ namespace Core.Network
         public void BroadcastGameProgress(int questionNumber, int alivePlayerCount, ushort turnPlayerId, int questionType, float timeLimit)
         {
             if (!IsHost) return;
-            photonView.RPC("OnGameProgress_RPC", RpcTarget.Others, questionNumber, alivePlayerCount, (int)turnPlayerId, questionType, timeLimit);
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnGameProgress_RPC", RpcTarget.Others, questionNumber, alivePlayerCount, (int)turnPlayerId, questionType, timeLimit);
+            }
         }
 
         /// <summary>
@@ -415,7 +445,12 @@ namespace Core.Network
         public void BroadcastPlayerStateSync(ushort playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
         {
             if (!IsHost) return;
-            photonView.RPC("OnPlayerStateSync_RPC", RpcTarget.Others, (int)playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnPlayerStateSync_RPC", RpcTarget.Others, (int)playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+            }
         }
 
         /// <summary>
@@ -424,7 +459,12 @@ namespace Core.Network
         public void BroadcastPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
         {
             if (!IsHost) return;
-            photonView.RPC("OnPlayerAnswerResult_RPC", RpcTarget.Others, (int)playerId, isCorrect, answer);
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnPlayerAnswerResult_RPC", RpcTarget.Others, (int)playerId, isCorrect, answer);
+            }
         }
 
         #endregion
@@ -457,6 +497,33 @@ namespace Core.Network
                 return "未在房间中";
 
             return $"房间: {RoomName} | 玩家: {PlayerCount}/{MaxPlayers} | 准备: {GetReadyPlayerCount()}/{PlayerCount} | Host: {IsHost}";
+        }
+
+        /// <summary>
+        /// 检查是否具备RPC发送条件
+        /// </summary>
+        private bool CanSendRPC()
+        {
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager == null)
+            {
+                Debug.LogError("[NetworkManager] PersistentNetworkManager实例不存在");
+                return false;
+            }
+
+            if (persistentManager.photonView == null)
+            {
+                Debug.LogError("[NetworkManager] PersistentNetworkManager的PhotonView不存在");
+                return false;
+            }
+
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("[NetworkManager] 未在房间中，无法发送RPC");
+                return false;
+            }
+
+            return true;
         }
 
         #endregion
@@ -545,6 +612,72 @@ namespace Core.Network
 
         #endregion
 
+        #region 场景适配方法
+
+        /// <summary>
+        /// 为当前场景注册网络事件监听
+        /// </summary>
+        public void RegisterSceneNetworkListeners()
+        {
+            LogDebug("为当前场景注册网络事件监听");
+            // 这里可以根据当前场景自动注册相应的UI更新监听
+        }
+
+        /// <summary>
+        /// 取消当前场景的网络事件监听
+        /// </summary>
+        public void UnregisterSceneNetworkListeners()
+        {
+            LogDebug("取消当前场景的网络事件监听");
+            // 这里可以清理场景相关的事件监听
+        }
+
+        /// <summary>
+        /// 检查网络管理器是否可用于当前场景
+        /// </summary>
+        public bool IsAvailableForCurrentScene()
+        {
+            // 检查当前场景是否需要网络功能
+            string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            bool needsNetworking = currentScene.Contains("Room") || currentScene.Contains("Game") || currentScene.Contains("Network");
+
+            LogDebug($"当前场景: {currentScene}, 需要网络功能: {needsNetworking}");
+            return needsNetworking;
+        }
+
+        #endregion
+
+        #region 持久化状态管理
+
+        /// <summary>
+        /// 保存当前网络状态（场景切换前）
+        /// </summary>
+        public void SaveNetworkState()
+        {
+            LogDebug("保存网络状态");
+            // 可以在这里保存游戏状态、玩家准备状态等
+        }
+
+        /// <summary>
+        /// 恢复网络状态（场景切换后）
+        /// </summary>
+        public void RestoreNetworkState()
+        {
+            LogDebug("恢复网络状态");
+            // 可以在这里恢复之前保存的状态
+        }
+
+        /// <summary>
+        /// 重置网络状态
+        /// </summary>
+        public void ResetNetworkState()
+        {
+            LogDebug("重置网络状态");
+            // 清理临时状态，但保持连接
+        }
+
+        #endregion
+
         #region 调试方法
 
         private void LogDebug(string message)
@@ -584,7 +717,47 @@ namespace Core.Network
         [ContextMenu("测试设置准备状态")]
         public void TestSetReady()
         {
-            SetPlayerReady(!GetPlayerReady(PhotonNetwork.LocalPlayer));
+            if (PhotonNetwork.LocalPlayer != null)
+            {
+                SetPlayerReady(!GetPlayerReady(PhotonNetwork.LocalPlayer));
+            }
+        }
+
+        [ContextMenu("检查RPC发送条件")]
+        public void CheckRPCConditions()
+        {
+            bool canSend = CanSendRPC();
+            Debug.Log($"RPC发送条件检查: {(canSend ? "✓ 可以发送" : "✗ 不能发送")}");
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            Debug.Log($"PersistentNetworkManager: {(persistentManager != null ? "✓" : "✗")}");
+            Debug.Log($"PhotonView: {(persistentManager?.photonView != null ? "✓" : "✗")}");
+            Debug.Log($"在房间中: {(PhotonNetwork.InRoom ? "✓" : "✗")}");
+        }
+
+        [ContextMenu("显示网络管理器状态")]
+        public void ShowNetworkManagerStatus()
+        {
+            string status = "=== NetworkManager状态 ===\n";
+            status += $"可用于当前场景: {IsAvailableForCurrentScene()}\n";
+            status += $"房间状态: {GetRoomStatus()}\n";
+            status += $"RPC发送条件: {(CanSendRPC() ? "✓" : "✗")}\n";
+
+            Debug.Log(status);
+        }
+
+        [ContextMenu("测试RPC广播")]
+        public void TestRPCBroadcast()
+        {
+            if (IsHost && CanSendRPC())
+            {
+                BroadcastAnswerResult(true, "测试答案");
+                Debug.Log("已发送测试RPC");
+            }
+            else
+            {
+                Debug.Log("无法发送测试RPC - 不是Host或条件不满足");
+            }
         }
 
         #endregion

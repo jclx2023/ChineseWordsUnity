@@ -676,6 +676,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 817239012}
+  - component: {fileID: 817239014}
   - component: {fileID: 817239011}
   - component: {fileID: 817239010}
   - component: {fileID: 817239013}
@@ -698,7 +699,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3b492f26186250541acda9b0e2d4393d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  autoConnectOnStart: 1
+  autoConnectOnStart: 0
   roomListRefreshInterval: 10
   connectionTimeout: 10
   enableDebugLogs: 1
@@ -743,6 +744,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gameVersion: 0.4.4
+  enableDebugLogs: 1
+--- !u!114 &817239014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 817239009}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35722c898c0f89243bdeff8d2cf7abcc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  photonAdapter: {fileID: 817239013}
+  lobbyNetworkManager: {fileID: 817239010}
+  networkManager: {fileID: 817239011}
+  autoConnectOnStart: 1
+  connectionDelay: 0.01
   enableDebugLogs: 1
 --- !u!1 &987171892
 GameObject:
