@@ -2616,7 +2616,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gameStartDelay: 1
   minPlayersToStart: 2
-  enableDebugLogs: 0
+  enableDebugLogs: 1
 --- !u!114 &1443983243
 MonoBehaviour:
   m_ObjectHideFlags: 0

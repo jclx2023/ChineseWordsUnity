@@ -19,6 +19,7 @@ namespace Core.Network
         public static QuestionManagerBase CreateManager(
             GameObject parent,
             QuestionType questionType,
+            bool isNetworkMode = false,
             bool isDataOnly = false)
         {
             if (parent == null)
