@@ -288,7 +288,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0.000048410322}
+  m_AnchoredPosition: {x: 0, y: 0.00053065014}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &31117885
@@ -374,7 +374,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 756589972}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.99960446
+  m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -541,7 +541,13 @@ MonoBehaviour:
   defaultConfig: {fileID: 11400000, guid: c75a6fb5350357f4c9b04570f73244e7, type: 2}
   configUIPrefab: {fileID: 2374131951781154891, guid: 434fae588f24a4a48a08f91bd543391e, type: 3}
   configUIHotkey: 282
+  enableHotkeyInGame: 1
+  allowInAllScenes: 0
+  allowedScenes:
+  - RoomScene
+  - NetworkGameScene
   enableDebugLogs: 1
+  forceAllowInEditor: 1
 --- !u!4 &119549038
 Transform:
   m_ObjectHideFlags: 0
@@ -1196,11 +1202,9 @@ MonoBehaviour:
   startGameButton: {fileID: 1469649518}
   readyButton: {fileID: 143589881}
   readyButtonText: {fileID: 1014060086}
-  enableAutoRefresh: 1
-  autoRefreshInterval: 1
+  leaveRoomButton: {fileID: 0}
   enableDebugLogs: 0
-  enableManualRefresh: 1
-  manualRefreshButton: {fileID: 1908977751}
+  debugRefreshButton: {fileID: 0}
 --- !u!4 &469692676
 Transform:
   m_ObjectHideFlags: 0
@@ -2610,10 +2614,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cc50d216abadd6d43b74a22e12c669ce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxPlayersPerRoom: 4
-  enableDebugLogs: 0
-  hasGameStarted: 0
   gameStartDelay: 1
+  minPlayersToStart: 2
+  enableDebugLogs: 0
 --- !u!114 &1443983243
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2626,9 +2629,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21c82390ffb210e4caa05874ee73c7b6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  defaultPort: 7777
-  maxClients: 8
-  timeoutTime: 10000
   enableDebugLogs: 1
 --- !u!4 &1443983244
 Transform:

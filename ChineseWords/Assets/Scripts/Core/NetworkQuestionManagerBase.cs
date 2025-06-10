@@ -1,5 +1,6 @@
 using UnityEngine;
 using Core.Network;
+using Photon.Pun;
 
 namespace Core
 {
@@ -16,7 +17,7 @@ namespace Core
         protected virtual void Awake()
         {
             networkController = NetworkQuestionManagerController.Instance;
-            isNetworkMode = networkController?.IsMultiplayerMode ?? false;
+            isNetworkMode = isNetworkMode = PhotonNetwork.InRoom;
         }
 
         /// <summary>

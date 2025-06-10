@@ -48,6 +48,7 @@ MonoBehaviour:
   - OnPlayerStateSync_RPC
   - OnPlayerTurnChanged_RPC
   - OnQuestionReceived_RPC
+  - OnKickedFromRoom
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

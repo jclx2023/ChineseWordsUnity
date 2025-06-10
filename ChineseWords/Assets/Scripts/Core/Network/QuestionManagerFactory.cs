@@ -16,15 +16,9 @@ namespace Core.Network
         /// <summary>
         /// 创建题目管理器
         /// </summary>
-        /// <param name="parent">父对象</param>
-        /// <param name="questionType">题目类型</param>
-        /// <param name="isNetworkMode">是否为网络模式</param>
-        /// <param name="isDataOnly">是否仅用于数据获取（不创建UI）</param>
-        /// <returns>创建的题目管理器</returns>
         public static QuestionManagerBase CreateManager(
             GameObject parent,
             QuestionType questionType,
-            bool isNetworkMode = false,
             bool isDataOnly = false)
         {
             if (parent == null)

@@ -110,7 +110,6 @@ namespace Debugging
             UnityEngine.Debug.Log($"NQMC.Instance: {instance.name}");
             UnityEngine.Debug.Log($"  IsInitialized: {instance.IsInitialized}");
             UnityEngine.Debug.Log($"  IsGameStarted: {instance.IsGameStarted}");
-            UnityEngine.Debug.Log($"  IsMultiplayerMode: {instance.IsMultiplayerMode}");
             UnityEngine.Debug.Log($"  IsMyTurn: {instance.IsMyTurn}");
             UnityEngine.Debug.Log($"  CurrentManager: {(instance.CurrentManager != null ? instance.CurrentManager.GetType().Name : "null")}");
         }
@@ -230,7 +229,6 @@ namespace Debugging
 
             // 检查NQMC状态
             UnityEngine.Debug.Log($"NQMC游戏已启动: {nqmc.IsGameStarted}");
-            UnityEngine.Debug.Log($"NQMC多人模式: {nqmc.IsMultiplayerMode}");
             UnityEngine.Debug.Log($"NQMC是我的回合: {nqmc.IsMyTurn}");
 
             // 如果游戏未启动，尝试启动

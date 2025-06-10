@@ -331,7 +331,7 @@ namespace Core
                 }
                 else
                 {
-                    LogDebug($"NQMC已启动 - 多人模式: {nqmc.IsMultiplayerMode}");
+                    LogDebug($"NQMC已启动 - 多人模式");
                 }
             }
             else
