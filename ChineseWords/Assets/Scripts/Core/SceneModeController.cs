@@ -21,7 +21,6 @@ namespace Core
 
         [Header("可选组件引用")]
         [SerializeField] private GameObject networkCanvas;
-        [SerializeField] private RoomConfigManager roomConfigManager;
 
         [Header("自动查找设置")]
         [SerializeField] private bool autoFindComponents = true;
@@ -125,12 +124,6 @@ namespace Core
                 LogDebug($"找到NetworkCanvas: {networkCanvas?.name ?? "未找到"}");
             }
 
-            // 查找RoomConfigManager（可选）
-            if (roomConfigManager == null)
-            {
-                roomConfigManager = RoomConfigManager.Instance;
-                LogDebug($"找到RoomConfigManager: {roomConfigManager?.name ?? "未找到"}");
-            }
         }
 
         /// <summary>
@@ -235,8 +228,6 @@ namespace Core
             // HostGameManager配置
             ConfigureHostGameManager();
 
-            // RoomConfigManager配置
-            ConfigureRoomConfigManager();
         }
 
         /// <summary>
@@ -273,18 +264,6 @@ namespace Core
                 hostManager.enabled = shouldEnable;
 
                 LogDebug($"HostGameManager 启用状态: {shouldEnable}");
-            }
-        }
-
-        /// <summary>
-        /// 配置RoomConfigManager
-        /// </summary>
-        private void ConfigureRoomConfigManager()
-        {
-            if (roomConfigManager != null)
-            {
-                // RoomConfigManager会自己检查权限，这里不需要额外配置
-                LogDebug("RoomConfigManager已配置");
             }
         }
 
@@ -595,7 +574,6 @@ namespace Core
             return $"GameCanvas: {(gameCanvas != null ? "✓" : "✗")}, " +
                    $"NetworkUI: {(networkUI != null ? "✓" : "✗")}, " +
                    $"NetworkCanvas: {(networkCanvas != null ? "✓" : "✗")}, " +
-                   $"RoomConfigManager: {(roomConfigManager != null ? "✓" : "✗")}, " +
                    $"HostGameManager: {(HostGameManager.Instance != null ? "✓" : "✗")}";
         }
 

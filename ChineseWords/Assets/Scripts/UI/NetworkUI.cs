@@ -29,7 +29,7 @@ namespace UI
         [SerializeField] private Color normalPlayerColor = Color.white;
 
         [Header("调试设置")]
-        [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool enableDebugLogs;
 
         // 玩家UI状态数据
         [System.Serializable]

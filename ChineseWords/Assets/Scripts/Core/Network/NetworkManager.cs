@@ -69,13 +69,6 @@ namespace Core.Network
                 Destroy(gameObject);
                 return;
             }
-
-            // 确保PhotonView组件存在
-            if (photonView == null)
-            {
-                gameObject.AddComponent<PhotonView>();
-                LogDebug("自动添加PhotonView组件");
-            }
         }
 
         private void Start()

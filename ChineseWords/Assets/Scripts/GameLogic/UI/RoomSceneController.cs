@@ -679,20 +679,6 @@ namespace UI
 
             ShowLoadingPanel("游戏启动中，请稍候...");
 
-            // 触发HostGameManager开始游戏（仅Host端）
-            if (RoomManager.Instance?.IsHost == true)
-            {
-                if (HostGameManager.Instance != null)
-                {
-                    LogDebug("触发HostGameManager开始游戏");
-                    HostGameManager.Instance.StartGameFromRoom();
-                }
-                else
-                {
-                    LogDebug("HostGameManager实例不存在");
-                }
-            }
-
             // 使用SceneTransitionManager执行场景切换
             bool switchSuccess = SceneTransitionManager.SwitchToGameScene("RoomSceneController");
 
@@ -704,7 +690,6 @@ namespace UI
                 HideLoadingPanel();
             }
         }
-
         /// <summary>
         /// 返回大厅事件处理
         /// </summary>
