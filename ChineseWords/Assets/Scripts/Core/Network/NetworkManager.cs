@@ -254,13 +254,19 @@ namespace Core.Network
         [PunRPC]
         void OnQuestionReceived_RPC(byte[] questionData)
         {
+            if (questionData == null || questionData.Length == 0)
+            {
+                LogDebug("接收到空的题目数据");
+                return;
+            }
+
             var question = NetworkQuestionData.Deserialize(questionData);
+            LogDebug($"题目反序列化结果: {(question != null ? question.questionType.ToString() : "失败")}");
+
             if (question != null)
             {
-                LogDebug($"收到题目: {question.questionType} - {question.questionText}");
+                LogDebug($"成功接收题目: {question.questionType} - {question.questionText}");
                 OnQuestionReceived?.Invoke(question);
-
-                // 通知NQMC
                 NotifyNQMCQuestionReceived(question);
             }
         }
@@ -339,34 +345,36 @@ namespace Core.Network
 
         #endregion
 
-        #region Host专用RPC发送方法
+        #region Host专用RPC发送方法 - 修复版：统一使用 RpcTarget.All
 
         /// <summary>
-        /// 广播题目（Host → All）
+        /// 广播题目（Host → All）- 已修复
         /// </summary>
         public void BroadcastQuestion(NetworkQuestionData question)
         {
-            if (!IsHost)
-            {
-                Debug.LogWarning("[NetworkManager] 只有Host可以广播题目");
-                return;
-            }
+            if (!IsHost) return;
 
             var persistentManager = PersistentNetworkManager.Instance;
-            if (persistentManager != null && persistentManager.photonView != null)
+            LogDebug($"准备广播题目 - PhotonView可用: {persistentManager?.photonView != null}");
+            LogDebug($"PhotonView ID: {persistentManager?.photonView?.ViewID}");
+            LogDebug($"房间中玩家数: {PhotonNetwork.PlayerList?.Length}");
+
+            byte[] questionData = question.Serialize();
+            LogDebug($"题目序列化数据长度: {questionData?.Length ?? -1}");
+
+            if (questionData != null && questionData.Length > 0)
             {
-                byte[] questionData = question.Serialize();
-                persistentManager.photonView.RPC("OnQuestionReceived_RPC", RpcTarget.Others, questionData);
-                LogDebug($"广播题目: {question.questionType}");
+                persistentManager.photonView.RPC("OnQuestionReceived_RPC", RpcTarget.All, questionData);
+                LogDebug($"✓ RPC已发送到所有玩家（包括Host）");
             }
             else
             {
-                Debug.LogError("[NetworkManager] 无法广播题目，PersistentNetworkManager或PhotonView不可用");
+                LogDebug("序列化数据无效，跳过RPC发送");
             }
         }
 
         /// <summary>
-        /// 广播答题结果（Host → All）
+        /// 广播答题结果（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastAnswerResult(bool isCorrect, string correctAnswer)
         {
@@ -375,13 +383,13 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnAnswerResult_RPC", RpcTarget.Others, isCorrect, correctAnswer);
-                LogDebug($"广播答题结果: {(isCorrect ? "正确" : "错误")}");
+                persistentManager.photonView.RPC("OnAnswerResult_RPC", RpcTarget.All, isCorrect, correctAnswer);
+                LogDebug($"✓ 广播答题结果到所有玩家: {(isCorrect ? "正确" : "错误")}");
             }
         }
 
         /// <summary>
-        /// 广播血量更新（Host → All）
+        /// 广播血量更新（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastHealthUpdate(ushort playerId, int newHealth, int maxHealth)
         {
@@ -390,13 +398,13 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnHealthUpdate_RPC", RpcTarget.Others, (int)playerId, newHealth, maxHealth);
-                LogDebug($"广播血量更新: 玩家{playerId} {newHealth}/{maxHealth}");
+                persistentManager.photonView.RPC("OnHealthUpdate_RPC", RpcTarget.All, (int)playerId, newHealth, maxHealth);
+                LogDebug($"✓ 广播血量更新到所有玩家: 玩家{playerId} {newHealth}/{maxHealth}");
             }
         }
 
         /// <summary>
-        /// 广播回合变更（Host → All）
+        /// 广播回合变更（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastPlayerTurnChanged(ushort newTurnPlayerId)
         {
@@ -405,13 +413,13 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnPlayerTurnChanged_RPC", RpcTarget.Others, (int)newTurnPlayerId);
-                LogDebug($"广播回合变更: 玩家{newTurnPlayerId}");
+                persistentManager.photonView.RPC("OnPlayerTurnChanged_RPC", RpcTarget.All, (int)newTurnPlayerId);
+                LogDebug($"✓ 广播回合变更到所有玩家: 玩家{newTurnPlayerId}");
             }
         }
 
         /// <summary>
-        /// 广播游戏开始（Host → All）
+        /// 广播游戏开始（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastGameStart(int totalPlayerCount, int alivePlayerCount, ushort firstTurnPlayerId)
         {
@@ -420,13 +428,13 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnGameStart_RPC", RpcTarget.Others, totalPlayerCount, alivePlayerCount, (int)firstTurnPlayerId);
-                LogDebug($"广播游戏开始: 总玩家{totalPlayerCount}, 首回合玩家{firstTurnPlayerId}");
+                persistentManager.photonView.RPC("OnGameStart_RPC", RpcTarget.All, totalPlayerCount, alivePlayerCount, (int)firstTurnPlayerId);
+                LogDebug($"✓ 广播游戏开始到所有玩家: 总玩家{totalPlayerCount}, 首回合玩家{firstTurnPlayerId}");
             }
         }
 
         /// <summary>
-        /// 广播游戏进度（Host → All）
+        /// 广播游戏进度（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastGameProgress(int questionNumber, int alivePlayerCount, ushort turnPlayerId, int questionType, float timeLimit)
         {
@@ -435,12 +443,13 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnGameProgress_RPC", RpcTarget.Others, questionNumber, alivePlayerCount, (int)turnPlayerId, questionType, timeLimit);
+                persistentManager.photonView.RPC("OnGameProgress_RPC", RpcTarget.All, questionNumber, alivePlayerCount, (int)turnPlayerId, questionType, timeLimit);
+                LogDebug($"✓ 广播游戏进度到所有玩家: 第{questionNumber}题");
             }
         }
 
         /// <summary>
-        /// 广播玩家状态同步（Host → All）
+        /// 广播玩家状态同步（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastPlayerStateSync(ushort playerId, string playerName, bool isHost, int currentHealth, int maxHealth, bool isAlive)
         {
@@ -449,12 +458,13 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnPlayerStateSync_RPC", RpcTarget.Others, (int)playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+                persistentManager.photonView.RPC("OnPlayerStateSync_RPC", RpcTarget.All, (int)playerId, playerName, isHost, currentHealth, maxHealth, isAlive);
+                LogDebug($"✓ 广播玩家状态同步到所有玩家: {playerName}");
             }
         }
 
         /// <summary>
-        /// 广播玩家答题结果（Host → All）
+        /// 广播玩家答题结果（Host → All）- 修复：改为 RpcTarget.All
         /// </summary>
         public void BroadcastPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
         {
@@ -463,7 +473,8 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             if (persistentManager != null && persistentManager.photonView != null)
             {
-                persistentManager.photonView.RPC("OnPlayerAnswerResult_RPC", RpcTarget.Others, (int)playerId, isCorrect, answer);
+                persistentManager.photonView.RPC("OnPlayerAnswerResult_RPC", RpcTarget.All, (int)playerId, isCorrect, answer);
+                LogDebug($"✓ 广播玩家答题结果到所有玩家: 玩家{playerId} {(isCorrect ? "正确" : "错误")}");
             }
         }
 
@@ -537,6 +548,7 @@ namespace Core.Network
         {
             if (NetworkQuestionManagerController.Instance != null)
             {
+                LogDebug("通知NQMC");
                 var method = NetworkQuestionManagerController.Instance.GetType()
                     .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 method?.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
