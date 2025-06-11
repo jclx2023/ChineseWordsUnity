@@ -2,14 +2,15 @@
 using Photon.Pun;
 using System.Collections;
 using Lobby.Core;
+using Photon.Realtime;
 
 namespace Core.Network
 {
     /// <summary>
-    /// 持久化网络管理器 - 游戏启动时创建，跨场景持续存在
-    /// 统一管理所有网络组件的生命周期和PhotonView ID分配
+    /// 修复后的持久化网络管理器
+    /// 统一管理所有网络组件，避免重复连接问题
     /// </summary>
-    [DefaultExecutionOrder(-100)] // 确保最先初始化
+    [DefaultExecutionOrder(-100)]
     public class PersistentNetworkManager : MonoBehaviourPun
     {
         [Header("网络组件引用")]
@@ -17,20 +18,23 @@ namespace Core.Network
         [SerializeField] private LobbyNetworkManager lobbyNetworkManager;
         [SerializeField] private NetworkManager networkManager;
 
-        [Header("自动连接设置")]
+        [Header("连接管理设置")]
         [SerializeField] private bool autoConnectOnStart = true;
-        [SerializeField] private float connectionDelay = 1f;
+        [SerializeField] private float initializationDelay = 1f;
+        [SerializeField] private float connectionDelay = 2f;
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static PersistentNetworkManager Instance { get; private set; }
 
-        // PhotonView ID 管理
-        private static int nextViewID = 1000; // 从1000开始，避免与系统ID冲突
-
-        // 组件状态
+        // 连接状态管理
         private bool isInitialized = false;
+        private bool isConnecting = false;
+        private bool hasAttemptedConnection = false;
+
+        // PhotonView ID 管理
+        private static int nextViewID = 1000;
 
         #region 公共属性
 
@@ -38,6 +42,7 @@ namespace Core.Network
         public LobbyNetworkManager LobbyNetwork => lobbyNetworkManager;
         public NetworkManager GameNetwork => networkManager;
         public bool IsInitialized => isInitialized;
+        public bool IsConnecting => isConnecting;
 
         #endregion
 
@@ -45,14 +50,14 @@ namespace Core.Network
 
         private void Awake()
         {
-            // 单例模式 - 确保只有一个实例
             if (Instance == null)
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
                 LogDebug("PersistentNetworkManager 创建成功，设置为跨场景持久化");
 
-                InitializeNetworkComponents();
+                // 立即初始化组件引用，但不启动连接
+                InitializeComponentReferences();
             }
             else
             {
@@ -65,7 +70,7 @@ namespace Core.Network
         {
             if (Instance == this)
             {
-                StartCoroutine(DelayedAutoConnect());
+                StartCoroutine(DelayedInitialization());
             }
         }
 
@@ -83,30 +88,115 @@ namespace Core.Network
         #region 初始化
 
         /// <summary>
-        /// 初始化所有网络组件
+        /// 延迟初始化流程
         /// </summary>
-        private void InitializeNetworkComponents()
+        private IEnumerator DelayedInitialization()
         {
-            LogDebug("开始初始化网络组件...");
+            LogDebug("开始延迟初始化流程");
+
+            // 等待初始化延迟，确保所有组件就绪
+            yield return new WaitForSeconds(initializationDelay);
+
+            // 初始化所有网络组件
+            InitializeNetworkComponents();
+
+            // 检查当前连接状态
+            CheckCurrentConnectionState();
+
+            // 如果需要自动连接且未连接，则启动连接
+            if (autoConnectOnStart && !PhotonNetwork.IsConnected && !hasAttemptedConnection)
+            {
+                yield return new WaitForSeconds(connectionDelay);
+                StartManagedConnection();
+            }
+
+            isInitialized = true;
+            LogDebug("PersistentNetworkManager 初始化完成");
+        }
+
+        /// <summary>
+        /// 初始化组件引用
+        /// </summary>
+        private void InitializeComponentReferences()
+        {
+            LogDebug("初始化组件引用...");
 
             // 自动查找组件（如果没有手动分配）
             FindNetworkComponents();
 
             // 验证组件完整性
-            if (!ValidateComponents())
-            {
-                Debug.LogError("[PersistentNetworkManager] 网络组件验证失败！");
-                return;
-            }
+            ValidateComponents();
+        }
 
-            // 设置组件为持久化
+        /// <summary>
+        /// 初始化网络组件
+        /// </summary>
+        private void InitializeNetworkComponents()
+        {
+            LogDebug("初始化网络组件...");
+
+            // 设置组件持久化属性
             SetupComponentPersistence();
 
             // 配置PhotonView
             SetupPhotonView();
 
-            isInitialized = true;
+            // 禁用其他组件的自动连接，由PersistentNetworkManager统一管理
+            DisableAutoConnectInOtherComponents();
+
             LogDebug("网络组件初始化完成");
+        }
+
+        /// <summary>
+        /// 禁用其他组件的自动连接
+        /// </summary>
+        private void DisableAutoConnectInOtherComponents()
+        {
+            // 禁用LobbyNetworkManager的自动连接
+            if (lobbyNetworkManager != null)
+            {
+                // 通过反射禁用autoConnectOnStart
+                var autoConnectField = typeof(LobbyNetworkManager).GetField("autoConnectOnStart",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (autoConnectField != null)
+                {
+                    autoConnectField.SetValue(lobbyNetworkManager, false);
+                    LogDebug("已禁用LobbyNetworkManager的自动连接");
+                }
+            }
+
+            LogDebug("其他组件的自动连接已禁用，由PersistentNetworkManager统一管理");
+        }
+
+        /// <summary>
+        /// 检查当前连接状态
+        /// </summary>
+        private void CheckCurrentConnectionState()
+        {
+            if (PhotonNetwork.IsConnected)
+            {
+                LogDebug("检测到已连接到Photon，跳过自动连接");
+                hasAttemptedConnection = true;
+
+                // 确保LobbyNetworkManager状态同步
+                if (lobbyNetworkManager != null)
+                {
+                    // 调用LobbyNetworkManager的状态同步方法
+                    var syncMethod = typeof(LobbyNetworkManager).GetMethod("CheckAndSyncCurrentState",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (syncMethod != null)
+                    {
+                        syncMethod.Invoke(lobbyNetworkManager, null);
+                        LogDebug("已同步LobbyNetworkManager状态");
+                    }
+                }
+            }
+            else
+            {
+                LogDebug($"当前Photon状态: {PhotonNetwork.NetworkClientState}");
+            }
         }
 
         /// <summary>
@@ -152,10 +242,10 @@ namespace Core.Network
                 isValid = false;
             }
 
+            // NetworkManager是可选的，不会导致验证失败
             if (networkManager == null)
             {
-                Debug.LogError("[PersistentNetworkManager] NetworkManager 组件缺失！");
-                isValid = false;
+                LogDebug("NetworkManager 组件缺失（可选组件）");
             }
 
             return isValid;
@@ -166,8 +256,6 @@ namespace Core.Network
         /// </summary>
         private void SetupComponentPersistence()
         {
-            // 确保所有网络组件都标记为持久化处理
-            // 由于它们都在同一个持久化对象上，会自动继承持久化属性
             LogDebug("网络组件持久化设置完成");
         }
 
@@ -176,7 +264,6 @@ namespace Core.Network
         /// </summary>
         private void SetupPhotonView()
         {
-            // 确保PersistentNetworkManager有PhotonView组件
             if (photonView == null)
             {
                 var pv = gameObject.AddComponent<PhotonView>();
@@ -187,41 +274,129 @@ namespace Core.Network
 
         #endregion
 
-        #region 自动连接
+        #region 统一连接管理
 
         /// <summary>
-        /// 延迟自动连接
+        /// 启动受管理的连接流程
         /// </summary>
-        private IEnumerator DelayedAutoConnect()
+        private void StartManagedConnection()
         {
-            if (!autoConnectOnStart)
+            if (isConnecting || hasAttemptedConnection)
             {
-                LogDebug("自动连接已禁用");
-                yield break;
+                LogDebug("连接已在进行中或已尝试过，跳过重复连接");
+                return;
             }
 
-            LogDebug($"等待 {connectionDelay} 秒后开始自动连接...");
-            yield return new WaitForSeconds(connectionDelay);
+            LogDebug("开始受管理的Photon连接流程");
+            isConnecting = true;
+            hasAttemptedConnection = true;
 
-            // 检查是否已经连接
-            if (PhotonNetwork.IsConnected)
+            StartCoroutine(ManagedConnectionCoroutine());
+        }
+
+        /// <summary>
+        /// 受管理的连接协程
+        /// </summary>
+        private IEnumerator ManagedConnectionCoroutine()
+        {
+            LogDebug("=== 开始受管理的Photon连接 ===");
+
+            try
             {
-                LogDebug("检测到已连接到Photon，跳过自动连接");
-                yield break;
+                // 检查PhotonNetworkAdapter是否就绪
+                if (photonAdapter == null)
+                {
+                    Debug.LogError("PhotonNetworkAdapter未就绪，无法连接");
+                    yield break;
+                }
+
+                // 检查当前状态
+                if (PhotonNetwork.IsConnected)
+                {
+                    LogDebug("已连接到Photon，连接流程完成");
+                    yield break;
+                }
+
+                // 使用PhotonNetworkAdapter进行连接
+                if (PhotonNetwork.NetworkClientState == ClientState.PeerCreated)
+                {
+                    LogDebug("通过PhotonNetwork.ConnectUsingSettings开始连接");
+                    bool connectResult = PhotonNetwork.ConnectUsingSettings();
+
+                    if (!connectResult)
+                    {
+                        Debug.LogError("PhotonNetwork.ConnectUsingSettings返回false");
+                        yield break;
+                    }
+                }
+                else
+                {
+                    LogDebug($"Photon状态不正确: {PhotonNetwork.NetworkClientState}，等待状态重置");
+
+                    // 等待状态重置
+                    float waitTime = 0f;
+                    while (PhotonNetwork.NetworkClientState != ClientState.PeerCreated && waitTime < 5f)
+                    {
+                        yield return new WaitForSeconds(0.5f);
+                        waitTime += 0.5f;
+                    }
+
+                    if (PhotonNetwork.NetworkClientState == ClientState.PeerCreated)
+                    {
+                        PhotonNetwork.ConnectUsingSettings();
+                    }
+                    else
+                    {
+                        Debug.LogError("Photon状态重置失败");
+                        yield break;
+                    }
+                }
+
+                // 等待连接完成
+                float connectionTimeout = 15f;
+                float elapsed = 0f;
+
+                while (!PhotonNetwork.IsConnectedAndReady && elapsed < connectionTimeout)
+                {
+                    LogDebug($"等待连接... 状态: {PhotonNetwork.NetworkClientState}, 时间: {elapsed:F1}s");
+                    yield return new WaitForSeconds(1f);
+                    elapsed += 1f;
+                }
+
+                if (PhotonNetwork.IsConnectedAndReady)
+                {
+                    LogDebug("✓ Photon连接成功！");
+
+                    // 通知LobbyNetworkManager同步状态
+                    NotifyLobbyManagerConnectionSuccess();
+                }
+                else
+                {
+                    Debug.LogError($"✗ Photon连接超时！最终状态: {PhotonNetwork.NetworkClientState}");
+                }
             }
+            finally
+            {
+                isConnecting = false;
+            }
+        }
 
-            LogDebug("开始自动连接到Photon...");
-
-            // 使用LobbyNetworkManager进行连接
+        /// <summary>
+        /// 通知LobbyNetworkManager连接成功
+        /// </summary>
+        private void NotifyLobbyManagerConnectionSuccess()
+        {
             if (lobbyNetworkManager != null)
             {
-                // 强制启动连接流程
-                lobbyNetworkManager.enabled = true;
-                lobbyNetworkManager.ForceReconnect();
-            }
-            else
-            {
-                Debug.LogError("[PersistentNetworkManager] LobbyNetworkManager 不可用，无法自动连接");
+                // 调用状态同步方法
+                var syncMethod = typeof(LobbyNetworkManager).GetMethod("CheckAndSyncCurrentState",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (syncMethod != null)
+                {
+                    syncMethod.Invoke(lobbyNetworkManager, null);
+                    LogDebug("已通知LobbyNetworkManager连接成功");
+                }
             }
         }
 
@@ -262,7 +437,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 重置PhotonView ID计数器（调试用）
+        /// 重置PhotonView ID计数器
         /// </summary>
         public void ResetPhotonViewIDCounter()
         {
@@ -279,11 +454,21 @@ namespace Core.Network
         /// </summary>
         public void ConnectToPhoton()
         {
-            if (lobbyNetworkManager != null)
+            if (isConnecting)
             {
-                LogDebug("手动触发Photon连接");
-                lobbyNetworkManager.ForceReconnect();
+                LogDebug("连接已在进行中");
+                return;
             }
+
+            if (PhotonNetwork.IsConnected)
+            {
+                LogDebug("已连接到Photon");
+                return;
+            }
+
+            LogDebug("手动触发Photon连接");
+            hasAttemptedConnection = false; // 重置标志，允许重新连接
+            StartManagedConnection();
         }
 
         /// <summary>
@@ -291,51 +476,16 @@ namespace Core.Network
         /// </summary>
         public void DisconnectFromPhoton()
         {
-            if (lobbyNetworkManager != null)
-            {
-                LogDebug("手动断开Photon连接");
-                lobbyNetworkManager.Disconnect();
-            }
-        }
-
-        /// <summary>
-        /// 获取网络状态信息
-        /// </summary>
-        public string GetNetworkStatus()
-        {
-            string status = "=== 持久化网络管理器状态 ===\n";
-            status += $"初始化状态: {isInitialized}\n";
-            status += $"PhotonAdapter: {(photonAdapter != null ? "✓" : "✗")}\n";
-            status += $"LobbyNetwork: {(lobbyNetworkManager != null ? "✓" : "✗")}\n";
-            status += $"GameNetwork: {(networkManager != null ? "✓" : "✗")}\n";
-
             if (PhotonNetwork.IsConnected)
             {
-                status += $"Photon状态: 已连接\n";
-                status += $"房间状态: {(PhotonNetwork.InRoom ? $"在房间 '{PhotonNetwork.CurrentRoom.Name}'" : "未在房间")}\n";
-                status += $"玩家ID: {PhotonNetwork.LocalPlayer?.ActorNumber}\n";
+                LogDebug("手动断开Photon连接");
+                hasAttemptedConnection = false; // 重置标志
+                PhotonNetwork.Disconnect();
             }
-            else
-            {
-                status += $"Photon状态: 未连接\n";
-            }
-
-            status += $"下一个PhotonView ID: {nextViewID}";
-            return status;
         }
 
         /// <summary>
-        /// 强制重新初始化网络组件
-        /// </summary>
-        public void ForceReinitialize()
-        {
-            LogDebug("强制重新初始化网络组件");
-            isInitialized = false;
-            InitializeNetworkComponents();
-        }
-
-        /// <summary>
-        /// 检查网络连接状态
+        /// 检查是否连接到Photon
         /// </summary>
         public bool IsConnectedToPhoton()
         {
@@ -358,6 +508,49 @@ namespace Core.Network
             return PhotonNetwork.CurrentRoom?.Name ?? "";
         }
 
+        /// <summary>
+        /// 获取网络状态信息
+        /// </summary>
+        public string GetNetworkStatus()
+        {
+            string status = "=== 持久化网络管理器状态 ===\n";
+            status += $"初始化状态: {isInitialized}\n";
+            status += $"连接中: {isConnecting}\n";
+            status += $"已尝试连接: {hasAttemptedConnection}\n";
+            status += $"PhotonAdapter: {(photonAdapter != null ? "✓" : "✗")}\n";
+            status += $"LobbyNetwork: {(lobbyNetworkManager != null ? "✓" : "✗")}\n";
+            status += $"GameNetwork: {(networkManager != null ? "✓" : "✗")}\n";
+
+            if (PhotonNetwork.IsConnected)
+            {
+                status += $"Photon状态: 已连接 ({PhotonNetwork.NetworkClientState})\n";
+                status += $"房间状态: {(PhotonNetwork.InRoom ? $"在房间 '{PhotonNetwork.CurrentRoom.Name}'" : "未在房间")}\n";
+                status += $"大厅状态: {(PhotonNetwork.InLobby ? "在大厅" : "未在大厅")}\n";
+                status += $"玩家ID: {PhotonNetwork.LocalPlayer?.ActorNumber}\n";
+            }
+            else
+            {
+                status += $"Photon状态: 未连接 ({PhotonNetwork.NetworkClientState})\n";
+            }
+
+            status += $"下一个PhotonView ID: {nextViewID}";
+            return status;
+        }
+
+        /// <summary>
+        /// 强制重新初始化
+        /// </summary>
+        public void ForceReinitialize()
+        {
+            LogDebug("强制重新初始化网络组件");
+            isInitialized = false;
+            hasAttemptedConnection = false;
+            isConnecting = false;
+
+            StopAllCoroutines();
+            StartCoroutine(DelayedInitialization());
+        }
+
         #endregion
 
         #region 场景切换支持
@@ -368,9 +561,6 @@ namespace Core.Network
         public void PrepareForSceneTransition(string targetScene)
         {
             LogDebug($"准备切换到场景: {targetScene}");
-
-            // 这里可以添加场景切换前的网络状态保存逻辑
-            // 例如保存玩家状态、房间状态等
         }
 
         /// <summary>
@@ -379,9 +569,6 @@ namespace Core.Network
         public void OnSceneTransitionComplete(string currentScene)
         {
             LogDebug($"场景切换完成: {currentScene}");
-
-            // 这里可以添加场景切换后的网络状态恢复逻辑
-            // 例如重新建立UI连接、同步数据等
         }
 
         #endregion
@@ -420,10 +607,14 @@ namespace Core.Network
             ForceReinitialize();
         }
 
-        [ContextMenu("分配测试PhotonView")]
-        public void AllocateTestPhotonView()
+        [ContextMenu("检查组件状态")]
+        public void CheckComponentStatus()
         {
-            AllocatePhotonView(gameObject);
+            LogDebug($"=== 组件状态检查 ===");
+            LogDebug($"PhotonAdapter: {photonAdapter?.name ?? "null"}");
+            LogDebug($"LobbyNetwork: {lobbyNetworkManager?.name ?? "null"}");
+            LogDebug($"GameNetwork: {networkManager?.name ?? "null"}");
+            LogDebug($"PhotonNetwork状态: {PhotonNetwork.NetworkClientState}");
         }
 
         #endregion

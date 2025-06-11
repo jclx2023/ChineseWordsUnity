@@ -533,6 +533,55 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 108389379}
   m_CullTransparentMesh: 1
+--- !u!1 &347531341
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 347531343}
+  - component: {fileID: 347531342}
+  m_Layer: 0
+  m_Name: PersistentNetworkManagerInitializer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &347531342
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 347531341}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d34feaffbd83b4c498df1567b9a4f90f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  persistentNetworkManagerPrefab: {fileID: 5771835129948504701, guid: 3a663bf0dc576724e848f2ce995f993c, type: 3}
+  persistentNetworkManagerPrefabPath: Prefabs/Network/PersistentNetworkManager
+  mainMenuSceneName: MainMenuScene
+  onlyInMainMenu: 1
+  enableDebugLogs: 0
+--- !u!4 &347531343
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 347531341}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 960, y: 540, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &668126024
 GameObject:
   m_ObjectHideFlags: 0
@@ -667,102 +716,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 668126024}
   m_CullTransparentMesh: 1
---- !u!1 &817239009
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 817239012}
-  - component: {fileID: 817239014}
-  - component: {fileID: 817239011}
-  - component: {fileID: 817239010}
-  - component: {fileID: 817239013}
-  m_Layer: 0
-  m_Name: PersistentNetworkManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &817239010
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 817239009}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3b492f26186250541acda9b0e2d4393d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  autoConnectOnStart: 0
-  roomListRefreshInterval: 10
-  connectionTimeout: 10
-  enableDebugLogs: 1
---- !u!114 &817239011
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 817239009}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 21c82390ffb210e4caa05874ee73c7b6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  enableDebugLogs: 1
---- !u!4 &817239012
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 817239009}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 960, y: 540, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &817239013
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 817239009}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3b5aafc696ea0cd4386f443ee29d3ca2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  gameVersion: 0.4.4
-  enableDebugLogs: 1
---- !u!114 &817239014
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 817239009}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 35722c898c0f89243bdeff8d2cf7abcc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  photonAdapter: {fileID: 817239013}
-  lobbyNetworkManager: {fileID: 817239010}
-  networkManager: {fileID: 817239011}
-  autoConnectOnStart: 1
-  connectionDelay: 0.01
-  enableDebugLogs: 1
 --- !u!1 &987171892
 GameObject:
   m_ObjectHideFlags: 0
@@ -1383,4 +1336,4 @@ SceneRoots:
   - {fileID: 67581783}
   - {fileID: 2092512689}
   - {fileID: 1162326221}
-  - {fileID: 817239012}
+  - {fileID: 347531343}

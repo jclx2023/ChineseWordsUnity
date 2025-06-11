@@ -4,6 +4,7 @@ using System.Collections;
 using Photon.Pun;
 using Photon.Realtime;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
+using UnityEngine.SceneManagement;
 
 namespace Core.Network
 {
@@ -423,8 +424,21 @@ namespace Core.Network
 
             LogDebug("离开房间并返回大厅");
             PhotonNetwork.LeaveRoom();
+            ReturnToLobbyDelayed();
         }
+        private void ReturnToLobbyDelayed()
+        {
+            LogDebug("执行返回大厅");
 
+            bool switchSuccess = SceneTransitionManager.ReturnToMainMenu("RoomSceneController");
+
+            if (!switchSuccess)
+            {
+                // 备用方案：直接切换场景
+                Debug.LogWarning("[RoomManager] SceneTransitionManager返回失败，使用备用方案");
+                SceneManager.LoadScene("LobbyScene");
+            }
+        }
         /// <summary>
         /// 踢出玩家（房主专用）
         /// </summary>
