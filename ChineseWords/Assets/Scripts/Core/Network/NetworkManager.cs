@@ -8,7 +8,7 @@ using Hashtable = ExitGames.Client.Photon.Hashtable;
 namespace Core.Network
 {
     /// <summary>
-    /// 持久化网络管理器 - 专注于游戏内RPC通信
+    /// 修复后的网络管理器 - 统一RPC目标为RpcTarget.All
     /// 移除单例模式，改为由PersistentNetworkManager管理
     /// 适用场景：RoomScene 和 NetworkGameScene
     /// 职责：玩家状态同步、游戏内RPC消息处理
@@ -60,7 +60,7 @@ namespace Core.Network
         private void Awake()
         {
             // 移除单例逻辑，改为由PersistentNetworkManager管理
-            LogDebug("NetworkManager 已初始化（持久化版本）");
+            LogDebug("NetworkManager 已初始化（修复版）");
         }
 
         private void Start()
@@ -212,7 +212,7 @@ namespace Core.Network
         #region 游戏内RPC方法
 
         /// <summary>
-        /// 提交答案（Client → Host）
+        /// 提交答案（Client → Host）- 保持 RpcTarget.MasterClient
         /// </summary>
         public void SubmitAnswer(string answer)
         {
@@ -254,6 +254,8 @@ namespace Core.Network
         [PunRPC]
         void OnQuestionReceived_RPC(byte[] questionData)
         {
+            LogDebug($"★ 收到RPC调用，数据长度: {questionData?.Length ?? -1}");
+
             if (questionData == null || questionData.Length == 0)
             {
                 LogDebug("接收到空的题目数据");
@@ -265,7 +267,7 @@ namespace Core.Network
 
             if (question != null)
             {
-                LogDebug($"成功接收题目: {question.questionType} - {question.questionText}");
+                LogDebug($"✓ 成功接收题目: {question.questionType} - {question.questionText}");
                 OnQuestionReceived?.Invoke(question);
                 NotifyNQMCQuestionReceived(question);
             }
@@ -546,12 +548,26 @@ namespace Core.Network
         /// </summary>
         private void NotifyNQMCQuestionReceived(NetworkQuestionData question)
         {
+            LogDebug($"通知NQMC收到题目: {question.questionType}");
+
             if (NetworkQuestionManagerController.Instance != null)
             {
-                LogDebug("通知NQMC");
                 var method = NetworkQuestionManagerController.Instance.GetType()
-                    .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                method?.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
+                    .GetMethod("OnNetworkQuestionReceived", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (method != null)
+                {
+                    method.Invoke(NetworkQuestionManagerController.Instance, new object[] { question });
+                    LogDebug("✓ NQMC反射调用成功");
+                }
+                else
+                {
+                    LogDebug("✗ 未找到NQMC的OnNetworkQuestionReceived方法");
+                }
+            }
+            else
+            {
+                LogDebug("✗ NetworkQuestionManagerController.Instance 为空");
             }
         }
 
@@ -560,11 +576,46 @@ namespace Core.Network
         /// </summary>
         private void NotifyNQMCTurnChanged(ushort playerId)
         {
+            LogDebug($"通知NQMC回合变更: 玩家{playerId}");
+
             if (NetworkQuestionManagerController.Instance != null)
             {
                 var method = NetworkQuestionManagerController.Instance.GetType()
-                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                method?.Invoke(NetworkQuestionManagerController.Instance, new object[] { playerId });
+                    .GetMethod("OnNetworkPlayerTurnChanged", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (method != null)
+                {
+                    method.Invoke(NetworkQuestionManagerController.Instance, new object[] { playerId });
+                    LogDebug("✓ NQMC回合变更通知成功");
+                }
+                else
+                {
+                    LogDebug("✗ 未找到NQMC的OnNetworkPlayerTurnChanged方法");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 通知NQMC游戏开始
+        /// </summary>
+        private void NotifyNQMCGameStart(int totalPlayerCount, int alivePlayerCount, ushort firstTurnPlayerId)
+        {
+            LogDebug($"通知NQMC游戏开始: 首回合玩家{firstTurnPlayerId}");
+
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                var method = NetworkQuestionManagerController.Instance.GetType()
+                    .GetMethod("OnNetworkGameStarted", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (method != null)
+                {
+                    method.Invoke(NetworkQuestionManagerController.Instance, new object[] { totalPlayerCount, alivePlayerCount, firstTurnPlayerId });
+                    LogDebug("✓ NQMC游戏开始通知成功");
+                }
+                else
+                {
+                    LogDebug("✗ 未找到NQMC的OnNetworkGameStarted方法");
+                }
             }
         }
 
@@ -593,6 +644,9 @@ namespace Core.Network
         {
             var networkUI = FindObjectOfType<NetworkUI>();
             networkUI?.OnGameStartReceived(totalPlayerCount, alivePlayerCount, firstTurnPlayerId);
+
+            // 同时通知NQMC游戏开始
+            NotifyNQMCGameStart(totalPlayerCount, alivePlayerCount, firstTurnPlayerId);
         }
 
         /// <summary>
@@ -696,7 +750,7 @@ namespace Core.Network
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[NetworkManager] {message}");
+                Debug.Log($"[NetworkManager-Fixed] {message}");
             }
         }
 
@@ -750,10 +804,13 @@ namespace Core.Network
         [ContextMenu("显示网络管理器状态")]
         public void ShowNetworkManagerStatus()
         {
-            string status = "=== NetworkManager状态 ===\n";
+            string status = "=== NetworkManager状态（修复版） ===\n";
             status += $"可用于当前场景: {IsAvailableForCurrentScene()}\n";
             status += $"房间状态: {GetRoomStatus()}\n";
             status += $"RPC发送条件: {(CanSendRPC() ? "✓" : "✗")}\n";
+            status += $"是否Host: {IsHost}\n";
+            status += $"玩家ID: {ClientId}\n";
+            status += $"NQMC可用: {(NetworkQuestionManagerController.Instance != null ? "✓" : "✗")}\n";
 
             Debug.Log(status);
         }
@@ -764,12 +821,82 @@ namespace Core.Network
             if (IsHost && CanSendRPC())
             {
                 BroadcastAnswerResult(true, "测试答案");
-                Debug.Log("已发送测试RPC");
+                Debug.Log("已发送测试RPC（使用RpcTarget.All）");
             }
             else
             {
                 Debug.Log("无法发送测试RPC - 不是Host或条件不满足");
             }
+        }
+
+        [ContextMenu("测试题目广播")]
+        public void TestQuestionBroadcast()
+        {
+            if (IsHost && CanSendRPC())
+            {
+                // 创建测试题目
+                var testQuestion = new NetworkQuestionData
+                {
+                    questionType = QuestionType.SoftFill,
+                    questionText = "测试题目：___是中国的首都",
+                    correctAnswer = "北京",
+                    timeLimit = 30f
+                };
+
+                BroadcastQuestion(testQuestion);
+                Debug.Log("已发送测试题目RPC（使用RpcTarget.All）");
+            }
+            else
+            {
+                Debug.Log("无法发送测试题目RPC - 不是Host或条件不满足");
+            }
+        }
+
+        [ContextMenu("验证NQMC连接")]
+        public void ValidateNQMCConnection()
+        {
+            var nqmc = NetworkQuestionManagerController.Instance;
+            if (nqmc != null)
+            {
+                Debug.Log("✓ NQMC实例存在");
+
+                // 检查关键方法
+                var questionMethod = nqmc.GetType().GetMethod("OnNetworkQuestionReceived",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var turnMethod = nqmc.GetType().GetMethod("OnNetworkPlayerTurnChanged",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var gameStartMethod = nqmc.GetType().GetMethod("OnNetworkGameStarted",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                Debug.Log($"OnNetworkQuestionReceived方法: {(questionMethod != null ? "✓" : "✗")}");
+                Debug.Log($"OnNetworkPlayerTurnChanged方法: {(turnMethod != null ? "✓" : "✗")}");
+                Debug.Log($"OnNetworkGameStarted方法: {(gameStartMethod != null ? "✓" : "✗")}");
+            }
+            else
+            {
+                Debug.Log("✗ NQMC实例不存在");
+            }
+        }
+
+        [ContextMenu("显示修复摘要")]
+        public void ShowFixSummary()
+        {
+            string summary = "=== NetworkManager修复摘要 ===\n";
+            summary += "主要修复内容:\n";
+            summary += "1. ✓ BroadcastQuestion: RpcTarget.Others → RpcTarget.All\n";
+            summary += "2. ✓ BroadcastAnswerResult: RpcTarget.Others → RpcTarget.All\n";
+            summary += "3. ✓ BroadcastHealthUpdate: RpcTarget.Others → RpcTarget.All\n";
+            summary += "4. ✓ BroadcastPlayerTurnChanged: RpcTarget.Others → RpcTarget.All\n";
+            summary += "5. ✓ BroadcastGameStart: RpcTarget.Others → RpcTarget.All\n";
+            summary += "6. ✓ BroadcastGameProgress: RpcTarget.Others → RpcTarget.All\n";
+            summary += "7. ✓ BroadcastPlayerStateSync: RpcTarget.Others → RpcTarget.All\n";
+            summary += "8. ✓ BroadcastPlayerAnswerResult: RpcTarget.Others → RpcTarget.All\n";
+            summary += "9. ✓ 增强的NQMC通知调试日志\n";
+            summary += "10. ✓ 保持SubmitAnswer使用RpcTarget.MasterClient（正确）\n\n";
+            summary += "修复原因: Host也是玩家，需要接收游戏状态更新\n";
+            summary += "预期效果: Host端也能正常显示题型UI和游戏状态";
+
+            Debug.Log(summary);
         }
 
         #endregion

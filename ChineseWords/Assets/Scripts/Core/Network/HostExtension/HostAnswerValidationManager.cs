@@ -1,39 +1,44 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections.Generic;
 using Core;
 using Core.Network;
 using GameLogic.FillBlank;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Mono.Data.Sqlite;
 
 namespace Core.Network
 {
     /// <summary>
-    /// ´ğ°¸ÑéÖ¤¹ÜÀíÆ÷
-    /// ×¨ÃÅ¸ºÔğ¸÷ÖÖÌâĞÍµÄ´ğ°¸ÑéÖ¤Âß¼­
+    /// ç­”æ¡ˆéªŒè¯ç®¡ç†å™¨ - ä¿®å¤ç‰ˆ
+    /// ä¸“é—¨è´Ÿè´£å„ç§é¢˜å‹çš„ç­”æ¡ˆéªŒè¯é€»è¾‘ï¼Œå®Œæ•´æ”¯æŒSoftFilléªŒè¯
     /// </summary>
     public class AnswerValidationManager
     {
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         private bool enableDebugLogs = true;
 
-        [Header("ÑéÖ¤ÉèÖÃ")]
-        private bool strictValidation = false; // ÊÇ·ñÆôÓÃÑÏ¸ñÑéÖ¤Ä£Ê½
-        private bool caseSensitive = false;    // ÊÇ·ñ´óĞ¡Ğ´Ãô¸Ğ
+        [Header("éªŒè¯è®¾ç½®")]
+        private bool strictValidation = false; // æ˜¯å¦å¯ç”¨ä¸¥æ ¼éªŒè¯æ¨¡å¼
+        private bool caseSensitive = false;    // æ˜¯å¦å¤§å°å†™æ•æ„Ÿ
 
-        // ÑéÖ¤½á¹û»º´æ£¨¿ÉÑ¡ÓÅ»¯£©
+        // éªŒè¯ç»“æœç¼“å­˜ï¼ˆå¯é€‰ä¼˜åŒ–ï¼‰
         private Dictionary<string, bool> validationCache;
-        private int maxCacheSize = 1000;
+        private int maxCacheSize = 3000;
 
-        // ÌØÊâÌâĞÍ¹ÜÀíÆ÷»º´æ
+        // ç‰¹æ®Šé¢˜å‹ç®¡ç†å™¨ç¼“å­˜
         private IdiomChainQuestionManager idiomChainManager;
         private QuestionDataService questionDataService;
 
-        // ÊÂ¼ş¶¨Òå
+        // SoftFillæ•°æ®åº“è·¯å¾„ï¼ˆç”¨äºéªŒè¯è¯åº“å­˜åœ¨æ€§ï¼‰
+        private string dbPath;
+
+        // äº‹ä»¶å®šä¹‰
         public System.Action<QuestionType, string, bool> OnAnswerValidated; // questionType, answer, isCorrect
         public System.Action<string> OnValidationError; // error message
 
         /// <summary>
-        /// ÑéÖ¤½á¹ûÊı¾İ½á¹¹
+        /// éªŒè¯ç»“æœæ•°æ®ç»“æ„
         /// </summary>
         public class ValidationResult
         {
@@ -56,24 +61,25 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ¹¹Ôìº¯Êı
+        /// æ„é€ å‡½æ•°
         /// </summary>
         public AnswerValidationManager()
         {
             validationCache = new Dictionary<string, bool>();
-            LogDebug("AnswerValidationManager ÊµÀıÒÑ´´½¨");
+            dbPath = Application.streamingAssetsPath + "/dictionary.db";
+            LogDebug("AnswerValidationManager å®ä¾‹å·²åˆ›å»º");
         }
 
-        #region ³õÊ¼»¯
+        #region åˆå§‹åŒ–
 
         /// <summary>
-        /// ³õÊ¼»¯´ğ°¸ÑéÖ¤¹ÜÀíÆ÷
+        /// åˆå§‹åŒ–ç­”æ¡ˆéªŒè¯ç®¡ç†å™¨
         /// </summary>
-        /// <param name="dataService">ÌâÄ¿Êı¾İ·şÎñ</param>
-        /// <param name="enableCache">ÊÇ·ñÆôÓÃÑéÖ¤»º´æ</param>
+        /// <param name="dataService">é¢˜ç›®æ•°æ®æœåŠ¡</param>
+        /// <param name="enableCache">æ˜¯å¦å¯ç”¨éªŒè¯ç¼“å­˜</param>
         public void Initialize(QuestionDataService dataService = null, bool enableCache = true)
         {
-            LogDebug("³õÊ¼»¯AnswerValidationManager...");
+            LogDebug("åˆå§‹åŒ–AnswerValidationManager...");
 
             questionDataService = dataService ?? QuestionDataService.Instance;
 
@@ -86,36 +92,42 @@ namespace Core.Network
                 validationCache = null;
             }
 
-            LogDebug($"AnswerValidationManager³õÊ¼»¯Íê³É - »º´æ: {(enableCache ? "ÆôÓÃ" : "½ûÓÃ")}");
+            // æ£€æŸ¥æ•°æ®åº“è·¯å¾„
+            if (!System.IO.File.Exists(dbPath))
+            {
+                Debug.LogWarning($"[AnswerValidationManager] æ•°æ®åº“æ–‡ä»¶ä¸å­˜åœ¨: {dbPath}");
+            }
+
+            LogDebug($"AnswerValidationManageråˆå§‹åŒ–å®Œæˆ - ç¼“å­˜: {(enableCache ? "å¯ç”¨" : "ç¦ç”¨")}");
         }
 
         #endregion
 
-        #region Ö÷ÑéÖ¤·½·¨
+        #region ä¸»éªŒè¯æ–¹æ³•
 
         /// <summary>
-        /// ÑéÖ¤´ğ°¸£¨Ö÷Èë¿Ú·½·¨£©
+        /// éªŒè¯ç­”æ¡ˆï¼ˆä¸»å…¥å£æ–¹æ³•ï¼‰
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         public ValidationResult ValidateAnswer(string answer, NetworkQuestionData question)
         {
             if (question == null)
             {
-                var error = "ÌâÄ¿Êı¾İÎª¿Õ";
-                LogDebug($"ÑéÖ¤Ê§°Ü: {error}");
+                var error = "é¢˜ç›®æ•°æ®ä¸ºç©º";
+                LogDebug($"éªŒè¯å¤±è´¥: {error}");
                 OnValidationError?.Invoke(error);
                 return new ValidationResult(false, answer, "", QuestionType.HardFill) { errorMessage = error };
             }
 
-            LogDebug($"¿ªÊ¼ÑéÖ¤´ğ°¸: [{answer}] ÌâĞÍ: {question.questionType}");
+            LogDebug($"å¼€å§‹éªŒè¯ç­”æ¡ˆ: [{answer}] é¢˜å‹: {question.questionType}");
 
             ValidationResult result;
 
             try
             {
-                // ¸ù¾İÌâÄ¿ÀàĞÍÑ¡ÔñÑéÖ¤·½Ê½
+                // æ ¹æ®é¢˜ç›®ç±»å‹é€‰æ‹©éªŒè¯æ–¹å¼
                 switch (question.questionType)
                 {
                     case QuestionType.IdiomChain:
@@ -153,16 +165,16 @@ namespace Core.Network
                         break;
                 }
 
-                LogDebug($"ÑéÖ¤Íê³É: {question.questionType} - {(result.isCorrect ? "ÕıÈ·" : "´íÎó")}");
+                LogDebug($"éªŒè¯å®Œæˆ: {question.questionType} - {(result.isCorrect ? "æ­£ç¡®" : "é”™è¯¯")}");
 
-                // ´¥·¢ÑéÖ¤ÊÂ¼ş
+                // è§¦å‘éªŒè¯äº‹ä»¶
                 OnAnswerValidated?.Invoke(question.questionType, answer, result.isCorrect);
 
                 return result;
             }
             catch (System.Exception e)
             {
-                var error = $"ÑéÖ¤¹ı³ÌÖĞ·¢ÉúÒì³£: {e.Message}";
+                var error = $"éªŒè¯è¿‡ç¨‹ä¸­å‘ç”Ÿå¼‚å¸¸: {e.Message}";
                 Debug.LogError($"[AnswerValidationManager] {error}");
                 OnValidationError?.Invoke(error);
                 return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = error };
@@ -170,11 +182,11 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ¼ò»¯µÄ´ğ°¸ÑéÖ¤·½·¨£¨Ïòºó¼æÈİ£©
+        /// ç®€åŒ–çš„ç­”æ¡ˆéªŒè¯æ–¹æ³•ï¼ˆå‘åå…¼å®¹ï¼‰
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÊÇ·ñÕıÈ·</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>æ˜¯å¦æ­£ç¡®</returns>
         public bool ValidateAnswerSimple(string answer, NetworkQuestionData question)
         {
             var result = ValidateAnswer(answer, question);
@@ -183,113 +195,316 @@ namespace Core.Network
 
         #endregion
 
-        #region ¾ßÌåÌâĞÍÑéÖ¤
+        #region å…·ä½“é¢˜å‹éªŒè¯
 
         /// <summary>
-        /// ÑéÖ¤³ÉÓï½ÓÁú´ğ°¸
+        /// éªŒè¯æˆè¯­æ¥é¾™ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateIdiomChainAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤³ÉÓï½ÓÁú´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯æˆè¯­æ¥é¾™ç­”æ¡ˆ: {answer}");
 
             try
             {
-                // ´ÓÌâÄ¿Êı¾İÖĞ»ñÈ¡Ìâ¸É³ÉÓï
+                // ä»é¢˜ç›®æ•°æ®ä¸­è·å–é¢˜å¹²æˆè¯­
                 string baseIdiom = GetBaseIdiomFromQuestion(question);
 
                 if (string.IsNullOrEmpty(baseIdiom))
                 {
-                    var error = "ÎŞ·¨»ñÈ¡³ÉÓï½ÓÁúµÄÌâ¸É³ÉÓï";
+                    var error = "æ— æ³•è·å–æˆè¯­æ¥é¾™çš„é¢˜å¹²æˆè¯­";
                     LogDebug(error);
                     return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = error };
                 }
 
-                // »ñÈ¡³ÉÓï½ÓÁú¹ÜÀíÆ÷
+                // è·å–æˆè¯­æ¥é¾™ç®¡ç†å™¨
                 var idiomManager = GetIdiomChainManager();
                 if (idiomManager == null)
                 {
-                    var error = "ÎŞ·¨ÕÒµ½³ÉÓï½ÓÁú¹ÜÀíÆ÷";
+                    var error = "æ— æ³•æ‰¾åˆ°æˆè¯­æ¥é¾™ç®¡ç†å™¨";
                     LogDebug(error);
                     return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = error };
                 }
 
-                // µ÷ÓÃ×¨ÒµÑéÖ¤·½·¨
+                // è°ƒç”¨ä¸“ä¸šéªŒè¯æ–¹æ³•
                 bool isValid = idiomManager.ValidateIdiomChain(answer, baseIdiom);
-                LogDebug($"³ÉÓï½ÓÁúÑéÖ¤½á¹û: {answer} (»ùÓÚ: {baseIdiom}) -> {isValid}");
+                LogDebug($"æˆè¯­æ¥é¾™éªŒè¯ç»“æœ: {answer} (åŸºäº: {baseIdiom}) -> {isValid}");
 
                 return new ValidationResult(isValid, answer, question.correctAnswer, question.questionType);
             }
             catch (System.Exception e)
             {
-                var error = $"³ÉÓï½ÓÁúÑéÖ¤Ê§°Ü: {e.Message}";
+                var error = $"æˆè¯­æ¥é¾™éªŒè¯å¤±è´¥: {e.Message}";
                 LogDebug(error);
                 return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = error };
             }
         }
 
         /// <summary>
-        /// ÑéÖ¤Ó²ĞÔÌî¿ÕÌâ´ğ°¸
+        /// éªŒè¯ç¡¬æ€§å¡«ç©ºé¢˜ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateHardFillAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤Ó²ĞÔÌî¿Õ´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯ç¡¬æ€§å¡«ç©ºç­”æ¡ˆ: {answer}");
 
             try
             {
-                // µ÷ÓÃHardFill¹ÜÀíÆ÷µÄ¾²Ì¬ÑéÖ¤·½·¨
+                // è°ƒç”¨HardFillç®¡ç†å™¨çš„é™æ€éªŒè¯æ–¹æ³•
                 bool isValid = HardFillQuestionManager.ValidateAnswerStatic(answer, question);
-                LogDebug($"Ó²ĞÔÌî¿ÕÑéÖ¤½á¹û: {isValid}");
+                LogDebug($"ç¡¬æ€§å¡«ç©ºéªŒè¯ç»“æœ: {isValid}");
 
                 return new ValidationResult(isValid, answer, question.correctAnswer, question.questionType);
             }
             catch (System.Exception e)
             {
-                var error = $"Ó²ĞÔÌî¿ÕÑéÖ¤Ê§°Ü: {e.Message}";
+                var error = $"ç¡¬æ€§å¡«ç©ºéªŒè¯å¤±è´¥: {e.Message}";
                 LogDebug(error);
 
-                // »ØÍËµ½Í¨ÓÃÑéÖ¤
+                // å›é€€åˆ°é€šç”¨éªŒè¯
                 bool fallbackResult = ValidateGenericAnswerInternal(answer, question.correctAnswer);
                 return new ValidationResult(fallbackResult, answer, question.correctAnswer, question.questionType) { errorMessage = error };
             }
         }
 
         /// <summary>
-        /// ÑéÖ¤ÈíĞÔÌî¿ÕÌâ´ğ°¸
+        /// éªŒè¯è½¯æ€§å¡«ç©ºé¢˜ç­”æ¡ˆ - ä¿®å¤ç‰ˆæœ¬
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateSoftFillAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤ÈíĞÔÌî¿Õ´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯è½¯æ€§å¡«ç©ºç­”æ¡ˆ: {answer}");
 
-            // ÈíĞÔÌî¿ÕÍ¨³£ÓĞ¶à¸ö¿ÉÄÜµÄÕıÈ·´ğ°¸
-            // ÕâÀï¿ÉÒÔÀ©Õ¹Ö§³Ö¶à´ğ°¸ÑéÖ¤
-            bool isValid = ValidateGenericAnswerInternal(answer, question.correctAnswer);
+            if (string.IsNullOrEmpty(answer?.Trim()))
+            {
+                LogDebug("è½¯æ€§å¡«ç©ºç­”æ¡ˆä¸ºç©º");
+                return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = "ç­”æ¡ˆä¸ºç©º" };
+            }
 
-            // ¿ÉÒÔÔÚÕâÀïÌí¼ÓÈíĞÔÌî¿ÕµÄÌØÊâÂß¼­
-            // ±ÈÈçÍ¬Òå´Ê¼ì²é¡¢²¿·ÖÆ¥ÅäµÈ
+            try
+            {
+                // 1. ä»é¢˜ç›®æ•°æ®è§£æé€šé…ç¬¦æ¨¡å¼
+                string stemPattern = ExtractStemPatternFromQuestion(question);
 
-            return new ValidationResult(isValid, answer, question.correctAnswer, question.questionType);
+                if (string.IsNullOrEmpty(stemPattern))
+                {
+                    var error = "æ— æ³•è·å–è½¯æ€§å¡«ç©ºçš„é€šé…ç¬¦æ¨¡å¼";
+                    LogDebug(error);
+                    // å›é€€åˆ°ç›´æ¥æ¯”è¾ƒ
+                    bool fallbackResult = ValidateGenericAnswerInternal(answer, question.correctAnswer);
+                    return new ValidationResult(fallbackResult, answer, question.correctAnswer, question.questionType) { errorMessage = error };
+                }
+
+                LogDebug($"è½¯æ€§å¡«ç©ºæ¨¡å¼: {stemPattern}");
+
+                // 2. åˆ›å»ºæ­£åˆ™è¡¨è¾¾å¼è¿›è¡Œæ¨¡å¼åŒ¹é…
+                bool patternMatches = ValidatePatternMatch(answer.Trim(), stemPattern);
+
+                if (!patternMatches)
+                {
+                    LogDebug($"ç­”æ¡ˆ '{answer}' ä¸åŒ¹é…æ¨¡å¼ '{stemPattern}'");
+                    return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = "ä¸åŒ¹é…é¢˜ç›®æ¨¡å¼" };
+                }
+
+                LogDebug($"ç­”æ¡ˆ '{answer}' åŒ¹é…æ¨¡å¼ '{stemPattern}' âœ“");
+
+                // 3. æ£€æŸ¥è¯æ˜¯å¦å­˜åœ¨äºè¯åº“ä¸­
+                bool wordExists = IsWordInDatabase(answer.Trim());
+
+                if (!wordExists)
+                {
+                    LogDebug($"ç­”æ¡ˆ '{answer}' ä¸åœ¨è¯åº“ä¸­");
+                    return new ValidationResult(false, answer, question.correctAnswer, question.questionType) { errorMessage = "è¯æ±‡ä¸åœ¨è¯åº“ä¸­" };
+                }
+
+                LogDebug($"ç­”æ¡ˆ '{answer}' åœ¨è¯åº“ä¸­ âœ“");
+
+                // ä¸¤ä¸ªæ¡ä»¶éƒ½æ»¡è¶³ï¼Œç­”æ¡ˆæ­£ç¡®
+                LogDebug($"è½¯æ€§å¡«ç©ºéªŒè¯é€šè¿‡: {answer}");
+                return new ValidationResult(true, answer, question.correctAnswer, question.questionType);
+            }
+            catch (System.Exception e)
+            {
+                var error = $"è½¯æ€§å¡«ç©ºéªŒè¯å¤±è´¥: {e.Message}";
+                LogDebug(error);
+
+                // å›é€€åˆ°é€šç”¨éªŒè¯
+                bool fallbackResult = ValidateGenericAnswerInternal(answer, question.correctAnswer);
+                return new ValidationResult(fallbackResult, answer, question.correctAnswer, question.questionType) { errorMessage = error };
+            }
         }
 
         /// <summary>
-        /// ÑéÖ¤Æ´Òô´ğ°¸
+        /// ä»é¢˜ç›®æ•°æ®ä¸­æå–é€šé…ç¬¦æ¨¡å¼
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>é€šé…ç¬¦æ¨¡å¼</returns>
+        private string ExtractStemPatternFromQuestion(NetworkQuestionData question)
+        {
+            try
+            {
+                // æ–¹æ³•1ï¼šä»é™„åŠ æ•°æ®ä¸­è§£æ
+                if (!string.IsNullOrEmpty(question.additionalData))
+                {
+                    var additionalInfo = JsonUtility.FromJson<SoftFillAdditionalData>(question.additionalData);
+                    if (!string.IsNullOrEmpty(additionalInfo.stemPattern))
+                    {
+                        LogDebug($"ä»é™„åŠ æ•°æ®è§£æåˆ°æ¨¡å¼: {additionalInfo.stemPattern}");
+                        return additionalInfo.stemPattern;
+                    }
+                }
+
+                // æ–¹æ³•2ï¼šä»é¢˜ç›®æ–‡æœ¬ä¸­æå–ï¼ˆå¤‡ç”¨æ–¹æ¡ˆï¼‰
+                if (!string.IsNullOrEmpty(question.questionText))
+                {
+                    // å¯»æ‰¾ <color=red>æ¨¡å¼</color> æ ¼å¼
+                    var colorMatch = Regex.Match(question.questionText, @"<color=red>([^<]+)</color>");
+                    if (colorMatch.Success)
+                    {
+                        string pattern = colorMatch.Groups[1].Value;
+                        LogDebug($"ä»é¢˜ç›®æ–‡æœ¬è§£æåˆ°æ¨¡å¼: {pattern}");
+                        return pattern;
+                    }
+
+                    // å¯»æ‰¾é€šé…ç¬¦æ¨¡å¼ï¼ˆåŒ…å«*æˆ–_çš„å­—ç¬¦ä¸²ï¼‰
+                    var wildcardMatch = Regex.Match(question.questionText, @"([*_\u4e00-\u9fa5]+[*_][*_\u4e00-\u9fa5]*)");
+                    if (wildcardMatch.Success)
+                    {
+                        string pattern = wildcardMatch.Groups[1].Value;
+                        LogDebug($"ä»é¢˜ç›®æ–‡æœ¬é€šé…ç¬¦è§£æåˆ°æ¨¡å¼: {pattern}");
+                        return pattern;
+                    }
+                }
+
+                LogDebug("æ— æ³•è§£æé€šé…ç¬¦æ¨¡å¼");
+                return "";
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"è§£æé€šé…ç¬¦æ¨¡å¼å¤±è´¥: {e.Message}");
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// éªŒè¯ç­”æ¡ˆæ˜¯å¦åŒ¹é…é€šé…ç¬¦æ¨¡å¼
+        /// </summary>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="stemPattern">é€šé…ç¬¦æ¨¡å¼</param>
+        /// <returns>æ˜¯å¦åŒ¹é…</returns>
+        private bool ValidatePatternMatch(string answer, string stemPattern)
+        {
+            try
+            {
+                // åˆ›å»ºæ­£åˆ™è¡¨è¾¾å¼æ¨¡å¼
+                // * -> .* (ä»»æ„ä¸ªå­—ç¬¦)
+                // _ -> . (å•ä¸ªå­—ç¬¦)
+                // å…¶ä»–å­—ç¬¦ -> è½¬ä¹‰
+                var regexPattern = "^" + string.Concat(stemPattern.Select(c =>
+                {
+                    if (c == '*') return ".*";
+                    if (c == '_') return ".";
+                    return Regex.Escape(c.ToString());
+                })) + "$";
+
+                LogDebug($"æ­£åˆ™è¡¨è¾¾å¼æ¨¡å¼: {regexPattern}");
+
+                var regex = new Regex(regexPattern);
+                bool matches = regex.IsMatch(answer);
+
+                LogDebug($"æ¨¡å¼åŒ¹é…ç»“æœ: '{answer}' åŒ¹é… '{regexPattern}' = {matches}");
+                return matches;
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"æ¨¡å¼åŒ¹é…å¤±è´¥: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// æ£€æŸ¥è¯æ˜¯å¦åœ¨æ•°æ®åº“ä¸­
+        /// </summary>
+        /// <param name="word">è¦æ£€æŸ¥çš„è¯</param>
+        /// <returns>æ˜¯å¦å­˜åœ¨</returns>
+        private bool IsWordInDatabase(string word)
+        {
+            if (string.IsNullOrEmpty(word))
+                return false;
+
+            // æ£€æŸ¥ç¼“å­˜
+            string cacheKey = $"word_exists_{word}";
+            if (validationCache != null && validationCache.ContainsKey(cacheKey))
+            {
+                return validationCache[cacheKey];
+            }
+
+            bool exists = false;
+
+            try
+            {
+                if (!System.IO.File.Exists(dbPath))
+                {
+                    LogDebug($"æ•°æ®åº“æ–‡ä»¶ä¸å­˜åœ¨: {dbPath}");
+                    return false;
+                }
+
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT COUNT(*) FROM (
+                                SELECT word FROM word WHERE word = @word
+                                UNION ALL
+                                SELECT word FROM idiom WHERE word = @word
+                            )";
+                        cmd.Parameters.AddWithValue("@word", word);
+
+                        long count = (long)cmd.ExecuteScalar();
+                        exists = count > 0;
+                    }
+                }
+
+                LogDebug($"è¯åº“æŸ¥è¯¢ç»“æœ: '{word}' å­˜åœ¨ = {exists}");
+
+                // ç¼“å­˜ç»“æœ
+                if (validationCache != null)
+                {
+                    if (validationCache.Count >= maxCacheSize)
+                    {
+                        validationCache.Clear();
+                    }
+                    validationCache[cacheKey] = exists;
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"æ•°æ®åº“æŸ¥è¯¢å¤±è´¥: {e.Message}");
+                exists = false;
+            }
+
+            return exists;
+        }
+
+        /// <summary>
+        /// éªŒè¯æ‹¼éŸ³ç­”æ¡ˆ
+        /// </summary>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidatePinyinAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤Æ´Òô´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯æ‹¼éŸ³ç­”æ¡ˆ: {answer}");
 
-            // Æ´ÒôÑéÖ¤µÄÌØÊâ´¦Àí
+            // æ‹¼éŸ³éªŒè¯çš„ç‰¹æ®Šå¤„ç†
             string normalizedAnswer = NormalizePinyinAnswer(answer);
             string normalizedCorrect = NormalizePinyinAnswer(question.correctAnswer);
 
@@ -299,16 +514,16 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ÑéÖ¤Ñ¡ÔñÌâ´ğ°¸
+        /// éªŒè¯é€‰æ‹©é¢˜ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateChoiceAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤Ñ¡ÔñÌâ´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯é€‰æ‹©é¢˜ç­”æ¡ˆ: {answer}");
 
-            // Ñ¡ÔñÌâÍ¨³£ÊÇ¾«È·Æ¥Åä
+            // é€‰æ‹©é¢˜é€šå¸¸æ˜¯ç²¾ç¡®åŒ¹é…
             bool isValid = answer.Trim().Equals(question.correctAnswer.Trim(),
                 caseSensitive ? System.StringComparison.Ordinal : System.StringComparison.OrdinalIgnoreCase);
 
@@ -316,16 +531,16 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ÑéÖ¤ÅĞ¶ÏÌâ´ğ°¸
+        /// éªŒè¯åˆ¤æ–­é¢˜ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateTrueFalseAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤ÅĞ¶ÏÌâ´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯åˆ¤æ–­é¢˜ç­”æ¡ˆ: {answer}");
 
-            // ±ê×¼»¯ÅĞ¶ÏÌâ´ğ°¸
+            // æ ‡å‡†åŒ–åˆ¤æ–­é¢˜ç­”æ¡ˆ
             string normalizedAnswer = NormalizeTrueFalseAnswer(answer);
             string normalizedCorrect = NormalizeTrueFalseAnswer(question.correctAnswer);
 
@@ -335,17 +550,17 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ÑéÖ¤ÊÖĞ´Ìâ´ğ°¸
+        /// éªŒè¯æ‰‹å†™é¢˜ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateHandwritingAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤ÊÖĞ´Ìâ´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯æ‰‹å†™é¢˜ç­”æ¡ˆ: {answer}");
 
-            // ÊÖĞ´Ìâ¿ÉÄÜĞèÒªÌØÊâµÄÊ¶±ğºÍÑéÖ¤Âß¼­
-            // ÕâÀïÔİÊ±Ê¹ÓÃÍ¨ÓÃÑéÖ¤£¬Êµ¼Ê¿ÉÄÜĞèÒªOCR»òÍ¼ÏñÊ¶±ğ
+            // æ‰‹å†™é¢˜å¯èƒ½éœ€è¦ç‰¹æ®Šçš„è¯†åˆ«å’ŒéªŒè¯é€»è¾‘
+            // è¿™é‡Œæš‚æ—¶ä½¿ç”¨é€šç”¨éªŒè¯ï¼Œå®é™…å¯èƒ½éœ€è¦OCRæˆ–å›¾åƒè¯†åˆ«
 
             bool isValid = ValidateGenericAnswerInternal(answer, question.correctAnswer);
 
@@ -353,14 +568,14 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// Í¨ÓÃ´ğ°¸ÑéÖ¤
+        /// é€šç”¨ç­”æ¡ˆéªŒè¯
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>ÑéÖ¤½á¹û</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>éªŒè¯ç»“æœ</returns>
         private ValidationResult ValidateGenericAnswer(string answer, NetworkQuestionData question)
         {
-            LogDebug($"ÑéÖ¤Í¨ÓÃ´ğ°¸: {answer}");
+            LogDebug($"éªŒè¯é€šç”¨ç­”æ¡ˆ: {answer}");
 
             bool isValid = ValidateGenericAnswerInternal(answer, question.correctAnswer);
 
@@ -369,36 +584,36 @@ namespace Core.Network
 
         #endregion
 
-        #region ´ğ°¸±ê×¼»¯·½·¨
+        #region ç­”æ¡ˆæ ‡å‡†åŒ–æ–¹æ³•
 
         /// <summary>
-        /// ±ê×¼»¯Æ´Òô´ğ°¸
+        /// æ ‡å‡†åŒ–æ‹¼éŸ³ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Ô­Ê¼´ğ°¸</param>
-        /// <returns>±ê×¼»¯ºóµÄ´ğ°¸</returns>
+        /// <param name="answer">åŸå§‹ç­”æ¡ˆ</param>
+        /// <returns>æ ‡å‡†åŒ–åçš„ç­”æ¡ˆ</returns>
         private string NormalizePinyinAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
                 return "";
 
-            // ÒÆ³ı¿Õ¸ñ¡¢Éùµ÷·ûºÅµÈ
+            // ç§»é™¤ç©ºæ ¼ã€å£°è°ƒç¬¦å·ç­‰
             string normalized = answer.Trim()
                 .Replace(" ", "")
-                .Replace("¨¡", "a").Replace("¨¢", "a").Replace("¨£", "a").Replace("¨¤", "a")
-                .Replace("¨¥", "e").Replace("¨¦", "e").Replace("¨§", "e").Replace("¨¨", "e")
-                .Replace("¨©", "i").Replace("¨ª", "i").Replace("¨«", "i").Replace("¨¬", "i")
-                .Replace("¨­", "o").Replace("¨®", "o").Replace("¨¯", "o").Replace("¨°", "o")
-                .Replace("¨±", "u").Replace("¨²", "u").Replace("¨³", "u").Replace("¨´", "u")
-                .Replace("¨µ", "v").Replace("¨¶", "v").Replace("¨·", "v").Replace("¨¸", "v");
+                .Replace("Ä", "a").Replace("Ã¡", "a").Replace("Ç", "a").Replace("Ã ", "a")
+                .Replace("Ä“", "e").Replace("Ã©", "e").Replace("Ä›", "e").Replace("Ã¨", "e")
+                .Replace("Ä«", "i").Replace("Ã­", "i").Replace("Ç", "i").Replace("Ã¬", "i")
+                .Replace("Å", "o").Replace("Ã³", "o").Replace("Ç’", "o").Replace("Ã²", "o")
+                .Replace("Å«", "u").Replace("Ãº", "u").Replace("Ç”", "u").Replace("Ã¹", "u")
+                .Replace("Ç–", "v").Replace("Ç˜", "v").Replace("Çš", "v").Replace("Çœ", "v");
 
             return normalized.ToLowerInvariant();
         }
 
         /// <summary>
-        /// ±ê×¼»¯ÅĞ¶ÏÌâ´ğ°¸
+        /// æ ‡å‡†åŒ–åˆ¤æ–­é¢˜ç­”æ¡ˆ
         /// </summary>
-        /// <param name="answer">Ô­Ê¼´ğ°¸</param>
-        /// <returns>±ê×¼»¯ºóµÄ´ğ°¸</returns>
+        /// <param name="answer">åŸå§‹ç­”æ¡ˆ</param>
+        /// <returns>æ ‡å‡†åŒ–åçš„ç­”æ¡ˆ</returns>
         private string NormalizeTrueFalseAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
@@ -406,16 +621,16 @@ namespace Core.Network
 
             string normalized = answer.Trim().ToLowerInvariant();
 
-            // Í³Ò»»¯¸÷ÖÖ"ÊÇ"µÄ±íÊ¾
-            if (normalized == "true" || normalized == "ÊÇ" || normalized == "¶Ô" ||
-                normalized == "ÕıÈ·" || normalized == "¡Ì" || normalized == "t" || normalized == "1")
+            // ç»Ÿä¸€åŒ–å„ç§"æ˜¯"çš„è¡¨ç¤º
+            if (normalized == "true" || normalized == "æ˜¯" || normalized == "å¯¹" ||
+                normalized == "æ­£ç¡®" || normalized == "âˆš" || normalized == "t" || normalized == "1")
             {
                 return "true";
             }
 
-            // Í³Ò»»¯¸÷ÖÖ"·ñ"µÄ±íÊ¾
-            if (normalized == "false" || normalized == "·ñ" || normalized == "´í" ||
-                normalized == "´íÎó" || normalized == "¡Á" || normalized == "f" || normalized == "0")
+            // ç»Ÿä¸€åŒ–å„ç§"å¦"çš„è¡¨ç¤º
+            if (normalized == "false" || normalized == "å¦" || normalized == "é”™" ||
+                normalized == "é”™è¯¯" || normalized == "Ã—" || normalized == "f" || normalized == "0")
             {
                 return "false";
             }
@@ -424,10 +639,10 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// Í¨ÓÃ´ğ°¸±ê×¼»¯
+        /// é€šç”¨ç­”æ¡ˆæ ‡å‡†åŒ–
         /// </summary>
-        /// <param name="answer">Ô­Ê¼´ğ°¸</param>
-        /// <returns>±ê×¼»¯ºóµÄ´ğ°¸</returns>
+        /// <param name="answer">åŸå§‹ç­”æ¡ˆ</param>
+        /// <returns>æ ‡å‡†åŒ–åçš„ç­”æ¡ˆ</returns>
         private string NormalizeGenericAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
@@ -435,47 +650,47 @@ namespace Core.Network
 
             string normalized = answer.Trim();
 
-            // ÒÆ³ı¶àÓàµÄ¿Õ¸ñ
+            // ç§»é™¤å¤šä½™çš„ç©ºæ ¼
             while (normalized.Contains("  "))
             {
                 normalized = normalized.Replace("  ", " ");
             }
 
-            // Í³Ò»ÖĞÓ¢ÎÄ±êµã·ûºÅ
+            // ç»Ÿä¸€ä¸­è‹±æ–‡æ ‡ç‚¹ç¬¦å·
             normalized = normalized
-                .Replace("£¬", ",")
-                .Replace("¡£", ".")
-                .Replace("£¿", "?")
-                .Replace("£¡", "!")
-                .Replace("£»", ";")
-                .Replace("£º", ":");
+                .Replace("ï¼Œ", ",")
+                .Replace("ã€‚", ".")
+                .Replace("ï¼Ÿ", "?")
+                .Replace("ï¼", "!")
+                .Replace("ï¼›", ";")
+                .Replace("ï¼š", ":");
 
             return caseSensitive ? normalized : normalized.ToLowerInvariant();
         }
 
         #endregion
 
-        #region ¸¨ÖúÑéÖ¤·½·¨
+        #region è¾…åŠ©éªŒè¯æ–¹æ³•
 
         /// <summary>
-        /// Í¨ÓÃ´ğ°¸ÑéÖ¤ÄÚ²¿ÊµÏÖ
+        /// é€šç”¨ç­”æ¡ˆéªŒè¯å†…éƒ¨å®ç°
         /// </summary>
-        /// <param name="answer">Íæ¼Ò´ğ°¸</param>
-        /// <param name="correctAnswer">ÕıÈ·´ğ°¸</param>
-        /// <returns>ÊÇ·ñÕıÈ·</returns>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="correctAnswer">æ­£ç¡®ç­”æ¡ˆ</param>
+        /// <returns>æ˜¯å¦æ­£ç¡®</returns>
         private bool ValidateGenericAnswerInternal(string answer, string correctAnswer)
         {
             if (string.IsNullOrEmpty(answer) || string.IsNullOrEmpty(correctAnswer))
                 return false;
 
-            // ¼ì²é»º´æ
+            // æ£€æŸ¥ç¼“å­˜
             string cacheKey = $"{answer}|{correctAnswer}";
             if (validationCache != null && validationCache.ContainsKey(cacheKey))
             {
                 return validationCache[cacheKey];
             }
 
-            // ±ê×¼»¯´ğ°¸
+            // æ ‡å‡†åŒ–ç­”æ¡ˆ
             string normalizedAnswer = NormalizeGenericAnswer(answer);
             string normalizedCorrect = NormalizeGenericAnswer(correctAnswer);
 
@@ -483,21 +698,21 @@ namespace Core.Network
 
             if (strictValidation)
             {
-                // ÑÏ¸ñÄ£Ê½£º±ØĞëÍêÈ«Æ¥Åä
+                // ä¸¥æ ¼æ¨¡å¼ï¼šå¿…é¡»å®Œå…¨åŒ¹é…
                 isCorrect = normalizedAnswer.Equals(normalizedCorrect);
             }
             else
             {
-                // ¿íËÉÄ£Ê½£ºÔÊĞí²¿·ÖÆ¥Åä
+                // å®½æ¾æ¨¡å¼ï¼šå…è®¸éƒ¨åˆ†åŒ¹é…
                 isCorrect = normalizedAnswer.Equals(normalizedCorrect) ||
                            normalizedCorrect.Contains(normalizedAnswer) ||
                            normalizedAnswer.Contains(normalizedCorrect);
             }
 
-            // »º´æ½á¹û
+            // ç¼“å­˜ç»“æœ
             if (validationCache != null)
             {
-                // ÏŞÖÆ»º´æ´óĞ¡
+                // é™åˆ¶ç¼“å­˜å¤§å°
                 if (validationCache.Count >= maxCacheSize)
                 {
                     validationCache.Clear();
@@ -509,10 +724,10 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ´ÓÌâÄ¿Êı¾İÖĞ»ñÈ¡Ìâ¸É³ÉÓï
+        /// ä»é¢˜ç›®æ•°æ®ä¸­è·å–é¢˜å¹²æˆè¯­
         /// </summary>
-        /// <param name="question">ÌâÄ¿Êı¾İ</param>
-        /// <returns>Ìâ¸É³ÉÓï</returns>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>é¢˜å¹²æˆè¯­</returns>
         private string GetBaseIdiomFromQuestion(NetworkQuestionData question)
         {
             try
@@ -525,25 +740,25 @@ namespace Core.Network
             }
             catch (System.Exception e)
             {
-                LogDebug($"»ñÈ¡Ìâ¸É³ÉÓïÊ§°Ü: {e.Message}");
+                LogDebug($"è·å–é¢˜å¹²æˆè¯­å¤±è´¥: {e.Message}");
             }
 
             return "";
         }
 
         /// <summary>
-        /// »ñÈ¡³ÉÓï½ÓÁú¹ÜÀíÆ÷ÊµÀı
+        /// è·å–æˆè¯­æ¥é¾™ç®¡ç†å™¨å®ä¾‹
         /// </summary>
-        /// <returns>³ÉÓï½ÓÁú¹ÜÀíÆ÷</returns>
+        /// <returns>æˆè¯­æ¥é¾™ç®¡ç†å™¨</returns>
         private IdiomChainQuestionManager GetIdiomChainManager()
         {
-            // Èç¹ûÒÑ»º´æ£¬Ö±½Ó·µ»Ø
+            // å¦‚æœå·²ç¼“å­˜ï¼Œç›´æ¥è¿”å›
             if (idiomChainManager != null)
                 return idiomChainManager;
 
             try
             {
-                // ´ÓÌâÄ¿Êı¾İ·şÎñ»ñÈ¡
+                // ä»é¢˜ç›®æ•°æ®æœåŠ¡è·å–
                 if (questionDataService != null)
                 {
                     var getProviderMethod = questionDataService.GetType()
@@ -561,33 +776,33 @@ namespace Core.Network
                     }
                 }
 
-                // Ö±½ÓÔÚ³¡¾°ÖĞ²éÕÒ
+                // ç›´æ¥åœ¨åœºæ™¯ä¸­æŸ¥æ‰¾
                 idiomChainManager = Object.FindObjectOfType<IdiomChainQuestionManager>();
                 return idiomChainManager;
             }
             catch (System.Exception e)
             {
-                LogDebug($"»ñÈ¡IdiomChainQuestionManagerÊ§°Ü: {e.Message}");
+                LogDebug($"è·å–IdiomChainQuestionManagerå¤±è´¥: {e.Message}");
                 return null;
             }
         }
 
         #endregion
 
-        #region ÅúÁ¿ÑéÖ¤
+        #region æ‰¹é‡éªŒè¯
 
         /// <summary>
-        /// ÅúÁ¿ÑéÖ¤´ğ°¸
+        /// æ‰¹é‡éªŒè¯ç­”æ¡ˆ
         /// </summary>
         public List<ValidationResult> ValidateAnswersBatch(List<string> answers, List<NetworkQuestionData> questions)
         {
             if (answers == null || questions == null || answers.Count != questions.Count)
             {
-                LogDebug("ÅúÁ¿ÑéÖ¤²ÎÊıÎŞĞ§");
+                LogDebug("æ‰¹é‡éªŒè¯å‚æ•°æ— æ•ˆ");
                 return new List<ValidationResult>();
             }
 
-            LogDebug($"¿ªÊ¼ÅúÁ¿ÑéÖ¤ {answers.Count} ¸ö´ğ°¸");
+            LogDebug($"å¼€å§‹æ‰¹é‡éªŒè¯ {answers.Count} ä¸ªç­”æ¡ˆ");
 
             var results = new List<ValidationResult>();
 
@@ -597,19 +812,19 @@ namespace Core.Network
                 results.Add(result);
             }
 
-            LogDebug($"ÅúÁ¿ÑéÖ¤Íê³É£¬ÕıÈ·ÂÊ: {results.Count(r => r.isCorrect)}/{results.Count}");
+            LogDebug($"æ‰¹é‡éªŒè¯å®Œæˆï¼Œæ­£ç¡®ç‡: {results.Count(r => r.isCorrect)}/{results.Count}");
 
             return results;
         }
 
         #endregion
 
-        #region ÅäÖÃ¹ÜÀí
+        #region é…ç½®ç®¡ç†
 
         /// <summary>
-        /// ÉèÖÃ»º´æ´óĞ¡
+        /// è®¾ç½®ç¼“å­˜å¤§å°
         /// </summary>
-        /// <param name="size">×î´ó»º´æÌõÄ¿Êı</param>
+        /// <param name="size">æœ€å¤§ç¼“å­˜æ¡ç›®æ•°</param>
         public void SetCacheSize(int size)
         {
             maxCacheSize = Mathf.Max(0, size);
@@ -619,61 +834,83 @@ namespace Core.Network
                 validationCache.Clear();
             }
 
-            LogDebug($"ÑéÖ¤»º´æ´óĞ¡ÒÑÉèÖÃÎª: {maxCacheSize}");
+            LogDebug($"éªŒè¯ç¼“å­˜å¤§å°å·²è®¾ç½®ä¸º: {maxCacheSize}");
         }
 
         /// <summary>
-        /// Çå¿ÕÑéÖ¤»º´æ
+        /// æ¸…ç©ºéªŒè¯ç¼“å­˜
         /// </summary>
         public void ClearValidationCache()
         {
             validationCache?.Clear();
-            LogDebug("ÑéÖ¤»º´æÒÑÇå¿Õ");
+            LogDebug("éªŒè¯ç¼“å­˜å·²æ¸…ç©º");
+        }
+
+        /// <summary>
+        /// è®¾ç½®ä¸¥æ ¼éªŒè¯æ¨¡å¼
+        /// </summary>
+        /// <param name="strict">æ˜¯å¦å¯ç”¨ä¸¥æ ¼éªŒè¯</param>
+        public void SetStrictValidation(bool strict)
+        {
+            strictValidation = strict;
+            LogDebug($"ä¸¥æ ¼éªŒè¯æ¨¡å¼: {(strict ? "å¯ç”¨" : "ç¦ç”¨")}");
+        }
+
+        /// <summary>
+        /// è®¾ç½®å¤§å°å†™æ•æ„Ÿ
+        /// </summary>
+        /// <param name="sensitive">æ˜¯å¦å¤§å°å†™æ•æ„Ÿ</param>
+        public void SetCaseSensitive(bool sensitive)
+        {
+            caseSensitive = sensitive;
+            LogDebug($"å¤§å°å†™æ•æ„Ÿ: {(sensitive ? "å¯ç”¨" : "ç¦ç”¨")}");
         }
 
         #endregion
 
-        #region Í³¼ÆĞÅÏ¢
+        #region ç»Ÿè®¡ä¿¡æ¯
 
         /// <summary>
-        /// »ñÈ¡ÑéÖ¤Í³¼ÆĞÅÏ¢
+        /// è·å–éªŒè¯ç»Ÿè®¡ä¿¡æ¯
         /// </summary>
-        /// <returns>Í³¼ÆĞÅÏ¢×Ö·û´®</returns>
+        /// <returns>ç»Ÿè®¡ä¿¡æ¯å­—ç¬¦ä¸²</returns>
         public string GetValidationStats()
         {
-            var stats = "=== AnswerValidationManagerÍ³¼Æ ===\n";
-            stats += $"ÑéÖ¤Ä£Ê½: {(strictValidation ? "ÑÏ¸ñ" : "¿íËÉ")}\n";
-            stats += $"´óĞ¡Ğ´Ãô¸Ğ: {(caseSensitive ? "ÊÇ" : "·ñ")}\n";
-            stats += $"»º´æÆôÓÃ: {(validationCache != null ? "ÊÇ" : "·ñ")}\n";
+            var stats = "=== AnswerValidationManagerç»Ÿè®¡ ===\n";
+            stats += $"éªŒè¯æ¨¡å¼: {(strictValidation ? "ä¸¥æ ¼" : "å®½æ¾")}\n";
+            stats += $"å¤§å°å†™æ•æ„Ÿ: {(caseSensitive ? "æ˜¯" : "å¦")}\n";
+            stats += $"ç¼“å­˜å¯ç”¨: {(validationCache != null ? "æ˜¯" : "å¦")}\n";
 
             if (validationCache != null)
             {
-                stats += $"»º´æÌõÄ¿Êı: {validationCache.Count}/{maxCacheSize}\n";
-                stats += $"»º´æÊ¹ÓÃÂÊ: {(float)validationCache.Count / maxCacheSize:P1}\n";
+                stats += $"ç¼“å­˜æ¡ç›®æ•°: {validationCache.Count}/{maxCacheSize}\n";
+                stats += $"ç¼“å­˜ä½¿ç”¨ç‡: {(float)validationCache.Count / maxCacheSize:P1}\n";
             }
 
-            stats += $"³ÉÓï½ÓÁú¹ÜÀíÆ÷: {(idiomChainManager != null ? "ÒÑ»º´æ" : "Î´»º´æ")}\n";
-            stats += $"ÌâÄ¿Êı¾İ·şÎñ: {(questionDataService != null ? "ÒÑÁ¬½Ó" : "Î´Á¬½Ó")}\n";
+            stats += $"æˆè¯­æ¥é¾™ç®¡ç†å™¨: {(idiomChainManager != null ? "å·²ç¼“å­˜" : "æœªç¼“å­˜")}\n";
+            stats += $"é¢˜ç›®æ•°æ®æœåŠ¡: {(questionDataService != null ? "å·²è¿æ¥" : "æœªè¿æ¥")}\n";
+            stats += $"æ•°æ®åº“è·¯å¾„: {dbPath}\n";
+            stats += $"æ•°æ®åº“å¯ç”¨: {(System.IO.File.Exists(dbPath) ? "æ˜¯" : "å¦")}";
 
             return stats;
         }
 
         #endregion
 
-        #region ¹¤¾ß·½·¨
+        #region å·¥å…·æ–¹æ³•
 
         /// <summary>
-        /// ÉèÖÃµ÷ÊÔÈÕÖ¾¿ª¹Ø
+        /// è®¾ç½®è°ƒè¯•æ—¥å¿—å¼€å…³
         /// </summary>
-        /// <param name="enabled">ÊÇ·ñÆôÓÃµ÷ÊÔÈÕÖ¾</param>
+        /// <param name="enabled">æ˜¯å¦å¯ç”¨è°ƒè¯•æ—¥å¿—</param>
         public void SetDebugLogs(bool enabled)
         {
             enableDebugLogs = enabled;
-            LogDebug($"µ÷ÊÔÈÕÖ¾ÒÑ{(enabled ? "ÆôÓÃ" : "½ûÓÃ")}");
+            LogDebug($"è°ƒè¯•æ—¥å¿—å·²{(enabled ? "å¯ç”¨" : "ç¦ç”¨")}");
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾Êä³ö
+        /// è°ƒè¯•æ—¥å¿—è¾“å‡º
         /// </summary>
         private void LogDebug(string message)
         {
@@ -685,33 +922,61 @@ namespace Core.Network
 
         #endregion
 
-        #region Ïú»ÙºÍÇåÀí
+        #region é”€æ¯å’Œæ¸…ç†
 
         /// <summary>
-        /// Ïú»Ù´ğ°¸ÑéÖ¤¹ÜÀíÆ÷
+        /// é”€æ¯ç­”æ¡ˆéªŒè¯ç®¡ç†å™¨
         /// </summary>
         public void Dispose()
         {
-            // ÇåÀíÊÂ¼ş
+            // æ¸…ç†äº‹ä»¶
             OnAnswerValidated = null;
             OnValidationError = null;
 
-            // ÇåÀí»º´æ
+            // æ¸…ç†ç¼“å­˜
             validationCache?.Clear();
             validationCache = null;
 
-            // ÇåÀíÒıÓÃ
+            // æ¸…ç†å¼•ç”¨
             idiomChainManager = null;
             questionDataService = null;
 
-            LogDebug("AnswerValidationManagerÒÑÏú»Ù");
+            LogDebug("AnswerValidationManagerå·²é”€æ¯");
+        }
+
+        #endregion
+
+        #region é™æ€éªŒè¯æ–¹æ³•ï¼ˆä¸ºSoftFillQuestionManageræä¾›æ”¯æŒï¼‰
+
+        /// <summary>
+        /// é™æ€éªŒè¯è½¯æ€§å¡«ç©ºç­”æ¡ˆï¼ˆæä¾›ç»™SoftFillQuestionManagerä½¿ç”¨ï¼‰
+        /// </summary>
+        /// <param name="answer">ç©å®¶ç­”æ¡ˆ</param>
+        /// <param name="question">é¢˜ç›®æ•°æ®</param>
+        /// <returns>æ˜¯å¦æ­£ç¡®</returns>
+        public static bool ValidateSoftFillAnswerStatic(string answer, NetworkQuestionData question)
+        {
+            try
+            {
+                // åˆ›å»ºä¸´æ—¶éªŒè¯å™¨å®ä¾‹
+                var validator = new AnswerValidationManager();
+                validator.Initialize(null, false); // ä¸å¯ç”¨ç¼“å­˜ï¼Œç”¨äºé™æ€è°ƒç”¨
+
+                var result = validator.ValidateSoftFillAnswer(answer, question);
+                return result.isCorrect;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[AnswerValidationManager] é™æ€éªŒè¯å¤±è´¥: {e.Message}");
+                return false;
+            }
         }
 
         #endregion
     }
 
     /// <summary>
-    /// ³ÉÓï½ÓÁú¸½¼ÓÊı¾İ½á¹¹£¨ÓëGameLogic.FillBlankÃüÃû¿Õ¼ä±£³ÖÒ»ÖÂ£©
+    /// æˆè¯­æ¥é¾™é™„åŠ æ•°æ®ç»“æ„ï¼ˆä¸GameLogic.FillBlankå‘½åç©ºé—´ä¿æŒä¸€è‡´ï¼‰
     /// </summary>
     [System.Serializable]
     public class IdiomChainAdditionalData

@@ -391,6 +391,188 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
+        /// 静态验证方法（为AnswerValidationManager提供支持）
+        /// </summary>
+        /// <param name="answer">玩家答案</param>
+        /// <param name="question">题目数据</param>
+        /// <returns>是否正确</returns>
+        public static bool ValidateAnswerStatic(string answer, NetworkQuestionData question)
+        {
+            Debug.Log($"[SoftFill] 静态验证答案: {answer}");
+
+            if (string.IsNullOrEmpty(answer?.Trim()) || question == null)
+            {
+                Debug.Log("[SoftFill] 静态验证：答案为空或题目数据无效");
+                return false;
+            }
+
+            if (question.questionType != QuestionType.SoftFill)
+            {
+                Debug.LogError($"[SoftFill] 静态验证：题目类型不匹配，期望SoftFill，实际{question.questionType}");
+                return false;
+            }
+
+            try
+            {
+                // 1. 解析通配符模式
+                string stemPattern = ExtractStemPatternStatic(question);
+
+                if (string.IsNullOrEmpty(stemPattern))
+                {
+                    Debug.LogWarning("[SoftFill] 静态验证：无法获取通配符模式，使用直接比较");
+                    // 回退到直接比较
+                    return answer.Trim().Equals(question.correctAnswer?.Trim(), System.StringComparison.OrdinalIgnoreCase);
+                }
+
+                Debug.Log($"[SoftFill] 静态验证模式: {stemPattern}");
+
+                // 2. 验证模式匹配
+                bool patternMatches = ValidatePatternMatchStatic(answer.Trim(), stemPattern);
+
+                if (!patternMatches)
+                {
+                    Debug.Log($"[SoftFill] 静态验证：答案 '{answer}' 不匹配模式 '{stemPattern}'");
+                    return false;
+                }
+
+                // 3. 验证词库存在性
+                bool wordExists = IsWordInDatabaseStatic(answer.Trim());
+
+                if (!wordExists)
+                {
+                    Debug.Log($"[SoftFill] 静态验证：答案 '{answer}' 不在词库中");
+                    return false;
+                }
+
+                Debug.Log($"[SoftFill] 静态验证通过: {answer}");
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[SoftFill] 静态验证异常: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 静态提取通配符模式
+        /// </summary>
+        /// <param name="question">题目数据</param>
+        /// <returns>通配符模式</returns>
+        private static string ExtractStemPatternStatic(NetworkQuestionData question)
+        {
+            try
+            {
+                // 方法1：从附加数据中解析
+                if (!string.IsNullOrEmpty(question.additionalData))
+                {
+                    var additionalInfo = JsonUtility.FromJson<SoftFillAdditionalData>(question.additionalData);
+                    if (!string.IsNullOrEmpty(additionalInfo.stemPattern))
+                    {
+                        return additionalInfo.stemPattern;
+                    }
+                }
+
+                // 方法2：从题目文本中提取
+                if (!string.IsNullOrEmpty(question.questionText))
+                {
+                    // 寻找 <color=red>模式</color> 格式
+                    var colorMatch = Regex.Match(question.questionText, @"<color=red>([^<]+)</color>");
+                    if (colorMatch.Success)
+                    {
+                        return colorMatch.Groups[1].Value;
+                    }
+
+                    // 寻找通配符模式
+                    var wildcardMatch = Regex.Match(question.questionText, @"([*_\u4e00-\u9fa5]+[*_][*_\u4e00-\u9fa5]*)");
+                    if (wildcardMatch.Success)
+                    {
+                        return wildcardMatch.Groups[1].Value;
+                    }
+                }
+
+                return "";
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[SoftFill] 静态解析模式失败: {e.Message}");
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// 静态模式匹配验证
+        /// </summary>
+        /// <param name="answer">答案</param>
+        /// <param name="stemPattern">模式</param>
+        /// <returns>是否匹配</returns>
+        private static bool ValidatePatternMatchStatic(string answer, string stemPattern)
+        {
+            try
+            {
+                // 创建正则表达式模式
+                var regexPattern = "^" + string.Concat(stemPattern.Select(c =>
+                {
+                    if (c == '*') return ".*";
+                    if (c == '_') return ".";
+                    return Regex.Escape(c.ToString());
+                })) + "$";
+
+                var regex = new Regex(regexPattern);
+                return regex.IsMatch(answer);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[SoftFill] 静态模式匹配失败: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 静态词库检查
+        /// </summary>
+        /// <param name="word">单词</param>
+        /// <returns>是否存在</returns>
+        private static bool IsWordInDatabaseStatic(string word)
+        {
+            if (string.IsNullOrEmpty(word))
+                return false;
+
+            string dbPath = Application.streamingAssetsPath + "/dictionary.db";
+
+            try
+            {
+                if (!System.IO.File.Exists(dbPath))
+                {
+                    Debug.LogWarning($"[SoftFill] 静态验证：数据库文件不存在: {dbPath}");
+                    return false;
+                }
+
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                    SELECT COUNT(*) FROM (
+                        SELECT word FROM word WHERE word = @word
+                        UNION ALL
+                        SELECT word FROM idiom WHERE word = @word
+                    )";
+                        cmd.Parameters.AddWithValue("@word", word);
+
+                        long count = (long)cmd.ExecuteScalar();
+                        return count > 0;
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[SoftFill] 静态词库查询失败: {e.Message}");
+                return false;
+            }
+        }
+        /// <summary>
         /// 从数据库随机获取单词
         /// </summary>
         private string GetRandomWord()
