@@ -289,77 +289,30 @@ namespace UI
         /// </summary>
         private string GetCreditsContent()
         {
-            return @"《中文词汇量大挑战》
+            return @"《语文课堂》
 
-开发团队：
+<color=#4A90E2><b>开发团队：</b></color></size>
 策划: Alexa
-程序: [开发者名称]
-美术: [美术师名称]
+程序: Alexa
+美术: Alexa
 音效: [音效师名称]
 
-特别感谢：
-Unity Technologies
-Photon Network
+<color=#4A90E2><b>特别感谢：</b></color></size>
 所有测试玩家
 
-技术支持：
+<color=#4A90E2><b>技术支持：</b></color></size>
 Unity 2022.3 LTS
 Photon PUN2
-TextMeshPro
+Riptide
 
-版本信息：
+<color=#4A90E2><b>版本信息：</b></color></size>
 版本号: " + Application.version + @"
-构建日期: " + System.DateTime.Now.ToString("yyyy-MM-dd") + @"
 
-© 2025 中文词汇量大挑战开发团队
+© 2025 语文课堂开发团队
 保留所有权利";
         }
 
 
-
-        #endregion
-
-        #region 兼容性方法（保留以防其他脚本引用）
-
-        /// <summary>
-        /// 兼容方法：单机游戏（已废弃）
-        /// </summary>
-        [System.Obsolete("单机模式已移除，请使用进入大厅")]
-        public void OnSinglePlayerClicked()
-        {
-            LogDebug("单机模式已移除，转向进入大厅");
-            OnEnterLobbyClicked();
-        }
-
-        /// <summary>
-        /// 兼容方法：开始游戏（已废弃）
-        /// </summary>
-        [System.Obsolete("请使用进入大厅")]
-        public void OnStartGameClicked()
-        {
-            LogDebug("开始游戏已改为进入大厅");
-            OnEnterLobbyClicked();
-        }
-
-        /// <summary>
-        /// 兼容方法：创建房间（已废弃）
-        /// </summary>
-        [System.Obsolete("请在大厅场景中创建房间")]
-        public void OnCreateRoomClicked()
-        {
-            LogDebug("请在大厅场景中创建房间");
-            OnEnterLobbyClicked();
-        }
-
-        /// <summary>
-        /// 兼容方法：加入房间（已废弃）
-        /// </summary>
-        [System.Obsolete("请在大厅场景中加入房间")]
-        public void OnJoinRoomClicked()
-        {
-            LogDebug("请在大厅场景中加入房间");
-            OnEnterLobbyClicked();
-        }
 
         #endregion
 
@@ -414,18 +367,6 @@ TextMeshPro
             }
         }
 
-        [ContextMenu("显示当前状态")]
-        public void ShowCurrentStatus()
-        {
-            string status = "=== MainMenuManager 状态 ===\n";
-            status += $"游戏模式: {SelectedGameMode}\n";
-            status += $"大厅场景: {lobbyScene}\n";
-            status += $"主音量: {AudioListener.volume:F2}\n";
-            status += $"全屏模式: {Screen.fullScreen}\n";
-
-            Debug.Log(status);
-        }
-
         [ContextMenu("重置游戏设置")]
         public void ResetGameSettings()
         {
@@ -434,15 +375,6 @@ TextMeshPro
             PlayerPrefs.Save();
 
             LogDebug("游戏设置已重置");
-        }
-
-        [ContextMenu("测试进入大厅")]
-        public void TestEnterLobby()
-        {
-            if (Application.isPlaying)
-            {
-                OnEnterLobbyClicked();
-            }
         }
 
         #endregion
