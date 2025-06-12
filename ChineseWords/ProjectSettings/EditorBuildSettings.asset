@@ -17,4 +17,5 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/NetworkGameScene.unity
     guid: 22cf8bbd634be5b4f813507e3efa2023
-  m_configObjects: {}
+  m_configObjects:
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 635a5750e73830c489bdea90dd5b7bf3, type: 2}

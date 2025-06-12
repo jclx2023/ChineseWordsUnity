@@ -23,3 +23,5 @@ sysinfo.txt
 .DS_Store
 *.swp
 ChineseWords/Assets/StreamingAssets/dictionary.db
+ChineseWords/Assets/Resources/Fonts/Ali-02 Atlas.png
+ChineseWords/Assets/Resources/Fonts/Ali-01 Atlas.png

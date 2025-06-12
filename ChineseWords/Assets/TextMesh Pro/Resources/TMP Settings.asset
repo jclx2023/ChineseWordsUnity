@@ -21,7 +21,7 @@ MonoBehaviour:
   m_GetFontFeaturesAtRuntime: 1
   m_missingGlyphCharacter: 0
   m_warningsDisabled: 0
-  m_defaultFontAsset: {fileID: 11400000, guid: fedfa0ca645c5054ba4af63c0d8da60b, type: 2}
+  m_defaultFontAsset: {fileID: 11400000, guid: b27a7be283b014441b020f1afdb38500, type: 2}
   m_defaultFontAssetPath: Fonts & Materials/
   m_defaultFontSize: 36
   m_defaultAutoSizeMinRatio: 0.5
@@ -31,12 +31,8 @@ MonoBehaviour:
   m_autoSizeTextContainer: 0
   m_IsTextObjectScaleStatic: 0
   m_fallbackFontAssets:
-  - {fileID: 11400000, guid: ab3b4fae83f64cd4e85e1e71c2ea04fd, type: 2}
-  - {fileID: 11400000, guid: d24fbc78bce4a2f4b979a54935272b36, type: 2}
-  - {fileID: 11400000, guid: 81c59d4ac7ff88b47b232e2c2c70e6c9, type: 2}
-  - {fileID: 11400000, guid: 965f62d7d815f02448a16505fa60d3c9, type: 2}
-  - {fileID: 11400000, guid: 84a553eb53d56ac4387f101b71a634f0, type: 2}
-  - {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  - {fileID: 11400000, guid: b27a7be283b014441b020f1afdb38500, type: 2}
+  - {fileID: 11400000, guid: 48d3e518f9cb2cf4cbb83046cc6e4534, type: 2}
   m_matchMaterialPreset: 1
   m_defaultSpriteAsset: {fileID: 11400000, guid: c41005c129ba4d66911b75229fd70b45, type: 2}
   m_defaultSpriteAssetPath: Sprite Assets/
