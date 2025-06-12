@@ -103,7 +103,7 @@
       "url": "https://packages.unity.cn"
     },
     "com.unity.textmeshpro": {
-      "version": "3.0.7",
+      "version": "3.0.9",
       "depth": 0,
       "source": "registry",
       "dependencies": {
@@ -133,44 +133,12 @@
       }
     },
     "com.unity.visualscripting": {
-      "version": "1.9.4",
+      "version": "1.9.8",
       "depth": 0,
       "source": "registry",
       "dependencies": {
         "com.unity.ugui": "1.0.0",
         "com.unity.modules.jsonserialize": "1.0.0"
-      },
-      "url": "https://packages.unity.cn"
-    },
-    "com.unity.xr.core-utils": {
-      "version": "2.3.0",
-      "depth": 1,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.modules.xr": "1.0.0"
-      },
-      "url": "https://packages.unity.cn"
-    },
-    "com.unity.xr.legacyinputhelpers": {
-      "version": "2.1.11",
-      "depth": 1,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.modules.vr": "1.0.0",
-        "com.unity.modules.xr": "1.0.0"
-      },
-      "url": "https://packages.unity.cn"
-    },
-    "com.unity.xr.management": {
-      "version": "4.5.1",
-      "depth": 0,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.modules.vr": "1.0.0",
-        "com.unity.modules.xr": "1.0.0",
-        "com.unity.xr.core-utils": "2.2.1",
-        "com.unity.modules.subsystems": "1.0.0",
-        "com.unity.xr.legacyinputhelpers": "2.1.11"
       },
       "url": "https://packages.unity.cn"
     },

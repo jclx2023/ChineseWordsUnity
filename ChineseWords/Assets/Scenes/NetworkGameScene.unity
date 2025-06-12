@@ -632,8 +632,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: GameProgress
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b27a7be283b014441b020f1afdb38500, type: 2}
-  m_sharedMaterial: {fileID: -1658969112785876353, guid: b27a7be283b014441b020f1afdb38500, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
+  m_sharedMaterial: {fileID: 4633198236633052663, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -879,8 +879,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: Timer
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b27a7be283b014441b020f1afdb38500, type: 2}
-  m_sharedMaterial: {fileID: -1658969112785876353, guid: b27a7be283b014441b020f1afdb38500, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
+  m_sharedMaterial: {fileID: 4633198236633052663, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -994,8 +994,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: CurrentTurn
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b27a7be283b014441b020f1afdb38500, type: 2}
-  m_sharedMaterial: {fileID: -1658969112785876353, guid: b27a7be283b014441b020f1afdb38500, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
+  m_sharedMaterial: {fileID: 4633198236633052663, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
