@@ -538,12 +538,6 @@ namespace Lobby.Core
         {
             LogDebug("返回主菜单");
 
-            // 断开网络连接
-            if (LobbyNetworkManager.Instance != null)
-            {
-                LobbyNetworkManager.Instance.Disconnect();
-            }
-
             // 重置状态
             isTransitioningToRoom = false;
             lastJoinedRoomData = null;
