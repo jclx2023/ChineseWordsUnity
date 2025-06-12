@@ -86,10 +86,6 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// 获取题目数据（IQuestionDataProvider接口实现）
-        /// 专门为Host抽题使用，不显示UI
-        /// </summary>
-        /// <summary>
         /// 获取题目数据（增强版，支持显示格式）
         /// </summary>
         public NetworkQuestionData GetQuestionData()
@@ -451,7 +447,6 @@ namespace GameLogic.FillBlank
             string enhanced = "<color=orange><b>成语接龙</b></color>\n";
             enhanced += "<color=green>请完成接龙：</color>\n\n";
             enhanced += originalText;
-            enhanced += "\n\n<size=10><color=gray>💡 规则：用前一个成语的最后一个字开头</color></size>";
 
             return enhanced;
         }
@@ -509,7 +504,6 @@ namespace GameLogic.FillBlank
             // 激活输入框
             answerInput.ActivateInputField();
 
-            Debug.Log($"[IdiomChain] 题目显示完成: {displayText}");
         }
 
         /// <summary>
@@ -701,13 +695,7 @@ namespace GameLogic.FillBlank
                 return;
 
             Debug.Log("[IdiomChain] 玩家投降");
-
-            StopAllCoroutines();
-            isGameInProgress = false;
-            feedbackText.text = "已投降！";
-            feedbackText.color = Color.yellow;
-
-            OnAnswerResult?.Invoke(false);
+            SubmitAnswer("");
         }
 
         /// <summary>
@@ -748,15 +736,7 @@ namespace GameLogic.FillBlank
             feedbackText.text = "已提交答案，等待服务器结果...";
             feedbackText.color = Color.yellow;
 
-            // 提交答案到服务器
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.SubmitAnswer(answer);
-            }
-            else
-            {
-                Debug.LogError("[IdiomChain] NetworkManager实例不存在，无法提交答案");
-            }
+            NetworkManager.Instance.SubmitAnswer(answer);
         }
 
         /// <summary>

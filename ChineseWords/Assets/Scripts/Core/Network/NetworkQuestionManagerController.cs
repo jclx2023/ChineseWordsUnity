@@ -16,7 +16,6 @@ namespace Core.Network
     {
         [Header("依赖管理器引用")]
         [SerializeField] private TimerManager timerManager;
-        [SerializeField] private PlayerHealthManager hpManager;
 
         [Header("依赖配置")]
         [SerializeField] private float timeUpDelay = 1f;
@@ -112,8 +111,6 @@ namespace Core.Network
             // 获取或查找必要组件
             if (timerManager == null)
                 timerManager = GetComponent<TimerManager>() ?? FindObjectOfType<TimerManager>();
-            if (hpManager == null)
-                hpManager = GetComponent<PlayerHealthManager>() ?? FindObjectOfType<PlayerHealthManager>();
 
             if (timerManager == null)
             {
@@ -121,18 +118,12 @@ namespace Core.Network
                 return;
             }
 
-            if (hpManager == null)
-            {
-                Debug.LogError("[NQMC] 找不到PlayerHealthManager引用");
-                return;
-            }
 
             // 应用配置
             var cfg = ConfigManager.Instance?.Config;
             if (cfg != null)
             {
                 timerManager.ApplyConfig(cfg.timeLimit);
-                hpManager.ApplyConfig(cfg.initialHealth, cfg.damagePerWrong);
             }
 
             // 绑定计时器事件
@@ -244,8 +235,6 @@ namespace Core.Network
 
             if (currentManager != null)
             {
-                if (hpManager != null)
-                    hpManager.BindManager(currentManager);
 
                 currentManager.OnAnswerResult += HandleNetworkAnswerSubmission;
 
@@ -566,18 +555,6 @@ namespace Core.Network
         {
             LogDebug($"收到服务器答题结果: {(isCorrect ? "正确" : "错误")}");
 
-            if (!isCorrect && hpManager != null)
-            {
-                hpManager.HPHandleAnswerResult(false);
-
-                if (hpManager.CurrentHealth <= 0)
-                {
-                    LogDebug("生命耗尽，游戏结束");
-                    OnGameEnded?.Invoke(false);
-                    return;
-                }
-            }
-
             ShowAnswerFeedback(isCorrect, correctAnswer);
             OnAnswerCompleted?.Invoke(isCorrect);
         }
@@ -715,9 +692,6 @@ namespace Core.Network
             info += $"在房间中: {PhotonNetwork.InRoom}\n";
             info += $"我的ActorNumber: {(PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0)}\n";
             info += $"是否MasterClient: {PhotonNetwork.IsMasterClient}\n";
-
-            if (hpManager != null)
-                info += $"当前生命: {hpManager.CurrentHealth}\n";
 
             if (timerManager != null)
                 info += $"计时器状态: {(timerManager.IsRunning ? "运行中" : "已停止")}\n";

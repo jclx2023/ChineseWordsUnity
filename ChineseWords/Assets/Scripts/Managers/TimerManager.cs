@@ -3,6 +3,7 @@ using TMPro;
 using Core;
 using System;
 using System.Collections;
+using Core.Network;
 
 namespace Managers
 {
@@ -43,54 +44,19 @@ namespace Managers
 
         // 倒计时协程
         private Coroutine countdownCoroutine;
-
-        // 计时器状态
         private bool isRunning = false;
         private bool isPaused = false;
 
-        // 关联的题目管理器（可选）
-        private QuestionManagerBase questionManager;
 
         #region 事件定义
 
-        /// <summary>
-        /// 时间到事件
-        /// </summary>
         public event Action OnTimeUp;
-
-        /// <summary>
-        /// 时间变化事件（每秒触发）
-        /// </summary>
         public event Action<float> OnTimeChanged;
-
-        /// <summary>
-        /// 进入警告时间事件
-        /// </summary>
         public event Action OnWarningTime;
-
-        /// <summary>
-        /// 进入危险时间事件
-        /// </summary>
         public event Action OnCriticalTime;
-
-        /// <summary>
-        /// 计时器启动事件
-        /// </summary>
         public event Action OnTimerStarted;
-
-        /// <summary>
-        /// 计时器停止事件
-        /// </summary>
         public event Action OnTimerStopped;
-
-        /// <summary>
-        /// 计时器暂停事件
-        /// </summary>
         public event Action OnTimerPaused;
-
-        /// <summary>
-        /// 计时器恢复事件
-        /// </summary>
         public event Action OnTimerResumed;
 
         #endregion
@@ -175,26 +141,6 @@ namespace Managers
             UpdateTimerUI();
         }
 
-        /// <summary>
-        /// 绑定题目管理器（可选，用于自动化流程）
-        /// </summary>
-        /// <param name="manager">题目管理器</param>
-        public void BindManager(QuestionManagerBase manager)
-        {
-            if (manager == null)
-            {
-                Debug.LogWarning("[TimerManager] 尝试绑定空的题目管理器");
-                return;
-            }
-
-            // 先取消之前的订阅
-            UnsubscribeFromEvents();
-
-            questionManager = manager;
-
-            // 可以在这里添加与题目管理器的联动逻辑
-            LogDebug($"成功绑定题目管理器: {questionManager.GetType().Name}");
-        }
 
         /// <summary>
         /// 取消事件订阅
@@ -231,11 +177,6 @@ namespace Managers
         /// <summary>
         /// 开始倒计时（指定时间）
         /// </summary>
-        /// <param name="customTime">自定义倒计时时间</param>
-        /// <summary>
-        /// 开始倒计时（指定时间）
-        /// </summary>
-        /// <param name="customTime">自定义倒计时时间</param>
         public void StartTimer(float customTime)
         {
             if (customTime <= 0)
@@ -247,7 +188,6 @@ namespace Managers
 
             StopTimer(); // 先停止之前的计时器
 
-            // 关键修改：直接使用传入的时间作为本次倒计时时间，同时更新timeLimit
             timeLimit = customTime;
             currentTime = customTime;
             isRunning = true;
@@ -259,85 +199,6 @@ namespace Managers
 
             // 触发启动事件
             OnTimerStarted?.Invoke();
-        }
-        /// <summary>
-        /// 从TimerConfig应用完整配置
-        /// </summary>
-        public void ApplyTimerConfig(TimerConfig config, QuestionType questionType)
-        {
-            if (config == null)
-            {
-                Debug.LogWarning("[TimerManager] TimerConfig为空，使用默认配置");
-                ApplyConfig(defaultTimeLimit);
-                return;
-            }
-
-            // 获取题目类型对应的时间限制
-            float newTimeLimit = config.GetTimeLimitForQuestionType(questionType);
-
-            // 应用时间限制
-            ApplyConfig(newTimeLimit);
-
-            // 应用颜色设置
-            if (config.normalColor != Color.clear) normalColor = config.normalColor;
-            if (config.warningColor != Color.clear) warningColor = config.warningColor;
-            if (config.criticalColor != Color.clear) criticalColor = config.criticalColor;
-
-            // 应用阈值设置
-            warningThreshold = config.warningThreshold;
-            criticalThreshold = config.criticalThreshold;
-
-            LogDebug($"已应用TimerConfig配置 - 题型: {questionType}, 时间: {newTimeLimit}秒");
-        }
-        /// <summary>
-        /// 应用配置（重载版本，支持不重置当前时间）
-        /// </summary>
-        /// <param name="newTimeLimit">新的时间限制</param>
-        /// <param name="resetCurrentTime">是否重置当前时间</param>
-        public void ApplyConfig(float newTimeLimit, bool resetCurrentTime)
-        {
-            if (newTimeLimit <= 0)
-            {
-                Debug.LogWarning($"[TimerManager] 时间限制不能小于等于0，使用默认值{defaultTimeLimit}。传入值: {newTimeLimit}");
-                newTimeLimit = defaultTimeLimit;
-            }
-
-            timeLimit = newTimeLimit;
-
-            if (resetCurrentTime)
-            {
-                currentTime = timeLimit;
-            }
-
-            LogDebug($"配置应用完成 - 时间限制: {timeLimit}秒, 重置当前时间: {resetCurrentTime}");
-
-            // 更新UI显示
-            UpdateTimerUI();
-        }
-        /// <summary>
-        /// 使用TimerConfig启动计时器
-        /// </summary>
-        /// <param name="config">Timer配置</param>
-        /// <param name="questionType">题目类型</param>
-        public void StartTimerWithConfig(TimerConfig config, QuestionType questionType)
-        {
-            if (config == null)
-            {
-                Debug.LogWarning("[TimerManager] TimerConfig为空，使用默认时间启动");
-                StartTimer();
-                return;
-            }
-
-            float timeLimit = config.GetTimeLimitForQuestionType(questionType);
-
-            // 应用配置（不包括颜色，因为可能在运行时）
-            warningThreshold = config.warningThreshold;
-            criticalThreshold = config.criticalThreshold;
-
-            // 使用指定时间启动
-            StartTimer(timeLimit);
-
-            LogDebug($"使用TimerConfig启动 - 题型: {questionType}, 时间: {timeLimit}秒");
         }
 
         /// <summary>
@@ -430,7 +291,6 @@ namespace Managers
         /// <summary>
         /// 减少时间
         /// </summary>
-        /// <param name="seconds">要减少的秒数</param>
         public void ReduceTime(float seconds)
         {
             if (seconds <= 0)
@@ -519,24 +379,22 @@ namespace Managers
         private void HandleTimeUp()
         {
             LogDebug("时间到！");
-
-            // 更新UI显示
             UpdateTimerUI(true);
 
-            // 触发时间到事件
             OnTimeUp?.Invoke();
+        }
 
-            if (loopTimer)
+        private void HandleTimeoutAnswerSubmission()
+        {
+            LogDebug("超时自动提交答案");
+            SubmitTimeoutAnswer();
+        }
+
+        private void SubmitTimeoutAnswer()
+        {
+            if (NetworkManager.Instance != null)
             {
-                // 如果是循环计时器，重新开始
-                LogDebug("循环计时器，重新开始");
-                StartTimer();
-            }
-            else
-            {
-                // 停止计时器
-                isRunning = false;
-                OnTimerStopped?.Invoke();
+                NetworkManager.Instance.SubmitAnswer("");
             }
         }
 
@@ -544,10 +402,6 @@ namespace Managers
 
         #region UI更新
 
-        /// <summary>
-        /// 更新倒计时UI显示
-        /// </summary>
-        /// <param name="isTimeUp">是否时间到</param>
         private void UpdateTimerUI(bool isTimeUp = false)
         {
             if (timerText == null)
@@ -567,7 +421,6 @@ namespace Managers
                 string timeDisplay = FormatTime(currentTime);
                 timerText.text = string.Format(timerTextFormat, timeDisplay);
 
-                // 根据剩余时间设置颜色
                 UpdateTimerColor();
             }
         }
@@ -575,8 +428,6 @@ namespace Managers
         /// <summary>
         /// 格式化时间显示
         /// </summary>
-        /// <param name="time">时间（秒）</param>
-        /// <returns>格式化后的时间字符串</returns>
         private string FormatTime(float time)
         {
             int seconds = Mathf.CeilToInt(time);
@@ -618,49 +469,18 @@ namespace Managers
 
         #region 公共接口
 
-        /// <summary>
-        /// 获取当前剩余时间
-        /// </summary>
         public float CurrentTime => currentTime;
-
-        /// <summary>
-        /// 获取剩余时间（与CurrentTime相同，保持兼容性）
-        /// </summary>
         public float RemainingTime => currentTime;
-
-        /// <summary>
-        /// 获取时间限制
-        /// </summary>
         public float TimeLimit => timeLimit;
-
-        /// <summary>
-        /// 检查计时器是否正在运行
-        /// </summary>
         public bool IsRunning => isRunning;
-
-        /// <summary>
-        /// 检查计时器是否暂停
-        /// </summary>
         public bool IsPaused => isPaused;
-
-        /// <summary>
-        /// 获取时间进度（0-1）
-        /// </summary>
         public float Progress => timeLimit > 0 ? (timeLimit - currentTime) / timeLimit : 0f;
-
-        /// <summary>
-        /// 获取剩余时间百分比（0-1）
-        /// </summary>
         public float RemainingPercentage => timeLimit > 0 ? currentTime / timeLimit : 0f;
 
         #endregion
 
         #region 调试工具
 
-        /// <summary>
-        /// 调试日志输出
-        /// </summary>
-        /// <param name="message">日志信息</param>
         private void LogDebug(string message)
         {
             if (enableDebugLog)
@@ -668,57 +488,6 @@ namespace Managers
                 Debug.Log($"[TimerManager] {message}");
             }
         }
-
-        #endregion
-
-        #region Editor工具方法（仅在编辑器中使用）
-
-#if UNITY_EDITOR
-        /// <summary>
-        /// 在编辑器中测试开始计时器（仅用于调试）
-        /// </summary>
-        [ContextMenu("测试开始计时器")]
-        private void TestStartTimer()
-        {
-            StartTimer();
-        }
-
-        /// <summary>
-        /// 在编辑器中测试停止计时器（仅用于调试）
-        /// </summary>
-        [ContextMenu("测试停止计时器")]
-        private void TestStopTimer()
-        {
-            StopTimer();
-        }
-
-        /// <summary>
-        /// 在编辑器中测试暂停计时器（仅用于调试）
-        /// </summary>
-        [ContextMenu("测试暂停计时器")]
-        private void TestPauseTimer()
-        {
-            PauseTimer();
-        }
-
-        /// <summary>
-        /// 在编辑器中测试恢复计时器（仅用于调试）
-        /// </summary>
-        [ContextMenu("测试恢复计时器")]
-        private void TestResumeTimer()
-        {
-            ResumeTimer();
-        }
-
-        /// <summary>
-        /// 在编辑器中测试添加时间（仅用于调试）
-        /// </summary>
-        [ContextMenu("测试添加5秒")]
-        private void TestAddTime()
-        {
-            AddTime(5f);
-        }
-#endif
 
         #endregion
     }

@@ -640,7 +640,7 @@ namespace Core.Network
             if (string.IsNullOrWhiteSpace(answer))
             {
                 LogDebug($"玩家{playerId}提交了空答案");
-                return false;
+                return true;
             }
 
             return true;
