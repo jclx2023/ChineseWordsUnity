@@ -25,12 +25,12 @@ namespace UI
 
         [Header("按钮")]
         [SerializeField] private Button exitToRoomButton;
-        [SerializeField] private Button minimizeButton;
+        [SerializeField] private Button minimizeButton; // 可选：最小化死亡面板
 
         [Header("视觉效果")]
         [SerializeField] private CanvasGroup panelCanvasGroup;
         [SerializeField] private float fadeInDuration = 1f;
-        [SerializeField] private float autoMinimizeDelay = 8f;
+        [SerializeField] private float autoMinimizeDelay = 8f; // 8秒后自动最小化
 
         [Header("文本配置")]
         [SerializeField] private string defaultDeathMessage = "你已被淘汰";
@@ -280,10 +280,13 @@ namespace UI
                 LogDebug($"重新获取本地玩家ID: {localPlayerId}");
             }
 
+            // **增强调试信息**
+            LogDebug($"玩家ID比较: 死亡玩家={playerId}, 本地玩家={localPlayerId}, 是否匹配={playerId == localPlayerId}");
+
             // 检查是否为本地玩家
             if (playerId == localPlayerId)
             {
-                LogDebug($"本地玩家死亡: {playerName}，进入观战模式");
+                LogDebug($"★★★ 本地玩家死亡: {playerName}，进入观战模式 ★★★");
                 localPlayerName = playerName;
                 EnterSpectatorMode(playerName, "血量归零");
             }
@@ -294,12 +297,31 @@ namespace UI
         }
 
         /// <summary>
-        /// 处理游戏胜利事件（隐藏死亡界面）
+        /// 处理游戏胜利事件（延迟隐藏死亡界面）
         /// </summary>
         private void OnGameVictoryReceived(ushort winnerId, string winnerName, string reason)
         {
-            LogDebug($"收到游戏胜利事件，隐藏死亡界面");
-            HideDeathPanel();
+            LogDebug($"收到游戏胜利事件: {winnerName} 获胜");
+
+            // 如果当前玩家死亡UI正在显示，给用户一些时间看到死亡信息
+            if (isPanelVisible && isLocalPlayerDead)
+            {
+                LogDebug("死亡界面正在显示，延迟隐藏以显示胜利信息");
+
+                // 更新死亡面板文本，显示胜利信息
+                if (instructionText != null)
+                {
+                    instructionText.text = $"游戏结束！\n{winnerName} 获胜！\n\n{spectatorInstructionText}\n{exitInstructionText}";
+                }
+
+                // 延迟5秒后隐藏（让用户有时间看到信息）
+                Invoke(nameof(HideDeathPanel), 5f);
+            }
+            else
+            {
+                // 如果死亡界面没有显示，立即隐藏
+                HideDeathPanel();
+            }
         }
 
         /// <summary>
@@ -307,8 +329,26 @@ namespace UI
         /// </summary>
         private void OnGameEndWithoutWinnerReceived(string reason)
         {
-            LogDebug($"收到游戏结束事件，隐藏死亡界面");
-            HideDeathPanel();
+            LogDebug($"收到游戏结束事件: {reason}");
+
+            // 如果当前玩家死亡UI正在显示，显示游戏结束信息
+            if (isPanelVisible && isLocalPlayerDead)
+            {
+                LogDebug("死亡界面正在显示，延迟隐藏以显示结束信息");
+
+                // 更新死亡面板文本，显示结束信息
+                if (instructionText != null)
+                {
+                    instructionText.text = $"游戏结束！\n{reason}\n\n{exitInstructionText}";
+                }
+
+                // 延迟5秒后隐藏
+                Invoke(nameof(HideDeathPanel), 5f);
+            }
+            else
+            {
+                HideDeathPanel();
+            }
         }
 
         /// <summary>
@@ -385,6 +425,9 @@ namespace UI
         private void ShowDeathPanel()
         {
             LogDebug("显示死亡面板");
+
+            // ✅ 确保PlayerDeathUI在合适的层级
+            EnsureProperLayer();
 
             // 激活面板
             if (deathPanel != null)
@@ -539,6 +582,42 @@ namespace UI
 
         #endregion
 
+        #region 层级管理
+
+        /// <summary>
+        /// 确保PlayerDeathUI在合适的层级
+        /// </summary>
+        private void EnsureProperLayer()
+        {
+            // 获取当前GameObject的Canvas组件
+            Canvas thisCanvas = GetComponentInParent<Canvas>();
+            if (thisCanvas == null)
+            {
+                LogDebug("未找到Canvas组件，无法设置层级");
+                return;
+            }
+
+            // 查找所有Canvas，找到最高的sortingOrder
+            Canvas[] allCanvases = FindObjectsOfType<Canvas>();
+            int maxSortingOrder = 0;
+
+            foreach (Canvas canvas in allCanvases)
+            {
+                if (canvas != thisCanvas && canvas.sortingOrder > maxSortingOrder)
+                {
+                    maxSortingOrder = canvas.sortingOrder;
+                }
+            }
+
+            // 设置为比题型管理器高，但比GameEndUI低
+            int newSortingOrder = Mathf.Max(15, maxSortingOrder + 5);
+            thisCanvas.sortingOrder = newSortingOrder;
+
+            LogDebug($"PlayerDeathUI层级已设置为: {newSortingOrder}");
+        }
+
+        #endregion
+
         #region 动画效果
 
         /// <summary>
@@ -589,6 +668,9 @@ namespace UI
             }
         }
 
+        /// <summary>
+        /// 淡化到最小化状态
+        /// </summary>
         private IEnumerator FadeToMinimized()
         {
             float elapsedTime = 0f;
@@ -606,7 +688,6 @@ namespace UI
             panelCanvasGroup.alpha = targetAlpha;
             // 保持交互性，但降低可见度
         }
-
         private void EnablePanelInteraction()
         {
             if (panelCanvasGroup != null)
@@ -615,7 +696,6 @@ namespace UI
                 panelCanvasGroup.blocksRaycasts = true;
             }
         }
-
         private void DisablePanelInteraction()
         {
             if (panelCanvasGroup != null)
@@ -641,6 +721,7 @@ namespace UI
             // 请求返回房间
             RequestReturnToRoom();
         }
+
         private void OnMinimizeButtonClicked()
         {
             LogDebug("最小化按钮被点击");
@@ -658,10 +739,6 @@ namespace UI
         #endregion
 
         #region 游戏逻辑调用
-
-        /// <summary>
-        /// 请求返回房间
-        /// </summary>
         private void RequestReturnToRoom()
         {
             LogDebug($"请求返回房间 - 玩家ID: {localPlayerId}");
@@ -687,16 +764,6 @@ namespace UI
         public bool IsLocalPlayerDead => isLocalPlayerDead;
         public bool IsPanelVisible => isPanelVisible;
         public bool IsPanelMinimized => isPanelMinimized;
-        /// <summary>
-        /// 重置死亡状态
-        /// </summary>
-        public void ResetDeathState()
-        {
-            LogDebug("重置死亡状态");
-
-            isLocalPlayerDead = false;
-            HideDeathPanel();
-        }
 
         #endregion
 

@@ -893,8 +893,6 @@ namespace Core.Network
 
             // 广播血量更新（死亡状态）
             NetworkManager.Instance.BroadcastHealthUpdate(playerId, 0, maxHealth);
-
-            // **新增：广播玩家死亡事件**
             NetworkManager.Instance.BroadcastPlayerDeath(playerId, playerName);
 
             // 如果是当前回合玩家死亡，切换回合
@@ -984,7 +982,7 @@ namespace Core.Network
 
                 if (winnerId > 0)
                 {
-                    roomProps["winnerId"] = winnerId;
+                    roomProps["winnerId"] = (int)winnerId;
                     var winnerState = playerStateManager.GetPlayerState(winnerId);
                     if (winnerState != null)
                     {
