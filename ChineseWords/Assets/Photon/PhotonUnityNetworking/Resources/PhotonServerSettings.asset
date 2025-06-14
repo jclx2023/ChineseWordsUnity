@@ -50,6 +50,11 @@ MonoBehaviour:
   - OnQuestionReceived_RPC
   - OnKickedFromRoom
   - TestRPC
+  - OnForceReturnToRoom_RPC
+  - OnGameEndWithoutWinner_RPC
+  - OnGameVictory_RPC
+  - OnPlayerDeath_RPC
+  - OnReturnToRoomRequest_RPC
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

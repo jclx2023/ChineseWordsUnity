@@ -15,7 +15,7 @@ namespace Core.Network
         private bool useCustomConfig = false;
 
         [Header("调试设置")]
-        private bool enableDebugLogs = true;
+        private bool enableDebugLogs = false;
 
         // HP配置缓存
         private HPConfig currentHPConfig;
@@ -330,11 +330,6 @@ namespace Core.Network
         /// <summary>
         /// 对玩家造成伤害
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="damageAmount">伤害量（可选，-1表示使用配置值）</param>
-        /// <param name="newHealth">输出新的血量</param>
-        /// <param name="isDead">输出是否死亡</param>
-        /// <returns>是否成功造成伤害</returns>
         public bool ApplyDamage(ushort playerId, out int newHealth, out bool isDead, int damageAmount = -1)
         {
             newHealth = 0;
@@ -391,10 +386,6 @@ namespace Core.Network
         /// <summary>
         /// 恢复玩家血量
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="healAmount">恢复量</param>
-        /// <param name="newHealth">输出新的血量</param>
-        /// <returns>是否成功恢复血量</returns>
         public bool HealPlayer(ushort playerId, int healAmount, out int newHealth)
         {
             newHealth = 0;
@@ -430,44 +421,6 @@ namespace Core.Network
             return true;
         }
 
-        /// <summary>
-        /// 复活玩家
-        /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="reviveHealth">复活时的血量（可选，-1表示满血复活）</param>
-        /// <returns>是否成功复活</returns>
-        public bool RevivePlayer(ushort playerId, int reviveHealth = -1)
-        {
-            if (!playerHPStates.ContainsKey(playerId))
-            {
-                LogDebug($"玩家 {playerId} 的HP状态不存在，无法复活");
-                return false;
-            }
-
-            var hpState = playerHPStates[playerId];
-
-            if (hpState.isAlive)
-            {
-                LogDebug($"玩家 {playerId} 仍然存活，无需复活");
-                return false;
-            }
-
-            // 确定复活血量
-            int newHealth = reviveHealth > 0 ?
-                Mathf.Min(reviveHealth, hpState.maxHealth) :
-                hpState.maxHealth;
-
-            hpState.currentHealth = newHealth;
-            hpState.isAlive = true;
-
-            LogDebug($"玩家 {playerId} 已复活 - 血量: {newHealth}/{hpState.maxHealth}");
-
-            // 触发血量变更事件
-            TriggerHealthChanged(playerId, newHealth, hpState.maxHealth);
-
-            return true;
-        }
-
         #endregion
 
         #region 查询方法
@@ -475,8 +428,6 @@ namespace Core.Network
         /// <summary>
         /// 获取玩家血量信息
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>血量信息元组 (当前血量, 最大血量)</returns>
         public (int currentHealth, int maxHealth) GetPlayerHP(ushort playerId)
         {
             if (playerHPStates.ContainsKey(playerId))
@@ -492,8 +443,6 @@ namespace Core.Network
         /// <summary>
         /// 检查玩家是否存活
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>是否存活</returns>
         public bool IsPlayerAlive(ushort playerId)
         {
             if (playerHPStates.ContainsKey(playerId))
@@ -507,8 +456,6 @@ namespace Core.Network
         /// <summary>
         /// 获取玩家血量百分比
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>血量百分比 (0.0 - 1.0)</returns>
         public float GetPlayerHealthPercentage(ushort playerId)
         {
             if (playerHPStates.ContainsKey(playerId))
@@ -522,9 +469,6 @@ namespace Core.Network
         /// <summary>
         /// 检查玩家是否为低血量状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="threshold">低血量阈值 (0.0 - 1.0)</param>
-        /// <returns>是否为低血量</returns>
         public bool IsPlayerLowHealth(ushort playerId, float threshold = 0.3f)
         {
             if (playerHPStates.ContainsKey(playerId))
@@ -538,7 +482,6 @@ namespace Core.Network
         /// <summary>
         /// 获取存活玩家数量
         /// </summary>
-        /// <returns>存活玩家数量</returns>
         public int GetAlivePlayerCount()
         {
             int count = 0;
@@ -553,7 +496,6 @@ namespace Core.Network
         /// <summary>
         /// 获取所有存活玩家ID
         /// </summary>
-        /// <returns>存活玩家ID列表</returns>
         public List<ushort> GetAlivePlayerIds()
         {
             var alivePlayerIds = new List<ushort>();
@@ -568,8 +510,6 @@ namespace Core.Network
         /// <summary>
         /// 获取玩家受伤次数
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <returns>受伤次数</returns>
         public int GetPlayerDamageCount(ushort playerId)
         {
             if (playerHPStates.ContainsKey(playerId))
@@ -621,57 +561,9 @@ namespace Core.Network
         #endregion
 
         #region 状态信息
-
-        /// <summary>
-        /// 获取HP配置源信息（用于调试）
-        /// </summary>
-        public string GetHPConfigSource()
-        {
-            if (!hpConfigInitialized)
-                return "未初始化";
-
-            if (currentHPConfig == null)
-                return "默认值";
-
-            if (useCustomConfig && customHPConfig != null)
-                return $"自定义配置({currentHPConfig.ConfigName})";
-
-            return $"全局管理器({currentHPConfig.ConfigName})";
-        }
-
-        /// <summary>
-        /// 获取HP管理器状态信息
-        /// </summary>
-        /// <returns>状态信息字符串</returns>
-        public string GetStatusInfo()
-        {
-            var status = "=== PlayerHPManager状态 ===\n";
-            status += $"已初始化: {hpConfigInitialized}\n";
-            status += $"配置源: {GetHPConfigSource()}\n";
-            status += $"初始血量: {GetEffectiveInitialHealth()}\n";
-            status += $"答错扣血: {GetEffectiveDamageAmount()}\n";
-            status += $"最多答错: {GetMaxWrongAnswers()}次\n";
-            status += $"管理玩家数: {playerHPStates.Count}\n";
-            status += $"存活玩家数: {GetAlivePlayerCount()}\n";
-
-            if (playerHPStates.Count > 0)
-            {
-                status += "玩家HP状态:\n";
-                foreach (var hpState in playerHPStates.Values)
-                {
-                    status += $"  玩家{hpState.playerId}: {hpState.currentHealth}/{hpState.maxHealth} ";
-                    status += $"({hpState.GetHealthPercentage():P1}) ";
-                    status += $"{(hpState.isAlive ? "存活" : "死亡")}\n";
-                }
-            }
-
-            return status;
-        }
-
         /// <summary>
         /// 获取配置摘要信息
         /// </summary>
-        /// <returns>配置摘要字符串</returns>
         public string GetConfigSummary()
         {
             if (currentHPConfig != null)
@@ -707,16 +599,6 @@ namespace Core.Network
             RefreshHPConfigCache();
 
             LogDebug($"HP配置重新加载完成 - 初始血量: {cachedInitialHealth}, 扣血量: {cachedDamageAmount}");
-        }
-
-        /// <summary>
-        /// 设置调试日志开关
-        /// </summary>
-        /// <param name="enabled">是否启用调试日志</param>
-        public void SetDebugLogs(bool enabled)
-        {
-            enableDebugLogs = enabled;
-            LogDebug($"调试日志已{(enabled ? "启用" : "禁用")}");
         }
 
         /// <summary>

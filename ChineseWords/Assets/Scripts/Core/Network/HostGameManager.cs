@@ -380,7 +380,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 结束游戏
+        /// 结束游戏 - 修改版
         /// </summary>
         public void EndGame(string reason = "游戏结束")
         {
@@ -388,17 +388,17 @@ namespace Core.Network
 
             LogDebug($"结束游戏: {reason}");
 
-            // 确定获胜者
+            // 确定获胜者信息
             ushort winnerId = 0;
-            var alivePlayerIds = playerStateManager.GetAlivePlayerIds();
-            if (alivePlayerIds.Count == 1)
+            var alivePlayerIds = playerStateManager?.GetAlivePlayerIds();
+            if (alivePlayerIds != null && alivePlayerIds.Count == 1)
             {
                 winnerId = alivePlayerIds[0];
                 var winnerState = playerStateManager.GetPlayerState(winnerId);
-                LogDebug($"获胜者: {winnerState.playerName} (ID: {winnerId})");
+                LogDebug($"获胜者: {winnerState?.playerName} (ID: {winnerId})");
             }
 
-            // 广播游戏结束
+            // **新增：广播游戏结束**
             BroadcastGameEnd(reason, winnerId);
 
             // 重置游戏状态
@@ -770,28 +770,62 @@ namespace Core.Network
 
         /// <summary>
         /// 检查游戏结束条件
-        /// </summary>
+        /// </summary
         private void CheckGameEndConditions()
         {
-            if (!gameInProgress) return;
+            if (!gameInProgress || playerStateManager == null) return;
 
             var alivePlayerIds = playerStateManager.GetAlivePlayerIds();
+            LogDebug($"存活玩家检查: {alivePlayerIds.Count}/{PlayerCount}");
 
-            if (alivePlayerIds.Count == 0)
-            {
-                EndGame("所有玩家都被淘汰");
-            }
-            else if (alivePlayerIds.Count == 1)
+            // 只剩一名玩家存活 - 游戏胜利
+            if (alivePlayerIds.Count == 1)
             {
                 var winnerState = playerStateManager.GetPlayerState(alivePlayerIds[0]);
-                EndGame($"{winnerState.playerName} 获胜！");
+                LogDebug($"游戏胜利: {winnerState.playerName}");
+
+                // **新增：触发胜利结束**
+                EndGameWithWinner(winnerState.playerId, winnerState.playerName, "最后的幸存者！");
             }
+            // 没有存活玩家
+            else if (alivePlayerIds.Count == 0)
+            {
+                LogDebug("所有玩家都死亡");
+                EndGameWithoutWinner("所有玩家都被淘汰了！");
+            }
+            // 所有玩家都离开了
             else if (PlayerCount == 0)
             {
-                EndGame("所有玩家都离开了");
+                LogDebug("所有玩家都离开了房间");
+                EndGameWithoutWinner("所有玩家都离开了");
             }
         }
 
+        private void EndGameWithWinner(ushort winnerId, string winnerName, string reason)
+        {
+            if (!gameInProgress) return;
+
+            LogDebug($"游戏胜利结束: 获胜者={winnerName} (ID: {winnerId}), 原因={reason}");
+
+            // 广播胜利消息
+            NetworkManager.Instance.BroadcastGameVictory(winnerId, winnerName, reason);
+
+            // 结束游戏
+            EndGame($"{winnerName} 获胜！");
+        }
+
+        private void EndGameWithoutWinner(string reason)
+        {
+            if (!gameInProgress) return;
+
+            LogDebug($"游戏无胜利者结束: {reason}");
+
+            // 广播无胜利者消息
+            NetworkManager.Instance.BroadcastGameEndWithoutWinner(reason);
+
+            // 结束游戏
+            EndGame(reason);
+        }
         #endregion
 
         #region 事件处理
@@ -802,8 +836,6 @@ namespace Core.Network
         private void OnPlayerAdded(ushort playerId, string playerName, bool isHost)
         {
             LogDebug($"玩家加入: {playerName} (ID: {playerId}, Host: {isHost})");
-
-            // 初始化HP
             if (hpManager != null)
             {
                 int initialHealth = hpManager.GetEffectiveInitialHealth();
@@ -857,9 +889,13 @@ namespace Core.Network
             // 获取玩家状态以获取maxHealth
             var playerState = playerStateManager.GetPlayerState(playerId);
             int maxHealth = playerState?.maxHealth ?? 100;
+            string playerName = playerState?.playerName ?? $"玩家{playerId}";
 
             // 广播血量更新（死亡状态）
             NetworkManager.Instance.BroadcastHealthUpdate(playerId, 0, maxHealth);
+
+            // **新增：广播玩家死亡事件**
+            NetworkManager.Instance.BroadcastPlayerDeath(playerId, playerName);
 
             // 如果是当前回合玩家死亡，切换回合
             if (currentTurnPlayerId == playerId && gameInProgress)
@@ -932,23 +968,37 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 广播游戏结束
+        /// 广播游戏结束信息
         /// </summary>
-        private void BroadcastGameEnd(string reason, ushort winnerId)
+        private void BroadcastGameEnd(string reason, ushort winnerId = 0)
         {
-            LogDebug($"广播游戏结束: {reason}, 获胜者ID: {winnerId}");
+            if (NetworkManager.Instance == null) return;
 
-            // 使用现有的NetworkManager方法或创建简单的通知
-            // 由于NetworkManager可能没有BroadcastGameEnd方法，这里使用其他方式
-            // 可以通过房间属性或其他方式通知游戏结束
+            try
+            {
+                // 设置房间属性，标记游戏已结束
+                var roomProps = new ExitGames.Client.Photon.Hashtable();
+                roomProps["gameEnded"] = true;
+                roomProps["gameEndReason"] = reason;
+                roomProps["gameEndTime"] = PhotonNetwork.Time;
 
-            // 临时解决方案：设置房间属性来通知游戏结束
-            var roomProps = new ExitGames.Client.Photon.Hashtable();
-            roomProps["gameEnded"] = true;
-            roomProps["gameEndReason"] = reason;
-            roomProps["winnerId"] = (int)winnerId;
-            roomProps["totalQuestions"] = currentQuestionNumber;
-            PhotonNetwork.CurrentRoom.SetCustomProperties(roomProps);
+                if (winnerId > 0)
+                {
+                    roomProps["winnerId"] = winnerId;
+                    var winnerState = playerStateManager.GetPlayerState(winnerId);
+                    if (winnerState != null)
+                    {
+                        roomProps["winnerName"] = winnerState.playerName;
+                    }
+                }
+
+                PhotonNetwork.CurrentRoom.SetCustomProperties(roomProps);
+                LogDebug($"房间属性已更新 - 游戏结束: {reason}");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[HostGameManager] 广播游戏结束失败: {e.Message}");
+            }
         }
 
         #endregion
@@ -999,12 +1049,20 @@ namespace Core.Network
 
         void IInRoomCallbacks.OnMasterClientSwitched(Photon.Realtime.Player newMasterClient)
         {
+            LogDebug($"MasterClient切换: {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+
             if (PhotonNetwork.IsMasterClient)
             {
-                LogDebug("本地玩家成为新的MasterClient，激活HostGameManager");
+                LogDebug("本地玩家成为新的MasterClient");
                 this.enabled = true;
 
-                if (!isInitialized)
+                // **简单方案：如果游戏进行中，就结束游戏**
+                if (gameInProgress)
+                {
+                    LogDebug("检测到游戏进行中，原Host离开，结束游戏");
+                    EndGameWithoutWinner("原房主离开，游戏结束");
+                }
+                else if (!isInitialized)
                 {
                     StartCoroutine(InitializeHostGameManager());
                 }
@@ -1035,6 +1093,68 @@ namespace Core.Network
             }
         }
 
+        #endregion
+
+        #region 返回房间
+        /// <summary>
+        /// 请求返回房间（供其他脚本调用）
+        /// </summary>
+        public void RequestReturnToRoom(ushort requestPlayerId, string reason = "玩家请求")
+        {
+            LogDebug($"玩家{requestPlayerId}请求返回房间: {reason}");
+
+            // 验证请求者权限（可以是死亡玩家或游戏结束后的任何玩家）
+            bool canReturn = false;
+
+            // 游戏结束后任何人都可以返回
+            if (!gameInProgress)
+            {
+                canReturn = true;
+            }
+            // 游戏进行中只允许死亡玩家返回
+            else if (playerStateManager != null)
+            {
+                var playerState = playerStateManager.GetPlayerState(requestPlayerId);
+                canReturn = playerState != null && !playerState.isAlive;
+            }
+
+            if (canReturn)
+            {
+                // 广播返回房间请求
+                NetworkManager.Instance.BroadcastReturnToRoomRequest(requestPlayerId, reason);
+                LogDebug($"已批准玩家{requestPlayerId}的返回房间请求");
+            }
+            else
+            {
+                LogDebug($"拒绝玩家{requestPlayerId}的返回房间请求 - 不满足条件");
+            }
+        }
+
+        /// <summary>
+        /// 强制所有玩家返回房间（游戏结束时使用）
+        /// </summary>
+        public void ForceReturnAllToRoom(float delay = 5f)
+        {
+            LogDebug($"将在{delay}秒后强制所有玩家返回房间");
+
+            if (delay > 0)
+            {
+                Invoke(nameof(ExecuteForceReturn), delay);
+            }
+            else
+            {
+                ExecuteForceReturn();
+            }
+        }
+
+        /// <summary>
+        /// 执行强制返回
+        /// </summary>
+        private void ExecuteForceReturn()
+        {
+            LogDebug("执行强制返回房间");
+            NetworkManager.Instance.BroadcastForceReturnToRoom("游戏已结束");
+        }
         #endregion
 
         #region 辅助方法
@@ -1172,36 +1292,6 @@ namespace Core.Network
             }
         }
 
-        /// <summary>
-        /// 手动添加玩家（调试用）
-        /// </summary>
-        public void AddPlayer(ushort playerId, string playerName, bool isHost = false)
-        {
-            if (!isInitialized || playerStateManager == null) return;
-
-            int initialHealth = hpManager?.GetEffectiveInitialHealth() ?? 100;
-            playerStateManager.AddPlayer(playerId, playerName, initialHealth, initialHealth, isHost);
-            hpManager?.InitializePlayer(playerId, initialHealth);
-
-            LogDebug($"手动添加玩家: {playerName} (ID: {playerId})");
-        }
-
-        /// <summary>
-        /// 手动移除玩家（调试用）
-        /// </summary>
-        public void RemovePlayer(ushort playerId)
-        {
-            if (!isInitialized || playerStateManager == null) return;
-
-            var playerName = playerStateManager.GetPlayerState(playerId)?.playerName ?? "未知";
-            playerStateManager.RemovePlayer(playerId);
-            hpManager?.RemovePlayer(playerId);
-
-            LogDebug($"手动移除玩家: {playerName} (ID: {playerId})");
-
-            // 检查游戏结束条件
-            CheckGameEndConditions();
-        }
 
         /// <summary>
         /// 强制结束游戏
@@ -1210,21 +1300,6 @@ namespace Core.Network
         {
             LogDebug($"强制结束游戏: {reason}");
             EndGame(reason);
-        }
-
-        /// <summary>
-        /// 跳过当前回合（调试用）
-        /// </summary>
-        public void SkipCurrentTurn()
-        {
-            if (!gameInProgress)
-            {
-                LogDebug("游戏未进行，无法跳过回合");
-                return;
-            }
-
-            LogDebug($"跳过玩家{currentTurnPlayerId}的回合");
-            NextPlayerTurn();
         }
 
         /// <summary>
@@ -1247,76 +1322,6 @@ namespace Core.Network
                 Debug.Log($"[HostGameManager] {message}");
             }
         }
-
-        [ContextMenu("显示游戏统计")]
-        public void ShowGameStats()
-        {
-            Debug.Log(GetGameStats());
-        }
-
-        [ContextMenu("显示玩家列表")]
-        public void ShowPlayerList()
-        {
-            if (playerStateManager == null)
-            {
-                Debug.Log("PlayerStateManager未初始化");
-                return;
-            }
-
-            Debug.Log("=== 玩家列表 ===\n" + playerStateManager.GetStatusInfo());
-        }
-
-        [ContextMenu("显示管理器状态")]
-        public void ShowManagerStatus()
-        {
-            string status = "=== 管理器状态 ===\n";
-            status += $"PlayerStateManager: {(playerStateManager != null ? "✓" : "✗")}\n";
-            status += $"GameConfigManager: {(gameConfigManager != null ? "✓" : "✗")}\n";
-            status += $"AnswerValidationManager: {(answerValidationManager != null ? "✓" : "✗")}\n";
-            status += $"PlayerHPManager: {(hpManager != null ? "✓" : "✗")}\n";
-            status += $"QuestionDataService: {(questionDataService != null ? "✓" : "✗")}\n";
-
-            Debug.Log(status);
-        }
-
-        [ContextMenu("测试开始游戏")]
-        public void TestStartGame()
-        {
-            if (Application.isPlaying && PhotonNetwork.IsMasterClient)
-            {
-                StartGame();
-            }
-            else
-            {
-                Debug.Log("需要在游戏运行时且为MasterClient才能测试");
-            }
-        }
-
-        [ContextMenu("测试结束游戏")]
-        public void TestEndGame()
-        {
-            if (Application.isPlaying)
-            {
-                EndGame("测试结束");
-            }
-        }
-
-        [ContextMenu("测试跳过回合")]
-        public void TestSkipTurn()
-        {
-            if (Application.isPlaying)
-            {
-                SkipCurrentTurn();
-            }
-        }
-
-        [ContextMenu("重置成语接龙")]
-        public void TestResetIdiomChain()
-        {
-            ResetIdiomChainState();
-            Debug.Log("成语接龙状态已重置");
-        }
-
         #endregion
     }
 }

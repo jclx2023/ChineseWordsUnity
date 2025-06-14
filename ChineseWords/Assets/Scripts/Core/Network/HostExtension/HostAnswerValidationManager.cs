@@ -75,8 +75,6 @@ namespace Core.Network
         /// <summary>
         /// 初始化答案验证管理器
         /// </summary>
-        /// <param name="dataService">题目数据服务</param>
-        /// <param name="enableCache">是否启用验证缓存</param>
         public void Initialize(QuestionDataService dataService = null, bool enableCache = true)
         {
             LogDebug("初始化AnswerValidationManager...");
@@ -108,9 +106,6 @@ namespace Core.Network
         /// <summary>
         /// 验证答案（主入口方法）
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         public ValidationResult ValidateAnswer(string answer, NetworkQuestionData question)
         {
             if (question == null)
@@ -184,9 +179,6 @@ namespace Core.Network
         /// <summary>
         /// 简化的答案验证方法（向后兼容）
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>是否正确</returns>
         public bool ValidateAnswerSimple(string answer, NetworkQuestionData question)
         {
             var result = ValidateAnswer(answer, question);
@@ -200,9 +192,6 @@ namespace Core.Network
         /// <summary>
         /// 验证成语接龙答案
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateIdiomChainAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证成语接龙答案: {answer}");
@@ -245,9 +234,6 @@ namespace Core.Network
         /// <summary>
         /// 验证硬性填空题答案
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateHardFillAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证硬性填空答案: {answer}");
@@ -274,9 +260,6 @@ namespace Core.Network
         /// <summary>
         /// 验证软性填空题答案 - 修复版本
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateSoftFillAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证软性填空答案: {answer}");
@@ -343,8 +326,6 @@ namespace Core.Network
         /// <summary>
         /// 从题目数据中提取通配符模式
         /// </summary>
-        /// <param name="question">题目数据</param>
-        /// <returns>通配符模式</returns>
         private string ExtractStemPatternFromQuestion(NetworkQuestionData question)
         {
             try
@@ -395,17 +376,10 @@ namespace Core.Network
         /// <summary>
         /// 验证答案是否匹配通配符模式
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="stemPattern">通配符模式</param>
-        /// <returns>是否匹配</returns>
         private bool ValidatePatternMatch(string answer, string stemPattern)
         {
             try
             {
-                // 创建正则表达式模式
-                // * -> .* (任意个字符)
-                // _ -> . (单个字符)
-                // 其他字符 -> 转义
                 var regexPattern = "^" + string.Concat(stemPattern.Select(c =>
                 {
                     if (c == '*') return ".*";
@@ -431,8 +405,6 @@ namespace Core.Network
         /// <summary>
         /// 检查词是否在数据库中
         /// </summary>
-        /// <param name="word">要检查的词</param>
-        /// <returns>是否存在</returns>
         private bool IsWordInDatabase(string word)
         {
             if (string.IsNullOrEmpty(word))
@@ -497,9 +469,6 @@ namespace Core.Network
         /// <summary>
         /// 验证拼音答案
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidatePinyinAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证拼音答案: {answer}");
@@ -516,9 +485,6 @@ namespace Core.Network
         /// <summary>
         /// 验证选择题答案
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateChoiceAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证选择题答案: {answer}");
@@ -533,9 +499,6 @@ namespace Core.Network
         /// <summary>
         /// 验证判断题答案
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateTrueFalseAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证判断题答案: {answer}");
@@ -552,9 +515,6 @@ namespace Core.Network
         /// <summary>
         /// 验证手写题答案
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateHandwritingAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证手写题答案: {answer}");
@@ -570,9 +530,6 @@ namespace Core.Network
         /// <summary>
         /// 通用答案验证
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>验证结果</returns>
         private ValidationResult ValidateGenericAnswer(string answer, NetworkQuestionData question)
         {
             LogDebug($"验证通用答案: {answer}");
@@ -589,8 +546,6 @@ namespace Core.Network
         /// <summary>
         /// 标准化拼音答案
         /// </summary>
-        /// <param name="answer">原始答案</param>
-        /// <returns>标准化后的答案</returns>
         private string NormalizePinyinAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
@@ -612,8 +567,6 @@ namespace Core.Network
         /// <summary>
         /// 标准化判断题答案
         /// </summary>
-        /// <param name="answer">原始答案</param>
-        /// <returns>标准化后的答案</returns>
         private string NormalizeTrueFalseAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
@@ -641,8 +594,6 @@ namespace Core.Network
         /// <summary>
         /// 通用答案标准化
         /// </summary>
-        /// <param name="answer">原始答案</param>
-        /// <returns>标准化后的答案</returns>
         private string NormalizeGenericAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
@@ -675,9 +626,6 @@ namespace Core.Network
         /// <summary>
         /// 通用答案验证内部实现
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="correctAnswer">正确答案</param>
-        /// <returns>是否正确</returns>
         private bool ValidateGenericAnswerInternal(string answer, string correctAnswer)
         {
             if (string.IsNullOrEmpty(answer) || string.IsNullOrEmpty(correctAnswer))
@@ -726,8 +674,6 @@ namespace Core.Network
         /// <summary>
         /// 从题目数据中获取题干成语
         /// </summary>
-        /// <param name="question">题目数据</param>
-        /// <returns>题干成语</returns>
         private string GetBaseIdiomFromQuestion(NetworkQuestionData question)
         {
             try
@@ -749,7 +695,6 @@ namespace Core.Network
         /// <summary>
         /// 获取成语接龙管理器实例
         /// </summary>
-        /// <returns>成语接龙管理器</returns>
         private IdiomChainQuestionManager GetIdiomChainManager()
         {
             // 如果已缓存，直接返回
@@ -951,9 +896,6 @@ namespace Core.Network
         /// <summary>
         /// 静态验证软性填空答案（提供给SoftFillQuestionManager使用）
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>是否正确</returns>
         public static bool ValidateSoftFillAnswerStatic(string answer, NetworkQuestionData question)
         {
             try

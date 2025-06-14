@@ -47,6 +47,11 @@ namespace Core.Network
         public static event Action<ushort, int, int> OnHealthUpdated;
         public static event Action<ushort> OnPlayerTurnChanged;
         public static event Action<int, int, ushort> OnGameStarted; // 总玩家数, 存活数, 首回合玩家
+        public static event Action<ushort, string> OnPlayerDied;
+        public static event Action<ushort, string, string> OnGameVictory;
+        public static event Action<string> OnGameEndWithoutWinner;
+        public static event Action<ushort, string> OnReturnToRoomRequest;
+        public static event Action<string> OnForceReturnToRoom;
 
         // 房间事件（RoomScene需要）
         public static event Action<ushort> OnPlayerJoined;
@@ -344,6 +349,53 @@ namespace Core.Network
             // 转发给NetworkUI
             NotifyNetworkUIPlayerAnswerResult(playerIdUShort, isCorrect, answer);
         }
+        [PunRPC]
+        void OnPlayerDeath_RPC(int playerId, string playerName)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"收到玩家死亡通知: {playerName} (ID: {playerIdUShort})");
+
+            // 触发玩家死亡事件，供UI系统监听
+            OnPlayerDied?.Invoke(playerIdUShort, playerName);
+        }
+
+        [PunRPC]
+        void OnGameVictory_RPC(int winnerId, string winnerName, string reason)
+        {
+            ushort winnerIdUShort = (ushort)winnerId;
+            LogDebug($"收到游戏胜利通知: 获胜者 {winnerName} - {reason}");
+
+            // 触发游戏胜利事件
+            OnGameVictory?.Invoke(winnerIdUShort, winnerName, reason);
+        }
+
+        [PunRPC]
+        void OnGameEndWithoutWinner_RPC(string reason)
+        {
+            LogDebug($"收到无胜利者游戏结束通知: {reason}");
+
+            // 触发无胜利者游戏结束事件
+            OnGameEndWithoutWinner?.Invoke(reason);
+        }
+
+        [PunRPC]
+        void OnReturnToRoomRequest_RPC(int playerId, string reason)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"收到返回房间请求: 玩家{playerIdUShort} - {reason}");
+
+            // 触发返回房间请求事件
+            OnReturnToRoomRequest?.Invoke(playerIdUShort, reason);
+        }
+
+        [PunRPC]
+        void OnForceReturnToRoom_RPC(string reason)
+        {
+            LogDebug($"收到强制返回房间通知: {reason}");
+
+            // 触发强制返回房间事件
+            OnForceReturnToRoom?.Invoke(reason);
+        }
 
         #endregion
 
@@ -479,7 +531,80 @@ namespace Core.Network
                 LogDebug($"✓ 广播玩家答题结果到所有玩家: 玩家{playerId} {(isCorrect ? "正确" : "错误")}");
             }
         }
+        /// <summary>
+        /// 广播玩家死亡事件（Host → All）
+        /// </summary>
+        public void BroadcastPlayerDeath(ushort playerId, string playerName)
+        {
+            if (!IsHost) return;
 
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnPlayerDeath_RPC", RpcTarget.All, (int)playerId, playerName);
+                LogDebug($"✓ 广播玩家死亡到所有玩家: {playerName} (ID: {playerId})");
+            }
+        }
+
+        /// <summary>
+        /// 广播游戏胜利（Host → All）
+        /// </summary>
+        public void BroadcastGameVictory(ushort winnerId, string winnerName, string reason)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnGameVictory_RPC", RpcTarget.All, (int)winnerId, winnerName, reason);
+                LogDebug($"✓ 广播游戏胜利到所有玩家: 获胜者 {winnerName}");
+            }
+        }
+
+        /// <summary>
+        /// 广播无胜利者游戏结束（Host → All）
+        /// </summary>
+        public void BroadcastGameEndWithoutWinner(string reason)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnGameEndWithoutWinner_RPC", RpcTarget.All, reason);
+                LogDebug($"✓ 广播无胜利者游戏结束到所有玩家: {reason}");
+            }
+        }
+
+        /// <summary>
+        /// 广播返回房间请求（Host → All）
+        /// </summary>
+        public void BroadcastReturnToRoomRequest(ushort playerId, string reason)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnReturnToRoomRequest_RPC", RpcTarget.All, (int)playerId, reason);
+                LogDebug($"✓ 广播返回房间请求到所有玩家: 玩家{playerId}");
+            }
+        }
+
+        /// <summary>
+        /// 广播强制返回房间（Host → All）
+        /// </summary>
+        public void BroadcastForceReturnToRoom(string reason)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnForceReturnToRoom_RPC", RpcTarget.All, reason);
+                LogDebug($"✓ 广播强制返回房间到所有玩家: {reason}");
+            }
+        }
         #endregion
 
         #region 辅助方法
@@ -760,47 +885,6 @@ namespace Core.Network
             Debug.Log($"=== 房间状态 ===\n{GetRoomStatus()}");
         }
 
-        [ContextMenu("显示准备状态")]
-        public void ShowReadyStatus()
-        {
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.Log("未在房间中");
-                return;
-            }
-
-            string status = "=== 玩家准备状态 ===\n";
-            foreach (var player in PhotonNetwork.PlayerList)
-            {
-                bool isReady = GetPlayerReady(player);
-                status += $"{player.NickName} (ID: {player.ActorNumber}): {(isReady ? "✓ 准备" : "✗ 未准备")}\n";
-            }
-            status += $"总计: {GetReadyPlayerCount()}/{PlayerCount} 准备就绪";
-
-            Debug.Log(status);
-        }
-
-        [ContextMenu("测试设置准备状态")]
-        public void TestSetReady()
-        {
-            if (PhotonNetwork.LocalPlayer != null)
-            {
-                SetPlayerReady(!GetPlayerReady(PhotonNetwork.LocalPlayer));
-            }
-        }
-
-        [ContextMenu("检查RPC发送条件")]
-        public void CheckRPCConditions()
-        {
-            bool canSend = CanSendRPC();
-            Debug.Log($"RPC发送条件检查: {(canSend ? "✓ 可以发送" : "✗ 不能发送")}");
-
-            var persistentManager = PersistentNetworkManager.Instance;
-            Debug.Log($"PersistentNetworkManager: {(persistentManager != null ? "✓" : "✗")}");
-            Debug.Log($"PhotonView: {(persistentManager?.photonView != null ? "✓" : "✗")}");
-            Debug.Log($"在房间中: {(PhotonNetwork.InRoom ? "✓" : "✗")}");
-        }
-
         [ContextMenu("显示网络管理器状态")]
         public void ShowNetworkManagerStatus()
         {
@@ -813,90 +897,6 @@ namespace Core.Network
             status += $"NQMC可用: {(NetworkQuestionManagerController.Instance != null ? "✓" : "✗")}\n";
 
             Debug.Log(status);
-        }
-
-        [ContextMenu("测试RPC广播")]
-        public void TestRPCBroadcast()
-        {
-            if (IsHost && CanSendRPC())
-            {
-                BroadcastAnswerResult(true, "测试答案");
-                Debug.Log("已发送测试RPC（使用RpcTarget.All）");
-            }
-            else
-            {
-                Debug.Log("无法发送测试RPC - 不是Host或条件不满足");
-            }
-        }
-
-        [ContextMenu("测试题目广播")]
-        public void TestQuestionBroadcast()
-        {
-            if (IsHost && CanSendRPC())
-            {
-                // 创建测试题目
-                var testQuestion = new NetworkQuestionData
-                {
-                    questionType = QuestionType.SoftFill,
-                    questionText = "测试题目：___是中国的首都",
-                    correctAnswer = "北京",
-                    timeLimit = 30f
-                };
-
-                BroadcastQuestion(testQuestion);
-                Debug.Log("已发送测试题目RPC（使用RpcTarget.All）");
-            }
-            else
-            {
-                Debug.Log("无法发送测试题目RPC - 不是Host或条件不满足");
-            }
-        }
-
-        [ContextMenu("验证NQMC连接")]
-        public void ValidateNQMCConnection()
-        {
-            var nqmc = NetworkQuestionManagerController.Instance;
-            if (nqmc != null)
-            {
-                Debug.Log("✓ NQMC实例存在");
-
-                // 检查关键方法
-                var questionMethod = nqmc.GetType().GetMethod("OnNetworkQuestionReceived",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var turnMethod = nqmc.GetType().GetMethod("OnNetworkPlayerTurnChanged",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var gameStartMethod = nqmc.GetType().GetMethod("OnNetworkGameStarted",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                Debug.Log($"OnNetworkQuestionReceived方法: {(questionMethod != null ? "✓" : "✗")}");
-                Debug.Log($"OnNetworkPlayerTurnChanged方法: {(turnMethod != null ? "✓" : "✗")}");
-                Debug.Log($"OnNetworkGameStarted方法: {(gameStartMethod != null ? "✓" : "✗")}");
-            }
-            else
-            {
-                Debug.Log("✗ NQMC实例不存在");
-            }
-        }
-
-        [ContextMenu("显示修复摘要")]
-        public void ShowFixSummary()
-        {
-            string summary = "=== NetworkManager修复摘要 ===\n";
-            summary += "主要修复内容:\n";
-            summary += "1. ✓ BroadcastQuestion: RpcTarget.Others → RpcTarget.All\n";
-            summary += "2. ✓ BroadcastAnswerResult: RpcTarget.Others → RpcTarget.All\n";
-            summary += "3. ✓ BroadcastHealthUpdate: RpcTarget.Others → RpcTarget.All\n";
-            summary += "4. ✓ BroadcastPlayerTurnChanged: RpcTarget.Others → RpcTarget.All\n";
-            summary += "5. ✓ BroadcastGameStart: RpcTarget.Others → RpcTarget.All\n";
-            summary += "6. ✓ BroadcastGameProgress: RpcTarget.Others → RpcTarget.All\n";
-            summary += "7. ✓ BroadcastPlayerStateSync: RpcTarget.Others → RpcTarget.All\n";
-            summary += "8. ✓ BroadcastPlayerAnswerResult: RpcTarget.Others → RpcTarget.All\n";
-            summary += "9. ✓ 增强的NQMC通知调试日志\n";
-            summary += "10. ✓ 保持SubmitAnswer使用RpcTarget.MasterClient（正确）\n\n";
-            summary += "修复原因: Host也是玩家，需要接收游戏状态更新\n";
-            summary += "预期效果: Host端也能正常显示题型UI和游戏状态";
-
-            Debug.Log(summary);
         }
 
         #endregion

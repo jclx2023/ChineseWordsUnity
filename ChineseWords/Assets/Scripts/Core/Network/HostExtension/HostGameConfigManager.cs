@@ -139,8 +139,6 @@ namespace Core.Network
         /// <summary>
         /// 获取指定题型的时间限制
         /// </summary>
-        /// <param name="questionType">题目类型</param>
-        /// <returns>时间限制（秒）</returns>
         public float GetTimeLimitForQuestionType(QuestionType questionType)
         {
             // 优先从缓存获取
@@ -161,8 +159,6 @@ namespace Core.Network
         /// <summary>
         /// 计算指定题型的时间限制
         /// </summary>
-        /// <param name="questionType">题目类型</param>
-        /// <returns>时间限制（秒）</returns>
         private float CalculateTimeLimitForQuestionType(QuestionType questionType)
         {
             try
@@ -190,8 +186,6 @@ namespace Core.Network
         /// <summary>
         /// 获取题型的默认时间限制
         /// </summary>
-        /// <param name="questionType">题目类型</param>
-        /// <returns>默认时间限制（秒）</returns>
         private float GetDefaultTimeLimitForQuestionType(QuestionType questionType)
         {
             switch (questionType)
@@ -219,7 +213,6 @@ namespace Core.Network
         /// <summary>
         /// 设置Timer配置
         /// </summary>
-        /// <param name="newTimerConfig">新的Timer配置</param>
         public void SetTimerConfig(TimerConfig newTimerConfig)
         {
             var oldConfig = timerConfig;
@@ -238,7 +231,6 @@ namespace Core.Network
         /// <summary>
         /// 获取Timer配置源信息
         /// </summary>
-        /// <returns>配置源描述</returns>
         public string GetTimerConfigSource()
         {
             if (!isTimerConfigInitialized)
@@ -257,7 +249,6 @@ namespace Core.Network
         /// <summary>
         /// 选择随机题目类型（根据权重）
         /// </summary>
-        /// <returns>选中的题目类型</returns>
         public QuestionType SelectRandomQuestionType()
         {
             try
@@ -285,7 +276,6 @@ namespace Core.Network
         /// <summary>
         /// 获取当前权重配置
         /// </summary>
-        /// <returns>权重字典</returns>
         public Dictionary<QuestionType, float> GetCurrentWeights()
         {
             try
@@ -307,7 +297,6 @@ namespace Core.Network
         /// <summary>
         /// 获取默认权重配置
         /// </summary>
-        /// <returns>默认权重字典</returns>
         private Dictionary<QuestionType, float> GetDefaultWeights()
         {
             return new Dictionary<QuestionType, float>
@@ -326,7 +315,6 @@ namespace Core.Network
         /// <summary>
         /// 设置权重配置
         /// </summary>
-        /// <param name="newWeightConfig">新的权重配置</param>
         public void SetWeightConfig(QuestionWeightConfig newWeightConfig)
         {
             var oldConfig = questionWeightConfig;
@@ -342,7 +330,6 @@ namespace Core.Network
         /// <summary>
         /// 获取权重配置源信息
         /// </summary>
-        /// <returns>配置源描述</returns>
         public string GetWeightConfigSource()
         {
             if (!isWeightConfigInitialized)
@@ -357,8 +344,6 @@ namespace Core.Network
         /// <summary>
         /// 检查题型是否启用
         /// </summary>
-        /// <param name="questionType">题目类型</param>
-        /// <returns>是否启用</returns>
         public bool IsQuestionTypeEnabled(QuestionType questionType)
         {
             try
@@ -382,8 +367,6 @@ namespace Core.Network
         /// <summary>
         /// 获取题型权重
         /// </summary>
-        /// <param name="questionType">题目类型</param>
-        /// <returns>题型权重</returns>
         public float GetQuestionTypeWeight(QuestionType questionType)
         {
             try
@@ -449,246 +432,7 @@ namespace Core.Network
 
         #endregion
 
-        #region 配置验证
-
-        /// <summary>
-        /// 验证当前配置有效性
-        /// </summary>
-        /// <returns>验证结果</returns>
-        public bool ValidateCurrentConfiguration()
-        {
-            bool isValid = true;
-            List<string> issues = new List<string>();
-
-            // 验证Timer配置
-            if (timerConfig != null)
-            {
-                try
-                {
-                    // 检查几个常用题型的时间限制
-                    var testTypes = new QuestionType[] {
-                        QuestionType.HardFill,
-                        QuestionType.ExplanationChoice
-                    };
-
-                    foreach (var testType in testTypes)
-                    {
-                        float timeLimit = timerConfig.GetTimeLimitForQuestionType(testType);
-                        if (timeLimit <= 0)
-                        {
-                            issues.Add($"Timer配置异常: {testType} 时间限制为 {timeLimit}");
-                            isValid = false;
-                        }
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    issues.Add($"Timer配置验证失败: {e.Message}");
-                    isValid = false;
-                }
-            }
-
-            // 验证权重配置
-            if (questionWeightConfig != null)
-            {
-                try
-                {
-                    var weights = questionWeightConfig.GetWeights();
-                    if (weights.Count == 0)
-                    {
-                        issues.Add("权重配置异常: 没有启用的题型");
-                        isValid = false;
-                    }
-
-                    float totalWeight = 0f;
-                    foreach (var weight in weights.Values)
-                    {
-                        totalWeight += weight;
-                    }
-
-                    if (totalWeight <= 0)
-                    {
-                        issues.Add($"权重配置异常: 总权重为 {totalWeight}");
-                        isValid = false;
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    issues.Add($"权重配置验证失败: {e.Message}");
-                    isValid = false;
-                }
-            }
-
-            if (!isValid)
-            {
-                Debug.LogWarning($"[GameConfigManager] 配置验证失败:\n{string.Join("\n", issues)}");
-            }
-            else
-            {
-                LogDebug("配置验证通过");
-            }
-
-            return isValid;
-        }
-
-        #endregion
-
-        #region 状态信息
-
-        /// <summary>
-        /// 获取配置管理器状态信息
-        /// </summary>
-        /// <returns>状态信息字符串</returns>
-        public string GetStatusInfo()
-        {
-            var status = "=== GameConfigManager状态 ===\n";
-            status += $"Timer配置已初始化: {isTimerConfigInitialized}\n";
-            status += $"权重配置已初始化: {isWeightConfigInitialized}\n";
-            status += $"Timer配置源: {GetTimerConfigSource()}\n";
-            status += $"权重配置源: {GetWeightConfigSource()}\n";
-            status += $"时间限制缓存数量: {cachedTimeLimits.Count}\n";
-
-            // 显示缓存的时间限制
-            if (cachedTimeLimits.Count > 0)
-            {
-                status += "缓存的时间限制:\n";
-                foreach (var kvp in cachedTimeLimits)
-                {
-                    status += $"  {kvp.Key}: {kvp.Value}秒\n";
-                }
-            }
-
-            // 显示权重信息
-            try
-            {
-                var weights = GetCurrentWeights();
-                status += $"启用题型数量: {weights.Count}\n";
-                if (weights.Count > 0)
-                {
-                    status += "题型权重:\n";
-                    foreach (var kvp in weights)
-                    {
-                        status += $"  {kvp.Key}: {kvp.Value}\n";
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                status += $"权重信息获取失败: {e.Message}\n";
-            }
-
-            return status;
-        }
-
-        /// <summary>
-        /// 获取配置摘要信息
-        /// </summary>
-        /// <returns>配置摘要字符串</returns>
-        public string GetConfigSummary()
-        {
-            var summary = "配置摘要: ";
-
-            if (timerConfig != null)
-            {
-                summary += $"Timer({timerConfig.ConfigName}) ";
-            }
-            else
-            {
-                summary += "Timer(默认) ";
-            }
-
-            if (questionWeightConfig != null)
-            {
-                var weights = questionWeightConfig.GetWeights();
-                summary += $"权重({weights.Count}种题型)";
-            }
-            else
-            {
-                summary += "权重(默认)";
-            }
-
-            return summary;
-        }
-
-        #endregion
-
-        #region 配置同步
-
-        /// <summary>
-        /// 从房间配置管理器同步配置
-        /// </summary>
-        public void SyncFromRoomConfigManager()
-        {
-            LogDebug("从房间配置管理器同步配置");
-
-            try
-            {
-                if (RoomConfigManager.Instance != null)
-                {
-                    // 同步Timer配置
-                    var roomTimerConfig = RoomConfigManager.Instance.GetCurrentTimerConfig();
-                    if (roomTimerConfig != null)
-                    {
-                        SetTimerConfig(roomTimerConfig);
-                        LogDebug($"从房间同步Timer配置: {roomTimerConfig.ConfigName}");
-                    }
-
-                    LogDebug("房间配置同步完成");
-                }
-                else
-                {
-                    LogDebug("房间配置管理器不存在，跳过同步");
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[GameConfigManager] 房间配置同步失败: {e.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 从全局配置管理器刷新配置
-        /// </summary>
-        public void RefreshFromGlobalManagers()
-        {
-            LogDebug("从全局配置管理器刷新配置");
-
-            try
-            {
-                // 刷新Timer配置
-                if (TimerConfigManager.Config != null)
-                {
-                    SetTimerConfig(TimerConfigManager.Config);
-                }
-
-                // 刷新权重配置
-                if (QuestionWeightManager.Config != null)
-                {
-                    SetWeightConfig(QuestionWeightManager.Config);
-                }
-
-                LogDebug("全局配置刷新完成");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[GameConfigManager] 全局配置刷新失败: {e.Message}");
-            }
-        }
-
-        #endregion
-
         #region 工具方法
-
-        /// <summary>
-        /// 设置调试日志开关
-        /// </summary>
-        /// <param name="enabled">是否启用调试日志</param>
-        public void SetDebugLogs(bool enabled)
-        {
-            enableDebugLogs = enabled;
-            LogDebug($"调试日志已{(enabled ? "启用" : "禁用")}");
-        }
-
         /// <summary>
         /// 调试日志输出
         /// </summary>
