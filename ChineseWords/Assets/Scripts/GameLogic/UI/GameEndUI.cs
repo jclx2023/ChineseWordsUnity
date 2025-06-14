@@ -7,7 +7,7 @@ using System.Collections;
 namespace UI
 {
     /// <summary>
-    /// 简易游戏结束界面控制器
+    /// 修复版游戏结束界面控制器
     /// 职责：
     /// 1. 监听游戏胜利和结束事件
     /// 2. 显示获胜者信息或游戏结束状态
@@ -43,7 +43,7 @@ namespace UI
         [SerializeField] private string noWinnerTitle = "⚡ 游戏结束";
 
         [Header("调试设置")]
-        [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool enableDebugLogs = false;
 
         // 私有状态
         private bool isPanelVisible = false;
@@ -70,6 +70,9 @@ namespace UI
 
             // 验证组件配置
             ValidateComponents();
+
+            LogDebug($"GameEndUI初始化完成 - 脚本启用状态: {this.enabled}");
+            LogDebug($"NetworkManager.Instance存在: {NetworkManager.Instance != null}");
         }
 
         private void OnDestroy()
@@ -130,6 +133,7 @@ namespace UI
             if (gameEndPanel != null)
             {
                 gameEndPanel.SetActive(false);
+                LogDebug("gameEndPanel初始状态设为隐藏");
             }
 
             // 初始化CanvasGroup
@@ -138,15 +142,17 @@ namespace UI
                 panelCanvasGroup.alpha = 0f;
                 panelCanvasGroup.interactable = false;
                 panelCanvasGroup.blocksRaycasts = false;
+                LogDebug("CanvasGroup初始化完成");
             }
 
             // 绑定按钮事件
             if (returnToRoomButton != null)
             {
                 returnToRoomButton.onClick.AddListener(OnReturnToRoomButtonClicked);
+                LogDebug("返回房间按钮事件绑定完成");
             }
 
-            LogDebug("GameEndUI初始化完成");
+            LogDebug("GameEndUI UI组件初始化完成");
         }
 
         /// <summary>
@@ -158,29 +164,49 @@ namespace UI
 
             if (gameEndPanel == null)
             {
-                Debug.LogError("[GameEndUI] 缺少gameEndPanel引用");
+                Debug.LogError("[GameEndUI] ❌ 缺少gameEndPanel引用");
                 hasErrors = true;
+            }
+            else
+            {
+                LogDebug("✓ gameEndPanel引用正常");
             }
 
             if (titleText == null)
             {
-                Debug.LogWarning("[GameEndUI] 缺少titleText引用");
+                Debug.LogWarning("[GameEndUI] ⚠️ 缺少titleText引用");
+            }
+            else
+            {
+                LogDebug("✓ titleText引用正常");
             }
 
             if (returnToRoomButton == null)
             {
-                Debug.LogWarning("[GameEndUI] 缺少returnToRoomButton引用");
+                Debug.LogWarning("[GameEndUI] ⚠️ 缺少returnToRoomButton引用");
+            }
+            else
+            {
+                LogDebug("✓ returnToRoomButton引用正常");
             }
 
             if (panelCanvasGroup == null)
             {
-                Debug.LogWarning("[GameEndUI] 缺少panelCanvasGroup引用，将无法使用淡入效果");
+                Debug.LogWarning("[GameEndUI] ⚠️ 缺少panelCanvasGroup引用，将无法使用淡入效果");
+            }
+            else
+            {
+                LogDebug("✓ panelCanvasGroup引用正常");
             }
 
             if (hasErrors)
             {
-                Debug.LogError("[GameEndUI] 关键组件缺失，功能可能异常");
+                Debug.LogError("[GameEndUI] ❌ 关键组件缺失，禁用脚本");
                 this.enabled = false;
+            }
+            else
+            {
+                LogDebug("✓ 所有关键组件验证通过");
             }
         }
 
@@ -218,6 +244,7 @@ namespace UI
                 NetworkManager.OnGameVictory -= OnGameVictoryReceived;
                 NetworkManager.OnGameEndWithoutWinner -= OnGameEndWithoutWinnerReceived;
                 NetworkManager.OnForceReturnToRoom -= OnForceReturnToRoomReceived;
+                LogDebug("网络事件注销完成");
             }
         }
 
@@ -237,13 +264,15 @@ namespace UI
         /// </summary>
         private void OnGameVictoryReceived(ushort winnerId, string winnerName, string reason)
         {
-            LogDebug($"收到游戏胜利事件: 获胜者 {winnerName} (ID: {winnerId})");
+            LogDebug($"★★★ OnGameVictoryReceived被调用 - 获胜者: {winnerName} (ID: {winnerId}) ★★★");
 
             // 检查本地玩家状态
             CheckLocalPlayerStatus();
 
             // 判断本地玩家是否为获胜者
             isLocalPlayerWinner = (winnerId == localPlayerId);
+
+            LogDebug($"本地玩家ID: {localPlayerId}, 获胜者ID: {winnerId}, 是否为获胜者: {isLocalPlayerWinner}");
 
             // 显示胜利界面
             ShowGameEndPanel(true, winnerId, winnerName, reason);
@@ -254,7 +283,7 @@ namespace UI
         /// </summary>
         private void OnGameEndWithoutWinnerReceived(string reason)
         {
-            LogDebug($"收到游戏结束事件: {reason}");
+            LogDebug($"★★★ OnGameEndWithoutWinnerReceived被调用: {reason} ★★★");
 
             // 检查本地玩家状态
             CheckLocalPlayerStatus();
@@ -286,11 +315,13 @@ namespace UI
             if (playerDeathUI != null)
             {
                 isLocalPlayerAlive = !playerDeathUI.IsLocalPlayerDead;
+                LogDebug($"通过PlayerDeathUI检查本地玩家状态: 存活={isLocalPlayerAlive}");
             }
             else
             {
                 // 如果没有PlayerDeathUI，默认认为存活
                 isLocalPlayerAlive = true;
+                LogDebug("未找到PlayerDeathUI，默认本地玩家存活");
             }
 
             LogDebug($"本地玩家状态检查: 存活={isLocalPlayerAlive}");
@@ -301,31 +332,38 @@ namespace UI
         /// </summary>
         private void ShowGameEndPanel(bool hasWinner, ushort winnerId, string winnerName, string reason)
         {
+            LogDebug($"★★★ ShowGameEndPanel被调用 - hasWinner: {hasWinner}, winnerName: {winnerName} ★★★");
+
             if (isPanelVisible)
             {
                 LogDebug("游戏结束面板已显示，忽略重复调用");
                 return;
             }
 
-            LogDebug($"显示游戏结束面板 - 有获胜者: {hasWinner}, 获胜者: {winnerName}");
+            LogDebug($"开始显示游戏结束面板");
 
             isPanelVisible = true;
 
-            // ✅ 确保GameEndUI在最高层级
+            // 设置为最后渲染（最顶层）
             EnsureTopLayer();
 
             // 更新面板内容
             UpdateGameEndPanelContent(hasWinner, winnerId, winnerName, reason);
 
             // 激活面板
+            LogDebug($"gameEndPanel是否为null: {gameEndPanel == null}");
             if (gameEndPanel != null)
             {
+                LogDebug($"设置gameEndPanel.SetActive(true)");
                 gameEndPanel.SetActive(true);
+                LogDebug($"gameEndPanel当前状态: {gameEndPanel.activeSelf}");
+                LogDebug($"gameEndPanel在Hierarchy中是否激活: {gameEndPanel.activeInHierarchy}");
             }
 
-            // 播放淡入动画
+            // 播放淡入动画或直接显示
             if (panelCanvasGroup != null)
             {
+                LogDebug($"开始淡入动画 - 当前alpha: {panelCanvasGroup.alpha}");
                 if (fadeCoroutine != null)
                 {
                     StopCoroutine(fadeCoroutine);
@@ -334,11 +372,11 @@ namespace UI
             }
             else
             {
-                // 如果没有CanvasGroup，直接启用交互
+                LogDebug("panelCanvasGroup为null，直接启用交互");
                 EnablePanelInteraction();
             }
 
-            LogDebug("游戏结束面板显示完成");
+            LogDebug("★★★ 游戏结束面板显示逻辑完成 ★★★");
         }
 
         /// <summary>
@@ -379,8 +417,11 @@ namespace UI
         /// </summary>
         private void UpdateGameEndPanelContent(bool hasWinner, ushort winnerId, string winnerName, string reason)
         {
+            LogDebug($"更新面板内容 - hasWinner: {hasWinner}, winnerName: {winnerName}");
+
             // 确定玩家状态和对应的UI样式
             PlayerEndStatus playerStatus = DeterminePlayerStatus(hasWinner, winnerId);
+            LogDebug($"玩家状态确定: {playerStatus}");
 
             // 更新标题
             UpdateTitleText(playerStatus);
@@ -396,6 +437,8 @@ namespace UI
 
             // 更新视觉样式
             UpdateVisualStyle(playerStatus);
+
+            LogDebug("面板内容更新完成");
         }
 
         /// <summary>
@@ -440,6 +483,7 @@ namespace UI
             };
 
             titleText.text = title;
+            LogDebug($"标题更新为: {title}");
         }
 
         /// <summary>
@@ -457,6 +501,8 @@ namespace UI
             {
                 winnerInfoText.text = reason; // 显示游戏结束原因
             }
+
+            LogDebug($"获胜者信息更新为: {winnerInfoText.text}");
         }
 
         /// <summary>
@@ -469,6 +515,7 @@ namespace UI
             // 获取基本的游戏统计信息
             string stats = GetGameStatistics();
             gameStatsText.text = stats;
+            LogDebug($"游戏统计更新为: {stats}");
         }
 
         /// <summary>
@@ -488,6 +535,7 @@ namespace UI
             };
 
             statusMessageText.text = message;
+            LogDebug($"状态消息更新为: {message}");
         }
 
         /// <summary>
@@ -509,6 +557,7 @@ namespace UI
             // 设置背景颜色（半透明）
             backgroundColor.a = 0.8f;
             backgroundImage.color = backgroundColor;
+            LogDebug($"视觉样式更新为: {status}");
         }
 
         #endregion
@@ -516,35 +565,25 @@ namespace UI
         #region 层级管理
 
         /// <summary>
-        /// 确保GameEndUI在最高层级
+        /// 确保GameEndUI在最高层级 - 修复版
         /// </summary>
         private void EnsureTopLayer()
         {
-            // 获取当前GameObject的Canvas组件
-            Canvas thisCanvas = GetComponentInParent<Canvas>();
-            if (thisCanvas == null)
+            // 使用Transform层级而不是Canvas sortingOrder
+            if (transform != null)
             {
-                LogDebug("未找到Canvas组件，无法设置层级");
-                return;
+                // 将当前GameObject移到Transform层级的最后（最顶层）
+                transform.SetAsLastSibling();
+                LogDebug($"GameEndUI已移到Transform层级最顶层: {transform.GetSiblingIndex()}");
             }
 
-            // 查找所有Canvas，找到最高的sortingOrder
-            Canvas[] allCanvases = FindObjectsOfType<Canvas>();
-            int maxSortingOrder = 0;
-
-            foreach (Canvas canvas in allCanvases)
+            // 如果有独立的Canvas组件，也设置sortingOrder
+            Canvas thisCanvas = GetComponent<Canvas>();
+            if (thisCanvas != null)
             {
-                if (canvas != thisCanvas && canvas.sortingOrder > maxSortingOrder)
-                {
-                    maxSortingOrder = canvas.sortingOrder;
-                }
+                thisCanvas.sortingOrder = 100; // 设置一个高优先级
+                LogDebug($"GameEndUI独立Canvas层级设置为: {thisCanvas.sortingOrder}");
             }
-
-            // 设置为比最高层级还要高
-            int newSortingOrder = maxSortingOrder + 10;
-            thisCanvas.sortingOrder = newSortingOrder;
-
-            LogDebug($"GameEndUI层级已设置为: {newSortingOrder} (原最高层级: {maxSortingOrder})");
         }
 
         #endregion
@@ -556,6 +595,8 @@ namespace UI
         /// </summary>
         private IEnumerator FadeInPanel()
         {
+            LogDebug($"★ FadeInPanel开始 - 初始alpha: {panelCanvasGroup.alpha}");
+
             float elapsedTime = 0f;
             float startAlpha = panelCanvasGroup.alpha;
 
@@ -568,6 +609,7 @@ namespace UI
             }
 
             panelCanvasGroup.alpha = 1f;
+            LogDebug($"★ FadeInPanel完成 - 最终alpha: {panelCanvasGroup.alpha}");
             EnablePanelInteraction();
         }
 
@@ -576,6 +618,8 @@ namespace UI
         /// </summary>
         private IEnumerator FadeOutPanel()
         {
+            LogDebug($"FadeOutPanel开始 - 初始alpha: {panelCanvasGroup.alpha}");
+
             float elapsedTime = 0f;
             float startAlpha = panelCanvasGroup.alpha;
 
@@ -591,6 +635,7 @@ namespace UI
             }
 
             panelCanvasGroup.alpha = 0f;
+            LogDebug("FadeOutPanel完成");
 
             // 隐藏面板
             if (gameEndPanel != null)
@@ -608,6 +653,7 @@ namespace UI
             {
                 panelCanvasGroup.interactable = true;
                 panelCanvasGroup.blocksRaycasts = true;
+                LogDebug("面板交互已启用");
             }
         }
 
@@ -620,6 +666,7 @@ namespace UI
             {
                 panelCanvasGroup.interactable = false;
                 panelCanvasGroup.blocksRaycasts = false;
+                LogDebug("面板交互已禁用");
             }
         }
 
@@ -708,6 +755,27 @@ namespace UI
         #region 公共接口
 
         public bool IsPanelVisible => isPanelVisible;
+
+        /// <summary>
+        /// 强制显示面板（调试用）
+        /// </summary>
+        [ContextMenu("强制显示面板")]
+        public void ForceShowPanel()
+        {
+            LogDebug("★★★ 强制显示面板（调试） ★★★");
+            ShowGameEndPanel(true, localPlayerId, "测试获胜者", "调试测试");
+        }
+
+        /// <summary>
+        /// 强制隐藏面板（调试用）
+        /// </summary>
+        [ContextMenu("强制隐藏面板")]
+        public void ForceHidePanel()
+        {
+            LogDebug("★★★ 强制隐藏面板（调试） ★★★");
+            HideGameEndPanel();
+        }
+
         #endregion
 
         #region 调试方法
@@ -719,6 +787,41 @@ namespace UI
                 Debug.Log($"[GameEndUI] {message}");
             }
         }
+
+        /// <summary>
+        /// 获取详细状态信息（调试用）
+        /// </summary>
+        [ContextMenu("显示详细状态")]
+        public void ShowDetailedStatus()
+        {
+            string status = "=== GameEndUI 详细状态 ===\n";
+            status += $"脚本启用: {this.enabled}\n";
+            status += $"面板可见: {isPanelVisible}\n";
+            status += $"本地玩家ID: {localPlayerId}\n";
+            status += $"本地玩家存活: {isLocalPlayerAlive}\n";
+            status += $"本地玩家获胜: {isLocalPlayerWinner}\n";
+            status += $"gameEndPanel存在: {gameEndPanel != null}\n";
+
+            if (gameEndPanel != null)
+            {
+                status += $"gameEndPanel激活: {gameEndPanel.activeSelf}\n";
+                status += $"gameEndPanel在层级中激活: {gameEndPanel.activeInHierarchy}\n";
+            }
+
+            status += $"panelCanvasGroup存在: {panelCanvasGroup != null}\n";
+
+            if (panelCanvasGroup != null)
+            {
+                status += $"CanvasGroup alpha: {panelCanvasGroup.alpha}\n";
+                status += $"CanvasGroup interactable: {panelCanvasGroup.interactable}\n";
+                status += $"CanvasGroup blocksRaycasts: {panelCanvasGroup.blocksRaycasts}\n";
+            }
+
+            status += $"NetworkManager存在: {NetworkManager.Instance != null}\n";
+
+            Debug.Log(status);
+        }
+
         #endregion
     }
 }

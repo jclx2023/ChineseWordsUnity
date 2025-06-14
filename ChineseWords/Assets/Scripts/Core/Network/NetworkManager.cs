@@ -3,6 +3,7 @@ using Photon.Pun;
 using Photon.Realtime;
 using System;
 using UI;
+using UnityEngine.SceneManagement;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 namespace Core.Network
@@ -367,6 +368,8 @@ namespace Core.Network
 
             // 触发游戏胜利事件
             OnGameVictory?.Invoke(winnerIdUShort, winnerName, reason);
+
+            NotifyNQMCGameEnded();
         }
 
         [PunRPC]
@@ -376,6 +379,8 @@ namespace Core.Network
 
             // 触发无胜利者游戏结束事件
             OnGameEndWithoutWinner?.Invoke(reason);
+
+            NotifyNQMCGameEnded();
         }
 
         [PunRPC]
@@ -395,6 +400,8 @@ namespace Core.Network
 
             // 触发强制返回房间事件
             OnForceReturnToRoom?.Invoke(reason);
+
+            StartCoroutine(HandleReturnToRoom(reason));
         }
 
         #endregion
@@ -607,6 +614,76 @@ namespace Core.Network
         }
         #endregion
 
+        #region 🔧 修复：游戏结束和返回房间逻辑
+
+        /// <summary>
+        /// 通知NQMC游戏结束
+        /// </summary>
+        private void NotifyNQMCGameEnded()
+        {
+            LogDebug("通知NQMC游戏结束");
+
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                NetworkQuestionManagerController.Instance.StopGame();
+                LogDebug("✓ NQMC已停止游戏");
+            }
+            else
+            {
+                LogDebug("✗ NetworkQuestionManagerController.Instance 为空");
+            }
+        }
+
+        /// <summary>
+        /// 处理返回房间逻辑
+        /// </summary>
+        private System.Collections.IEnumerator HandleReturnToRoom(string reason)
+        {
+            LogDebug($"开始执行返回房间逻辑: {reason}");
+
+            // 等待1秒让UI显示完成
+            yield return new WaitForSeconds(1f);
+
+            try
+            {
+                // 检查当前场景
+                string currentScene = SceneManager.GetActiveScene().name;
+                LogDebug($"当前场景: {currentScene}");
+
+                // 如果在GameScene，返回RoomScene
+                if (currentScene.Contains("Game") || currentScene.Contains("Network"))
+                {
+                    LogDebug("从游戏场景返回房间场景");
+                    SceneManager.LoadScene("RoomScene");
+                }
+                // 如果已经在RoomScene，重新加载以重置状态
+                else if (currentScene.Contains("Room"))
+                {
+                    LogDebug("重新加载房间场景以重置状态");
+                    SceneManager.LoadScene(currentScene);
+                }
+                // 其他情况，尝试加载主菜单
+                else
+                {
+                    LogDebug("返回主菜单场景");
+                    SceneManager.LoadScene("MainMenuScene");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[NetworkManager] 返回房间失败: {e.Message}");
+
+                // 备用方案：离开房间
+                if (PhotonNetwork.InRoom)
+                {
+                    LogDebug("场景切换失败，尝试离开Photon房间");
+                    PhotonNetwork.LeaveRoom();
+                }
+            }
+        }
+
+        #endregion
+
         #region 辅助方法
 
         /// <summary>
@@ -805,18 +882,12 @@ namespace Core.Network
 
         #region 场景适配方法
 
-        /// <summary>
-        /// 为当前场景注册网络事件监听
-        /// </summary>
         public void RegisterSceneNetworkListeners()
         {
             LogDebug("为当前场景注册网络事件监听");
             // 这里可以根据当前场景自动注册相应的UI更新监听
         }
 
-        /// <summary>
-        /// 取消当前场景的网络事件监听
-        /// </summary>
         public void UnregisterSceneNetworkListeners()
         {
             LogDebug("取消当前场景的网络事件监听");
@@ -840,27 +911,16 @@ namespace Core.Network
 
         #region 持久化状态管理
 
-        /// <summary>
-        /// 保存当前网络状态（场景切换前）
-        /// </summary>
         public void SaveNetworkState()
         {
             LogDebug("保存网络状态");
             // 可以在这里保存游戏状态、玩家准备状态等
         }
-
-        /// <summary>
-        /// 恢复网络状态（场景切换后）
-        /// </summary>
         public void RestoreNetworkState()
         {
             LogDebug("恢复网络状态");
             // 可以在这里恢复之前保存的状态
         }
-
-        /// <summary>
-        /// 重置网络状态
-        /// </summary>
         public void ResetNetworkState()
         {
             LogDebug("重置网络状态");
@@ -877,12 +937,6 @@ namespace Core.Network
             {
                 Debug.Log($"[NetworkManager-Fixed] {message}");
             }
-        }
-
-        [ContextMenu("显示房间状态")]
-        public void ShowRoomStatus()
-        {
-            Debug.Log($"=== 房间状态 ===\n{GetRoomStatus()}");
         }
 
         [ContextMenu("显示网络管理器状态")]

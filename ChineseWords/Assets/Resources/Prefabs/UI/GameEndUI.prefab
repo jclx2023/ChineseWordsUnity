@@ -374,7 +374,7 @@ MonoBehaviour:
   gameStatsText: {fileID: 4472913813723961667}
   statusMessageText: {fileID: 1416395034662444569}
   returnToRoomButton: {fileID: 8482891509160547299}
-  panelCanvasGroup: {fileID: 0}
+  panelCanvasGroup: {fileID: 3998693462711121174}
   backgroundImage: {fileID: 2800213099839346224}
   fadeInDuration: 1.2
   victoryColor: {r: 1, g: 0.8, b: 0.2, a: 1}

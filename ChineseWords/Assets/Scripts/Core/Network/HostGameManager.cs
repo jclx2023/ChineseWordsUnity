@@ -1095,7 +1095,7 @@ namespace Core.Network
 
         #region 返回房间
         /// <summary>
-        /// 请求返回房间（供其他脚本调用）
+        /// 请求返回房间（供其他脚本调用
         /// </summary>
         public void RequestReturnToRoom(ushort requestPlayerId, string reason = "玩家请求")
         {
@@ -1108,18 +1108,30 @@ namespace Core.Network
             if (!gameInProgress)
             {
                 canReturn = true;
+                LogDebug($"游戏已结束，允许玩家{requestPlayerId}返回");
             }
             // 游戏进行中只允许死亡玩家返回
             else if (playerStateManager != null)
             {
                 var playerState = playerStateManager.GetPlayerState(requestPlayerId);
                 canReturn = playerState != null && !playerState.isAlive;
+                LogDebug($"游戏进行中，玩家{requestPlayerId}存活状态: {playerState?.isAlive}, 允许返回: {canReturn}");
             }
 
             if (canReturn)
             {
-                // 广播返回房间请求
-                NetworkManager.Instance.BroadcastReturnToRoomRequest(requestPlayerId, reason);
+                LogDebug($"准备广播返回房间请求 - NetworkManager可用: {NetworkManager.Instance != null}");
+
+                if (NetworkManager.Instance != null)
+                {
+                    NetworkManager.Instance.BroadcastForceReturnToRoom($"玩家{requestPlayerId}请求返回: {reason}");
+                    LogDebug($"✓ 已调用BroadcastForceReturnToRoom，将执行场景切换");
+                }
+                else
+                {
+                    LogDebug($"❌ NetworkManager.Instance为null，无法广播返回请求");
+                }
+
                 LogDebug($"已批准玩家{requestPlayerId}的返回房间请求");
             }
             else

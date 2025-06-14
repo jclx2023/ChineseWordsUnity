@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using Core;
 using Core.Network;
 using System.Collections;
@@ -8,24 +8,25 @@ using Photon.Pun;
 namespace Core.Network
 {
     /// <summary>
-    /// ÍøÂçÌâÄ¿¹ÜÀí¿ØÖÆÆ÷ - ´¿¶àÈËÄ£Ê½°æ
-    /// ×¨ÃÅÓÃÓÚ¶àÈËÄ£Ê½µÄÌâÄ¿¹ÜÀí + ÍøÂçÏûÏ¢´¦Àí + ´ğ°¸Ìá½»
-    /// ÒÑÒÆ³ıµ¥»úÄ£Ê½£¬×¨×¢ÓÚPhoton¶àÈËÓÎÏ·Á÷³Ì
+    /// ç½‘ç»œé¢˜ç›®ç®¡ç†æ§åˆ¶å™¨ - çº¯å¤šäººæ¨¡å¼ç‰ˆï¼ˆä¿®å¤ç‰ˆï¼‰
+    /// ä¸“é—¨ç”¨äºå¤šäººæ¨¡å¼çš„é¢˜ç›®ç®¡ç† + ç½‘ç»œæ¶ˆæ¯å¤„ç† + ç­”æ¡ˆæäº¤
+    /// å·²ç§»é™¤å•æœºæ¨¡å¼ï¼Œä¸“æ³¨äºPhotonå¤šäººæ¸¸æˆæµç¨‹
+    /// ä¿®å¤ï¼šæ·»åŠ æ¸¸æˆç»“æŸäº‹ä»¶ç›‘å¬å’Œå®Œæ•´çš„åœæ­¢é€»è¾‘
     /// </summary>
     public class NetworkQuestionManagerController : MonoBehaviourPun
     {
-        [Header("ÒÀÀµ¹ÜÀíÆ÷ÒıÓÃ")]
+        [Header("ä¾èµ–ç®¡ç†å™¨å¼•ç”¨")]
         [SerializeField] private TimerManager timerManager;
 
-        [Header("ÒÀÀµÅäÖÃ")]
+        [Header("ä¾èµ–é…ç½®")]
         [SerializeField] private float timeUpDelay = 1f;
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static NetworkQuestionManagerController Instance { get; private set; }
 
-        // µ±Ç°×´Ì¬
+        // å½“å‰çŠ¶æ€
         private QuestionManagerBase currentManager;
         private NetworkQuestionData currentNetworkQuestion;
         private bool isMyTurn = false;
@@ -34,23 +35,23 @@ namespace Core.Network
         private ushort currentTurnPlayerId = 0;
         private bool hasReceivedTurnChange = false;
 
-        // ÊÂ¼ş
+        // äº‹ä»¶
         public System.Action<bool> OnGameEnded;
         public System.Action<bool> OnAnswerCompleted;
 
-        // ÊôĞÔ
+        // å±æ€§
         public bool IsMyTurn => isMyTurn;
         public bool IsGameStarted => gameStarted;
         public bool IsInitialized => isInitialized;
         public QuestionManagerBase CurrentManager => currentManager;
 
-        // ×´Ì¬¹ÜÀíÃ¶¾Ù
+        // çŠ¶æ€ç®¡ç†æšä¸¾
         private enum QuestionDisplayState
         {
-            WaitingForGame,     // µÈ´ıÓÎÏ·¿ªÊ¼
-            MyTurn,            // ÂÖµ½ÎÒ´ğÌâ
-            OtherPlayerTurn,   // ÆäËûÍæ¼Ò»ØºÏ
-            GameEnded          // ÓÎÏ·½áÊø
+            WaitingForGame,     // ç­‰å¾…æ¸¸æˆå¼€å§‹
+            MyTurn,            // è½®åˆ°æˆ‘ç­”é¢˜
+            OtherPlayerTurn,   // å…¶ä»–ç©å®¶å›åˆ
+            GameEnded          // æ¸¸æˆç»“æŸ
         }
 
         private QuestionDisplayState currentDisplayState = QuestionDisplayState.WaitingForGame;
@@ -60,7 +61,7 @@ namespace Core.Network
             if (Instance == null)
             {
                 Instance = this;
-                LogDebug("NetworkQuestionManagerController (´¿¶àÈË°æ) µ¥ÀıÒÑ´´½¨");
+                LogDebug("NetworkQuestionManagerController (ä¿®å¤ç‰ˆ) å•ä¾‹å·²åˆ›å»º");
             }
             else
             {
@@ -74,17 +75,19 @@ namespace Core.Network
         private void Start()
         {
             isInitialized = true;
-            LogDebug("´¿¶àÈË°æNQMC³õÊ¼»¯Íê³É£¬µÈ´ıÍâ²¿Æô¶¯Ö¸Áî");
+            RegisterGameEndEvents();
+
+            LogDebug("ä¿®å¤ç‰ˆNQMCåˆå§‹åŒ–å®Œæˆï¼Œç­‰å¾…å¤–éƒ¨å¯åŠ¨æŒ‡ä»¤");
         }
 
         private void Update()
         {
-            // ¼àÌıÍøÂç×´Ì¬±ä»¯
+            // ç›‘å¬ç½‘ç»œçŠ¶æ€å˜åŒ–
             if (gameStarted)
             {
                 if (!PhotonNetwork.IsConnected || !PhotonNetwork.InRoom)
                 {
-                    LogDebug("¼ì²âµ½PhotonÁ¬½Ó¶Ï¿ª£¬Í£Ö¹ÓÎÏ·");
+                    LogDebug("æ£€æµ‹åˆ°Photonè¿æ¥æ–­å¼€ï¼Œåœæ­¢æ¸¸æˆ");
                     StopGame();
                     OnGameEnded?.Invoke(false);
                 }
@@ -93,140 +96,212 @@ namespace Core.Network
 
         private void OnDestroy()
         {
+            UnregisterGameEndEvents();
+
             CleanupCurrentManager();
 
             if (Instance == this)
                 Instance = null;
 
-            LogDebug("NetworkQuestionManagerController (´¿¶àÈË°æ) ÒÑÏú»Ù");
+            LogDebug("NetworkQuestionManagerController (ä¿®å¤ç‰ˆ) å·²é”€æ¯");
         }
 
         /// <summary>
-        /// ³õÊ¼»¯ÒıÓÃ×é¼ş
+        /// åˆå§‹åŒ–å¼•ç”¨ç»„ä»¶
         /// </summary>
         private void InitializeComponents()
         {
-            LogDebug("³õÊ¼»¯ÒıÓÃ×é¼ş...");
+            LogDebug("åˆå§‹åŒ–å¼•ç”¨ç»„ä»¶...");
 
-            // »ñÈ¡»ò²éÕÒ±ØÒª×é¼ş
+            // è·å–æˆ–æŸ¥æ‰¾å¿…è¦ç»„ä»¶
             if (timerManager == null)
                 timerManager = GetComponent<TimerManager>() ?? FindObjectOfType<TimerManager>();
 
             if (timerManager == null)
             {
-                Debug.LogError("[NQMC] ÕÒ²»µ½TimerManagerÒıÓÃ");
+                Debug.LogError("[NQMC] æ‰¾ä¸åˆ°TimerManagerå¼•ç”¨");
                 return;
             }
 
 
-            // Ó¦ÓÃÅäÖÃ
+            // åº”ç”¨é…ç½®
             var cfg = ConfigManager.Instance?.Config;
             if (cfg != null)
             {
                 timerManager.ApplyConfig(cfg.timeLimit);
             }
 
-            // °ó¶¨¼ÆÊ±Æ÷ÊÂ¼ş
+            // ç»‘å®šè®¡æ—¶å™¨äº‹ä»¶
             timerManager.OnTimeUp += HandleTimeUp;
 
-            LogDebug("ÒıÓÃ×é¼ş³õÊ¼»¯Íê³É");
+            LogDebug("å¼•ç”¨ç»„ä»¶åˆå§‹åŒ–å®Œæˆ");
         }
 
-        #region ¹«¹²½Ó¿Ú - ÓÃÓÚÍâ²¿ÏµÍ³µ÷ÓÃ
+        #region æ¸¸æˆç»“æŸäº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// ¿ªÊ¼¶àÈËÓÎÏ·£¨ÓÃÓÚÍâ²¿ÏµÍ³µ÷ÓÃ£©
+        /// æ³¨å†Œæ¸¸æˆç»“æŸäº‹ä»¶ç›‘å¬
+        /// </summary>
+        private void RegisterGameEndEvents()
+        {
+            NetworkManager.OnGameVictory += OnGameVictoryReceived;
+            NetworkManager.OnGameEndWithoutWinner += OnGameEndWithoutWinnerReceived;
+            NetworkManager.OnForceReturnToRoom += OnForceReturnToRoomReceived;
+
+            LogDebug("âœ“ æ¸¸æˆç»“æŸäº‹ä»¶ç›‘å¬å·²æ³¨å†Œ");
+        }
+
+        /// <summary>
+        /// å–æ¶ˆæ¸¸æˆç»“æŸäº‹ä»¶ç›‘å¬
+        /// </summary>
+        private void UnregisterGameEndEvents()
+        {
+            NetworkManager.OnGameVictory -= OnGameVictoryReceived;
+            NetworkManager.OnGameEndWithoutWinner -= OnGameEndWithoutWinnerReceived;
+            NetworkManager.OnForceReturnToRoom -= OnForceReturnToRoomReceived;
+
+            LogDebug("æ¸¸æˆç»“æŸäº‹ä»¶ç›‘å¬å·²å–æ¶ˆ");
+        }
+
+        /// <summary>
+        /// å¤„ç†æ¸¸æˆèƒœåˆ©äº‹ä»¶
+        /// </summary>
+        private void OnGameVictoryReceived(ushort winnerId, string winnerName, string reason)
+        {
+            LogDebug($"æ”¶åˆ°æ¸¸æˆèƒœåˆ©é€šçŸ¥: {winnerName} è·èƒœ - {reason}");
+            HandleGameEnded();
+        }
+
+        /// <summary>
+        /// å¤„ç†æ— èƒœåˆ©è€…æ¸¸æˆç»“æŸäº‹ä»¶
+        /// </summary>
+        private void OnGameEndWithoutWinnerReceived(string reason)
+        {
+            LogDebug($"æ”¶åˆ°æ— èƒœåˆ©è€…æ¸¸æˆç»“æŸé€šçŸ¥: {reason}");
+            HandleGameEnded();
+        }
+
+        /// <summary>
+        /// å¤„ç†å¼ºåˆ¶è¿”å›æˆ¿é—´äº‹ä»¶
+        /// </summary>
+        private void OnForceReturnToRoomReceived(string reason)
+        {
+            LogDebug($"æ”¶åˆ°å¼ºåˆ¶è¿”å›æˆ¿é—´é€šçŸ¥: {reason}");
+            HandleGameEnded();
+        }
+
+        /// <summary>
+        /// ç»Ÿä¸€çš„æ¸¸æˆç»“æŸå¤„ç†
+        /// </summary>
+        private void HandleGameEnded()
+        {
+            LogDebug("å¤„ç†æ¸¸æˆç»“æŸ - åœæ­¢æ‰€æœ‰æ¸¸æˆé€»è¾‘");
+            StopGame();
+            OnGameEnded?.Invoke(false);
+        }
+
+        #endregion
+
+        #region å…¬å…±æ¥å£ - ç”¨äºå¤–éƒ¨ç³»ç»Ÿè°ƒç”¨
+
+        /// <summary>
+        /// å¼€å§‹å¤šäººæ¸¸æˆï¼ˆç”¨äºå¤–éƒ¨ç³»ç»Ÿè°ƒç”¨ï¼‰
         /// </summary>
         public void StartGame(bool multiplayerMode = true)
         {
             if (!isInitialized)
             {
-                Debug.LogError("[NQMC] ÒıÓÃÎ´³õÊ¼»¯£¬ÎŞ·¨¿ªÊ¼ÓÎÏ·");
+                Debug.LogError("[NQMC] å¼•ç”¨æœªåˆå§‹åŒ–ï¼Œæ— æ³•å¼€å§‹æ¸¸æˆ");
                 return;
             }
 
-            // ²ÎÊıÒÑºöÂÔ£¬ÓÀÔ¶ÊÇ¶àÈËÄ£Ê½
+            // å‚æ•°å·²å¿½ç•¥ï¼Œæ°¸è¿œæ˜¯å¤šäººæ¨¡å¼
             gameStarted = true;
-            LogDebug("¿ªÊ¼¶àÈËÓÎÏ·");
+            LogDebug("å¼€å§‹å¤šäººæ¸¸æˆ");
 
             StartMultiplayerGame();
         }
 
         /// <summary>
-        /// Í£Ö¹ÓÎÏ· - ÖØÖÃ×´Ì¬
+        /// åœæ­¢æ¸¸æˆ - é‡ç½®çŠ¶æ€ï¼ˆä¿®å¤ç‰ˆï¼‰
         /// </summary>
         public void StopGame()
         {
-            LogDebug("Í£Ö¹ÓÎÏ·");
+            LogDebug("åœæ­¢æ¸¸æˆ - å¼€å§‹æ¸…ç†æ‰€æœ‰çŠ¶æ€");
+
             gameStarted = false;
             isMyTurn = false;
-
             currentDisplayState = QuestionDisplayState.GameEnded;
             hasReceivedTurnChange = false;
             currentTurnPlayerId = 0;
 
             StopTimer();
+
             CleanupCurrentManager();
+
+            DisableUIInteractions();
+
+            LogDebug("âœ“ æ¸¸æˆå·²å®Œå…¨åœæ­¢ï¼Œæ‰€æœ‰çŠ¶æ€å·²æ¸…ç†");
         }
 
         /// <summary>
-        /// ÔİÍ£ÓÎÏ·£¨ÓÃÓÚÍâ²¿ÏµÍ³µ÷ÓÃ£©
+        /// æš‚åœæ¸¸æˆï¼ˆç”¨äºå¤–éƒ¨ç³»ç»Ÿè°ƒç”¨ï¼‰
         /// </summary>
         public void PauseGame()
         {
-            LogDebug("ÔİÍ£ÓÎÏ·");
+            LogDebug("æš‚åœæ¸¸æˆ");
             if (timerManager != null)
                 timerManager.PauseTimer();
         }
 
         /// <summary>
-        /// »Ö¸´ÓÎÏ·£¨ÓÃÓÚÍâ²¿ÏµÍ³µ÷ÓÃ£©
+        /// æ¢å¤æ¸¸æˆï¼ˆç”¨äºå¤–éƒ¨ç³»ç»Ÿè°ƒç”¨ï¼‰
         /// </summary>
         public void ResumeGame()
         {
-            LogDebug("»Ö¸´ÓÎÏ·");
+            LogDebug("æ¢å¤æ¸¸æˆ");
             if (timerManager != null)
                 timerManager.ResumeTimer();
         }
 
         #endregion
 
-        #region ¶àÈËÓÎÏ·Á÷³Ì
+        #region å¤šäººæ¸¸æˆæµç¨‹
 
         /// <summary>
-        /// ¿ªÊ¼¶àÈËÓÎÏ·
+        /// å¼€å§‹å¤šäººæ¸¸æˆ
         /// </summary>
         private void StartMultiplayerGame()
         {
             if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom)
             {
-                LogDebug("¶àÈËÄ£Ê½£ºµÈ´ıHostGameManager·ÖÅä»ØºÏºÍ·¢ËÍÌâÄ¿");
+                LogDebug("å¤šäººæ¨¡å¼ï¼šç­‰å¾…HostGameManageråˆ†é…å›åˆå’Œå‘é€é¢˜ç›®");
                 currentDisplayState = QuestionDisplayState.WaitingForGame;
                 hasReceivedTurnChange = false;
             }
             else
             {
-                Debug.LogError("[NQMC] Î´Á¬½Óµ½Photon·¿¼ä£¬ÎŞ·¨¿ªÊ¼¶àÈËÓÎÏ·");
+                Debug.LogError("[NQMC] æœªè¿æ¥åˆ°Photonæˆ¿é—´ï¼Œæ— æ³•å¼€å§‹å¤šäººæ¸¸æˆ");
                 OnGameEnded?.Invoke(false);
             }
         }
 
         #endregion
 
-        #region ÍøÂçÌâÄ¿¹ÜÀí
+        #region ç½‘ç»œé¢˜ç›®ç®¡ç†
 
         /// <summary>
-        /// ¼ÓÔØÍøÂçÌâÄ¿ - ÎÒµÄ»ØºÏ
+        /// åŠ è½½ç½‘ç»œé¢˜ç›® - æˆ‘çš„å›åˆ
         /// </summary>
         private void LoadNetworkQuestion(NetworkQuestionData networkQuestion)
         {
             if (networkQuestion == null)
             {
-                Debug.LogError("[NQMC] ÍøÂçÌâÄ¿Êı¾İÎª¿Õ");
+                Debug.LogError("[NQMC] ç½‘ç»œé¢˜ç›®æ•°æ®ä¸ºç©º");
                 return;
             }
 
-            LogDebug($"¼ÓÔØÍøÂçÌâÄ¿: {networkQuestion.questionType}");
+            LogDebug($"åŠ è½½ç½‘ç»œé¢˜ç›®: {networkQuestion.questionType}");
 
             CleanupCurrentManager();
             currentNetworkQuestion = networkQuestion;
@@ -239,26 +314,26 @@ namespace Core.Network
                 currentManager.OnAnswerResult += HandleNetworkAnswerSubmission;
 
                 StartCoroutine(DelayedLoadNetworkQuestion(networkQuestion));
-                LogDebug($"ÍøÂçÌâÄ¿¹ÜÀíÆ÷´´½¨³É¹¦: {networkQuestion.questionType}");
+                LogDebug($"ç½‘ç»œé¢˜ç›®ç®¡ç†å™¨åˆ›å»ºæˆåŠŸ: {networkQuestion.questionType}");
             }
             else
             {
-                Debug.LogError("[NQMC] ÎŞ·¨ÎªÍøÂçÌâÄ¿´´½¨¹ÜÀíÆ÷");
+                Debug.LogError("[NQMC] æ— æ³•ä¸ºç½‘ç»œé¢˜ç›®åˆ›å»ºç®¡ç†å™¨");
             }
         }
 
         /// <summary>
-        /// ÒÔ¹Û²ìÕßÄ£Ê½¼ÓÔØÍøÂçÌâÄ¿ - ÆäËûÍæ¼Ò»ØºÏ
+        /// ä»¥è§‚å¯Ÿè€…æ¨¡å¼åŠ è½½ç½‘ç»œé¢˜ç›® - å…¶ä»–ç©å®¶å›åˆ
         /// </summary>
         private void LoadNetworkQuestionAsObserver(NetworkQuestionData networkQuestion)
         {
             if (networkQuestion == null)
             {
-                Debug.LogError("[NQMC] ÍøÂçÌâÄ¿Êı¾İÎª¿Õ");
+                Debug.LogError("[NQMC] ç½‘ç»œé¢˜ç›®æ•°æ®ä¸ºç©º");
                 return;
             }
 
-            LogDebug($"ÒÔ¹Û²ìÕßÄ£Ê½¼ÓÔØÍøÂçÌâÄ¿: {networkQuestion.questionType}");
+            LogDebug($"ä»¥è§‚å¯Ÿè€…æ¨¡å¼åŠ è½½ç½‘ç»œé¢˜ç›®: {networkQuestion.questionType}");
 
             CleanupCurrentManager();
             currentNetworkQuestion = networkQuestion;
@@ -267,20 +342,20 @@ namespace Core.Network
 
             if (currentManager != null)
             {
-                // ¹Û²ìÕßÄ£Ê½£º²»°ó¶¨´ğ°¸Ìá½»ÊÂ¼ş
-                LogDebug("¹Û²ìÕßÄ£Ê½£º²»°ó¶¨´ğ°¸Ìá½»ÊÂ¼ş");
+                // è§‚å¯Ÿè€…æ¨¡å¼ï¼šä¸ç»‘å®šç­”æ¡ˆæäº¤äº‹ä»¶
+                LogDebug("è§‚å¯Ÿè€…æ¨¡å¼ï¼šä¸ç»‘å®šç­”æ¡ˆæäº¤äº‹ä»¶");
 
                 StartCoroutine(DelayedLoadNetworkQuestionAsObserver(networkQuestion));
-                LogDebug($"¹Û²ìÕßÄ£Ê½ÌâÄ¿¹ÜÀíÆ÷´´½¨³É¹¦: {networkQuestion.questionType}");
+                LogDebug($"è§‚å¯Ÿè€…æ¨¡å¼é¢˜ç›®ç®¡ç†å™¨åˆ›å»ºæˆåŠŸ: {networkQuestion.questionType}");
             }
             else
             {
-                Debug.LogError("[NQMC] ÎŞ·¨Îª¹Û²ìÕßÄ£Ê½´´½¨¹ÜÀíÆ÷");
+                Debug.LogError("[NQMC] æ— æ³•ä¸ºè§‚å¯Ÿè€…æ¨¡å¼åˆ›å»ºç®¡ç†å™¨");
             }
         }
 
         /// <summary>
-        /// ÑÓ³Ù¼ÓÔØÍøÂçÌâÄ¿ - ÎÒµÄ»ØºÏ
+        /// å»¶è¿ŸåŠ è½½ç½‘ç»œé¢˜ç›® - æˆ‘çš„å›åˆ
         /// </summary>
         private IEnumerator DelayedLoadNetworkQuestion(NetworkQuestionData networkData)
         {
@@ -289,12 +364,12 @@ namespace Core.Network
             {
                 LoadQuestionWithNetworkData(networkData);
                 StartTimerWithDynamicLimit(networkData.timeLimit);
-                LogDebug($"ÍøÂçÌâÄ¿ÒÑ¼ÓÔØ²¢¿ªÊ¼¼ÆÊ±£¬Ê±¼äÏŞÖÆ: {networkData.timeLimit}Ãë");
+                LogDebug($"ç½‘ç»œé¢˜ç›®å·²åŠ è½½å¹¶å¼€å§‹è®¡æ—¶ï¼Œæ—¶é—´é™åˆ¶: {networkData.timeLimit}ç§’");
             }
         }
 
         /// <summary>
-        /// ÑÓ³Ù¼ÓÔØÍøÂçÌâÄ¿£¨¹Û²ìÕßÄ£Ê½£©
+        /// å»¶è¿ŸåŠ è½½ç½‘ç»œé¢˜ç›®ï¼ˆè§‚å¯Ÿè€…æ¨¡å¼ï¼‰
         /// </summary>
         private IEnumerator DelayedLoadNetworkQuestionAsObserver(NetworkQuestionData networkData)
         {
@@ -303,12 +378,12 @@ namespace Core.Network
             {
                 LoadQuestionWithNetworkData(networkData);
                 StartObserverTimer(networkData.timeLimit);
-                LogDebug($"¹Û²ìÕßÄ£Ê½£ºÌâÄ¿ÒÑ¼ÓÔØ£¬Æô¶¯Ö»¶Á¼ÆÊ±Æ÷");
+                LogDebug($"è§‚å¯Ÿè€…æ¨¡å¼ï¼šé¢˜ç›®å·²åŠ è½½ï¼Œå¯åŠ¨åªè¯»è®¡æ—¶å™¨");
             }
         }
 
         /// <summary>
-        /// Ê¹ÓÃÍøÂçÊı¾İ¼ÓÔØÌâÄ¿
+        /// ä½¿ç”¨ç½‘ç»œæ•°æ®åŠ è½½é¢˜ç›®
         /// </summary>
         private void LoadQuestionWithNetworkData(NetworkQuestionData networkData)
         {
@@ -319,24 +394,24 @@ namespace Core.Network
 
                 if (loadMethod != null)
                 {
-                    LogDebug($"Í¨¹ı·´Éäµ÷ÓÃÍøÂçÌâÄ¿¼ÓÔØ·½·¨: {networkData.questionType}");
+                    LogDebug($"é€šè¿‡åå°„è°ƒç”¨ç½‘ç»œé¢˜ç›®åŠ è½½æ–¹æ³•: {networkData.questionType}");
                     loadMethod.Invoke(networkManager, new object[] { networkData });
                 }
                 else
                 {
-                    Debug.LogWarning($"[NQMC] Î´ÕÒµ½LoadNetworkQuestion·½·¨£¬Ê¹ÓÃ±¸ÓÃ¼ÓÔØ·½Ê½");
+                    Debug.LogWarning($"[NQMC] æœªæ‰¾åˆ°LoadNetworkQuestionæ–¹æ³•ï¼Œä½¿ç”¨å¤‡ç”¨åŠ è½½æ–¹å¼");
                     currentManager.LoadQuestion();
                 }
             }
             else
             {
-                Debug.LogWarning($"[NQMC] ¹ÜÀíÆ÷²»ÊÇNetworkQuestionManagerBaseÀàĞÍ: {currentManager.GetType()}");
+                Debug.LogWarning($"[NQMC] ç®¡ç†å™¨ä¸æ˜¯NetworkQuestionManagerBaseç±»å‹: {currentManager.GetType()}");
                 currentManager.LoadQuestion();
             }
         }
 
         /// <summary>
-        /// Ê¹ÓÃ¶¯Ì¬Ê±¼äÏŞÖÆÆô¶¯¼ÆÊ±Æ÷
+        /// ä½¿ç”¨åŠ¨æ€æ—¶é—´é™åˆ¶å¯åŠ¨è®¡æ—¶å™¨
         /// </summary>
         private void StartTimerWithDynamicLimit(float timeLimit)
         {
@@ -347,12 +422,12 @@ namespace Core.Network
 
                 if (startTimerWithLimitMethod != null)
                 {
-                    LogDebug($"Ê¹ÓÃ¶¯Ì¬Ê±¼äÏŞÖÆÆô¶¯¼ÆÊ±Æ÷: {timeLimit}Ãë");
+                    LogDebug($"ä½¿ç”¨åŠ¨æ€æ—¶é—´é™åˆ¶å¯åŠ¨è®¡æ—¶å™¨: {timeLimit}ç§’");
                     startTimerWithLimitMethod.Invoke(timerManager, new object[] { timeLimit });
                 }
                 else if (setTimeLimitMethod != null)
                 {
-                    LogDebug($"ÉèÖÃÊ±¼äÏŞÖÆºóÆô¶¯¼ÆÊ±Æ÷: {timeLimit}Ãë");
+                    LogDebug($"è®¾ç½®æ—¶é—´é™åˆ¶åå¯åŠ¨è®¡æ—¶å™¨: {timeLimit}ç§’");
                     setTimeLimitMethod.Invoke(timerManager, new object[] { timeLimit });
                     timerManager.StartTimer();
                 }
@@ -364,12 +439,12 @@ namespace Core.Network
             }
             else
             {
-                Debug.LogError("[NQMC] TimerManagerÒıÓÃÎª¿Õ£¬ÎŞ·¨Æô¶¯¼ÆÊ±Æ÷");
+                Debug.LogError("[NQMC] TimerManagerå¼•ç”¨ä¸ºç©ºï¼Œæ— æ³•å¯åŠ¨è®¡æ—¶å™¨");
             }
         }
 
         /// <summary>
-        /// Æô¶¯¹Û²ìÕß¼ÆÊ±Æ÷£¨Ö»¶ÁÄ£Ê½£©
+        /// å¯åŠ¨è§‚å¯Ÿè€…è®¡æ—¶å™¨ï¼ˆåªè¯»æ¨¡å¼ï¼‰
         /// </summary>
         private void StartObserverTimer(float timeLimit)
         {
@@ -378,24 +453,24 @@ namespace Core.Network
                 var startReadOnlyMethod = timerManager.GetType().GetMethod("StartReadOnlyTimer");
                 if (startReadOnlyMethod != null)
                 {
-                    LogDebug($"Æô¶¯Ö»¶Á¼ÆÊ±Æ÷: {timeLimit}Ãë");
+                    LogDebug($"å¯åŠ¨åªè¯»è®¡æ—¶å™¨: {timeLimit}ç§’");
                     startReadOnlyMethod.Invoke(timerManager, new object[] { timeLimit });
                 }
                 else
                 {
-                    LogDebug("TimerManager²»Ö§³ÖÖ»¶ÁÄ£Ê½£¬Ìø¹ı¼ÆÊ±Æ÷Æô¶¯");
+                    LogDebug("TimerManagerä¸æ”¯æŒåªè¯»æ¨¡å¼ï¼Œè·³è¿‡è®¡æ—¶å™¨å¯åŠ¨");
                 }
             }
         }
 
         /// <summary>
-        /// ³¢ÊÔÍ¨¹ıTimerConfigÉèÖÃÊ±¼äÏŞÖÆ
+        /// å°è¯•é€šè¿‡TimerConfigè®¾ç½®æ—¶é—´é™åˆ¶
         /// </summary>
         private void TrySetTimerThroughConfig(float timeLimit)
         {
             try
             {
-                LogDebug($"³¢ÊÔÍ¨¹ıÅäÖÃ¹ÜÀíÆ÷ÉèÖÃÊ±¼äÏŞÖÆ: {timeLimit}Ãë");
+                LogDebug($"å°è¯•é€šè¿‡é…ç½®ç®¡ç†å™¨è®¾ç½®æ—¶é—´é™åˆ¶: {timeLimit}ç§’");
 
                 if (TimerConfigManager.Config != null)
                 {
@@ -403,7 +478,7 @@ namespace Core.Network
                     if (setTempTimeMethod != null)
                     {
                         setTempTimeMethod.Invoke(null, new object[] { timeLimit });
-                        LogDebug("Í¨¹ıTimerConfigManagerÉèÖÃÁÙÊ±Ê±¼äÏŞÖÆ³É¹¦");
+                        LogDebug("é€šè¿‡TimerConfigManagerè®¾ç½®ä¸´æ—¶æ—¶é—´é™åˆ¶æˆåŠŸ");
                         return;
                     }
 
@@ -411,21 +486,21 @@ namespace Core.Network
                     if (applyConfigMethod != null)
                     {
                         applyConfigMethod.Invoke(timerManager, new object[] { timeLimit });
-                        LogDebug("Í¨¹ıApplyConfigÉèÖÃÊ±¼äÏŞÖÆ³É¹¦");
+                        LogDebug("é€šè¿‡ApplyConfigè®¾ç½®æ—¶é—´é™åˆ¶æˆåŠŸ");
                         return;
                     }
                 }
 
-                Debug.LogWarning($"[NQMC] ÎŞ·¨ÉèÖÃ¶¯Ì¬Ê±¼äÏŞÖÆ£¬½«Ê¹ÓÃÄ¬ÈÏÅäÖÃ");
+                Debug.LogWarning($"[NQMC] æ— æ³•è®¾ç½®åŠ¨æ€æ—¶é—´é™åˆ¶ï¼Œå°†ä½¿ç”¨é»˜è®¤é…ç½®");
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[NQMC] ÉèÖÃÊ±¼äÏŞÖÆÊ§°Ü: {e.Message}");
+                Debug.LogError($"[NQMC] è®¾ç½®æ—¶é—´é™åˆ¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ´´½¨ÌâÄ¿¹ÜÀíÆ÷£¨Ê¹ÓÃ¹¤³§£©
+        /// åˆ›å»ºé¢˜ç›®ç®¡ç†å™¨ï¼ˆä½¿ç”¨å·¥å‚ï¼‰
         /// </summary>
         private QuestionManagerBase CreateQuestionManager(QuestionType questionType, bool isNetworkMode)
         {
@@ -443,13 +518,13 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// ÇåÀíµ±Ç°ÌâÄ¿¹ÜÀíÆ÷
+        /// æ¸…ç†å½“å‰é¢˜ç›®ç®¡ç†å™¨
         /// </summary>
         private void CleanupCurrentManager()
         {
             if (currentManager != null)
             {
-                LogDebug($"ÇåÀíÌâÄ¿¹ÜÀíÆ÷: {currentManager.GetType().Name}");
+                LogDebug($"æ¸…ç†é¢˜ç›®ç®¡ç†å™¨: {currentManager.GetType().Name}");
 
                 currentManager.OnAnswerResult -= HandleNetworkAnswerSubmission;
                 QuestionManagerFactory.DestroyManager(currentManager);
@@ -459,14 +534,14 @@ namespace Core.Network
 
         #endregion
 
-        #region ´ğÌâ½á¹û´¦Àí
+        #region ç­”é¢˜ç»“æœå¤„ç†
 
         /// <summary>
-        /// ´¦ÀíÍøÂç´ğ°¸Ìá½»
+        /// å¤„ç†ç½‘ç»œç­”æ¡ˆæäº¤
         /// </summary>
         private void HandleNetworkAnswerSubmission(bool isCorrect)
         {
-            LogDebug("¶àÈËÄ£Ê½±¾µØ´ğÌâ£¬µÈ´ı·şÎñÆ÷È·ÈÏ");
+            LogDebug("å¤šäººæ¨¡å¼æœ¬åœ°ç­”é¢˜ï¼Œç­‰å¾…æœåŠ¡å™¨ç¡®è®¤");
 
             if (currentDisplayState == QuestionDisplayState.MyTurn)
             {
@@ -474,16 +549,22 @@ namespace Core.Network
             }
             else
             {
-                LogDebug("²»ÊÇÎÒµÄ»ØºÏ£¬ºöÂÔ´ğ°¸Ìá½»´¦Àí");
+                LogDebug("ä¸æ˜¯æˆ‘çš„å›åˆï¼Œå¿½ç•¥ç­”æ¡ˆæäº¤å¤„ç†");
             }
         }
 
         /// <summary>
-        /// ´¦Àí³¬Ê±
+        /// å¤„ç†è¶…æ—¶ï¼ˆä¿®å¤ç‰ˆï¼‰
         /// </summary>
         private void HandleTimeUp()
         {
-            LogDebug("´ğÌâ³¬Ê±");
+            if (currentDisplayState == QuestionDisplayState.GameEnded || !gameStarted)
+            {
+                LogDebug("æ¸¸æˆå·²ç»“æŸï¼Œå¿½ç•¥è¶…æ—¶å¤„ç†");
+                return;
+            }
+
+            LogDebug("ç­”é¢˜è¶…æ—¶");
 
             StopTimer();
 
@@ -492,99 +573,115 @@ namespace Core.Network
                 if (NetworkManager.Instance != null)
                 {
                     NetworkManager.Instance.SubmitAnswer("");
-                    LogDebug("³¬Ê±£¬Ìá½»¿Õ´ğ°¸");
+                    LogDebug("è¶…æ—¶ï¼Œæäº¤ç©ºç­”æ¡ˆ");
                 }
             }
         }
 
         #endregion
 
-        #region ÍøÂçÊÂ¼ş´¦Àí - ÓÉNetworkManager·´Éäµ÷ÓÃ
+        #region ç½‘ç»œäº‹ä»¶å¤„ç† - ç”±NetworkManageråå°„è°ƒç”¨
 
         /// <summary>
-        /// ½ÓÊÕµ½ÍøÂçÌâÄ¿
+        /// æ¥æ”¶åˆ°ç½‘ç»œé¢˜ç›®ï¼ˆä¿®å¤ç‰ˆï¼‰
         /// </summary>
         public void OnNetworkQuestionReceived(NetworkQuestionData question)
         {
-            LogDebug($"ÊÕµ½ÍøÂçÌâÄ¿: {question.questionType}, Ê±¼äÏŞÖÆ: {question.timeLimit}Ãë");
-            LogDebug($"µ±Ç°×´Ì¬: ÎÒµÄ»ØºÏ={isMyTurn}, »ØºÏID={currentTurnPlayerId}");
+            if (currentDisplayState == QuestionDisplayState.GameEnded || !gameStarted)
+            {
+                LogDebug("æ¸¸æˆå·²ç»“æŸï¼Œå¿½ç•¥é¢˜ç›®æ¥æ”¶");
+                return;
+            }
+
+            LogDebug($"æ”¶åˆ°ç½‘ç»œé¢˜ç›®: {question.questionType}, æ—¶é—´é™åˆ¶: {question.timeLimit}ç§’");
+            LogDebug($"å½“å‰çŠ¶æ€: æˆ‘çš„å›åˆ={isMyTurn}, å›åˆID={currentTurnPlayerId}");
 
             switch (currentDisplayState)
             {
                 case QuestionDisplayState.MyTurn:
-                    LogDebug("ÂÖµ½ÎÒ´ğÌâ£¬ÍêÕû¼ÓÔØÌâÄ¿");
+                    LogDebug("è½®åˆ°æˆ‘ç­”é¢˜ï¼Œå®Œæ•´åŠ è½½é¢˜ç›®");
                     LoadNetworkQuestion(question);
                     break;
 
                 case QuestionDisplayState.OtherPlayerTurn:
-                    LogDebug($"ÆäËûÍæ¼Ò»ØºÏ£¬ÏÔÊ¾ÌâÄ¿µ«²»¿É½»»¥ (µ±Ç°»ØºÏÍæ¼Ò: {currentTurnPlayerId})");
+                    LogDebug($"å…¶ä»–ç©å®¶å›åˆï¼Œæ˜¾ç¤ºé¢˜ç›®ä½†ä¸å¯äº¤äº’ (å½“å‰å›åˆç©å®¶: {currentTurnPlayerId})");
                     LoadNetworkQuestionAsObserver(question);
                     break;
 
                 case QuestionDisplayState.WaitingForGame:
-                    LogDebug("ÊÕµ½ÌâÄ¿µ«ÓÎÏ·×´Ì¬ÎªµÈ´ıÖĞ£¬¼ì²é»ØºÏ×´Ì¬");
+                    LogDebug("æ”¶åˆ°é¢˜ç›®ä½†æ¸¸æˆçŠ¶æ€ä¸ºç­‰å¾…ä¸­ï¼Œæ£€æŸ¥å›åˆçŠ¶æ€");
                     if (hasReceivedTurnChange && isMyTurn)
                     {
-                        LogDebug("»ØºÏ×´Ì¬È·ÈÏÎªÎÒµÄ»ØºÏ£¬¼ÓÔØÌâÄ¿");
+                        LogDebug("å›åˆçŠ¶æ€ç¡®è®¤ä¸ºæˆ‘çš„å›åˆï¼ŒåŠ è½½é¢˜ç›®");
                         currentDisplayState = QuestionDisplayState.MyTurn;
                         LoadNetworkQuestion(question);
                     }
                     else if (hasReceivedTurnChange && !isMyTurn)
                     {
-                        LogDebug("»ØºÏ×´Ì¬È·ÈÏÎªÆäËûÍæ¼Ò»ØºÏ£¬¹Û²ìÄ£Ê½¼ÓÔØÌâÄ¿");
+                        LogDebug("å›åˆçŠ¶æ€ç¡®è®¤ä¸ºå…¶ä»–ç©å®¶å›åˆï¼Œè§‚å¯Ÿæ¨¡å¼åŠ è½½é¢˜ç›®");
                         currentDisplayState = QuestionDisplayState.OtherPlayerTurn;
                         LoadNetworkQuestionAsObserver(question);
                     }
                     else
                     {
-                        LogDebug("ÉĞÎ´ÊÕµ½»ØºÏ±ä¸üĞÅÏ¢£¬»º´æÌâÄ¿");
+                        LogDebug("å°šæœªæ”¶åˆ°å›åˆå˜æ›´ä¿¡æ¯ï¼Œç¼“å­˜é¢˜ç›®");
                         currentNetworkQuestion = question;
                     }
                     break;
 
+                case QuestionDisplayState.GameEnded:
+                    LogDebug("æ¸¸æˆå·²ç»“æŸï¼Œå¿½ç•¥é¢˜ç›®");
+                    break;
+
                 default:
-                    LogDebug($"Î´Öª×´Ì¬ {currentDisplayState}£¬ºöÂÔÌâÄ¿");
+                    LogDebug($"æœªçŸ¥çŠ¶æ€ {currentDisplayState}ï¼Œå¿½ç•¥é¢˜ç›®");
                     break;
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕµ½ÍøÂç´ğ°¸½á¹û
+        /// æ¥æ”¶åˆ°ç½‘ç»œç­”æ¡ˆç»“æœ
         /// </summary>
         public void OnNetworkAnswerResult(bool isCorrect, string correctAnswer)
         {
-            LogDebug($"ÊÕµ½·şÎñÆ÷´ğÌâ½á¹û: {(isCorrect ? "ÕıÈ·" : "´íÎó")}");
+            LogDebug($"æ”¶åˆ°æœåŠ¡å™¨ç­”é¢˜ç»“æœ: {(isCorrect ? "æ­£ç¡®" : "é”™è¯¯")}");
 
             ShowAnswerFeedback(isCorrect, correctAnswer);
             OnAnswerCompleted?.Invoke(isCorrect);
         }
 
         /// <summary>
-        /// Íæ¼Ò»ØºÏ±ä¸ü
+        /// ç©å®¶å›åˆå˜æ›´ï¼ˆä¿®å¤ç‰ˆï¼‰
         /// </summary>
         public void OnNetworkPlayerTurnChanged(ushort playerId)
         {
+            if (currentDisplayState == QuestionDisplayState.GameEnded || !gameStarted)
+            {
+                LogDebug("æ¸¸æˆå·²ç»“æŸï¼Œå¿½ç•¥å›åˆå˜æ›´");
+                return;
+            }
+
             bool wasMyTurn = isMyTurn;
             currentTurnPlayerId = playerId;
             isMyTurn = (playerId == PhotonNetwork.LocalPlayer.ActorNumber);
             hasReceivedTurnChange = true;
 
-            LogDebug($"»ØºÏ±ä¸ü: {(isMyTurn ? "ÂÖµ½ÎÒÁË" : $"ÂÖµ½Íæ¼Ò{playerId}")}");
+            LogDebug($"å›åˆå˜æ›´: {(isMyTurn ? "è½®åˆ°æˆ‘äº†" : $"è½®åˆ°ç©å®¶{playerId}")}");
 
             if (isMyTurn)
             {
                 currentDisplayState = QuestionDisplayState.MyTurn;
-                LogDebug("×´Ì¬±ä¸üÎª£ºMyTurn");
+                LogDebug("çŠ¶æ€å˜æ›´ä¸ºï¼šMyTurn");
 
                 if (!wasMyTurn)
                 {
-                    LogDebug("ÂÖµ½ÎÒ´ğÌâ£¬µÈ´ıHostGameManager·¢ËÍÌâÄ¿");
+                    LogDebug("è½®åˆ°æˆ‘ç­”é¢˜ï¼Œç­‰å¾…HostGameManagerå‘é€é¢˜ç›®");
                 }
             }
             else
             {
                 currentDisplayState = QuestionDisplayState.OtherPlayerTurn;
-                LogDebug($"×´Ì¬±ä¸üÎª£ºOtherPlayerTurn (Íæ¼Ò{playerId})");
+                LogDebug($"çŠ¶æ€å˜æ›´ä¸ºï¼šOtherPlayerTurn (ç©å®¶{playerId})");
 
                 if (wasMyTurn)
                 {
@@ -595,38 +692,44 @@ namespace Core.Network
 
         #endregion
 
-        #region ÌâÄ¿¹ÜÀíÆ÷½Ó¿Ú
+        #region é¢˜ç›®ç®¡ç†å™¨æ¥å£
 
         /// <summary>
-        /// Ìá½»´ğ°¸
+        /// æäº¤ç­”æ¡ˆï¼ˆä¿®å¤ç‰ˆï¼‰
         /// </summary>
         public void SubmitAnswer(string answer)
         {
+            if (currentDisplayState == QuestionDisplayState.GameEnded || !gameStarted)
+            {
+                LogDebug("æ¸¸æˆå·²ç»“æŸï¼Œæ— æ³•æäº¤ç­”æ¡ˆ");
+                return;
+            }
+
             if (currentDisplayState != QuestionDisplayState.MyTurn)
             {
-                LogDebug($"²»ÊÇÎÒµÄ»ØºÏ£¬ÎŞ·¨Ìá½»´ğ°¸¡£µ±Ç°×´Ì¬: {currentDisplayState}");
+                LogDebug($"ä¸æ˜¯æˆ‘çš„å›åˆï¼Œæ— æ³•æäº¤ç­”æ¡ˆã€‚å½“å‰çŠ¶æ€: {currentDisplayState}");
                 return;
             }
 
             if (!isMyTurn)
             {
-                LogDebug("»ØºÏ×´Ì¬²»Æ¥Åä£¬ÎŞ·¨Ìá½»´ğ°¸");
+                LogDebug("å›åˆçŠ¶æ€ä¸åŒ¹é…ï¼Œæ— æ³•æäº¤ç­”æ¡ˆ");
                 return;
             }
 
             if (PhotonNetwork.IsConnected && PhotonNetwork.InRoom && NetworkManager.Instance != null)
             {
                 NetworkManager.Instance.SubmitAnswer(answer);
-                LogDebug($"Ìá½»ÍøÂç´ğ°¸: {answer}");
+                LogDebug($"æäº¤ç½‘ç»œç­”æ¡ˆ: {answer}");
             }
             else
             {
-                LogDebug("ÍøÂçÎ´Á¬½Ó»òNetworkManager²»¿ÉÓÃ£¬ÎŞ·¨Ìá½»´ğ°¸");
+                LogDebug("ç½‘ç»œæœªè¿æ¥æˆ–NetworkManagerä¸å¯ç”¨ï¼Œæ— æ³•æäº¤ç­”æ¡ˆ");
             }
         }
 
         /// <summary>
-        /// »ñÈ¡µ±Ç°ÌâÄ¿µÄÍøÂçÊı¾İ£¨¹©ÌâÄ¿¹ÜÀíÆ÷Ê¹ÓÃ£©
+        /// è·å–å½“å‰é¢˜ç›®çš„ç½‘ç»œæ•°æ®ï¼ˆä¾›é¢˜ç›®ç®¡ç†å™¨ä½¿ç”¨ï¼‰
         /// </summary>
         public NetworkQuestionData GetCurrentNetworkQuestion()
         {
@@ -635,95 +738,97 @@ namespace Core.Network
 
         #endregion
 
-        #region ¸¨Öú·½·¨
+        #region ç¦ç”¨ui
 
         /// <summary>
-        /// Í£Ö¹¼ÆÊ±Æ÷
+        /// ç¦ç”¨UIäº¤äº’
+        /// </summary>
+        private void DisableUIInteractions()
+        {
+            LogDebug("ç¦ç”¨æ‰€æœ‰UIäº¤äº’");
+
+            // ç¦ç”¨å½“å‰é¢˜ç›®ç®¡ç†å™¨çš„UIäº¤äº’
+            if (currentManager != null)
+            {
+                // å°è¯•é€šè¿‡åå°„ç¦ç”¨UIäº¤äº’
+                var disableMethod = currentManager.GetType().GetMethod("DisableUIInteraction",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (disableMethod != null)
+                {
+                    disableMethod.Invoke(currentManager, null);
+                    LogDebug("âœ“ é¢˜ç›®ç®¡ç†å™¨UIäº¤äº’å·²ç¦ç”¨");
+                }
+                else
+                {
+                    LogDebug("é¢˜ç›®ç®¡ç†å™¨ä¸æ”¯æŒDisableUIInteractionæ–¹æ³•");
+                }
+            }
+
+            // å¯ä»¥åœ¨è¿™é‡Œæ·»åŠ å…¶ä»–UIç¦ç”¨é€»è¾‘
+            LogDebug("UIäº¤äº’ç¦ç”¨å®Œæˆ");
+        }
+
+        #endregion
+
+        #region è¾…åŠ©æ–¹æ³•
+
+        /// <summary>
+        /// åœæ­¢è®¡æ—¶å™¨
         /// </summary>
         private void StopTimer()
         {
             if (timerManager != null)
             {
                 timerManager.StopTimer();
-                LogDebug("¼ÆÊ±Æ÷ÒÑÍ£Ö¹");
+                LogDebug("è®¡æ—¶å™¨å·²åœæ­¢");
             }
         }
 
         /// <summary>
-        /// ÏÔÊ¾´ğ°¸·´À¡
+        /// æ˜¾ç¤ºç­”æ¡ˆåé¦ˆ
         /// </summary>
         private void ShowAnswerFeedback(bool isCorrect, string correctAnswer)
         {
-            string feedback = isCorrect ? "»Ø´ğÕıÈ·£¡" : $"»Ø´ğ´íÎó£¬ÕıÈ·´ğ°¸ÊÇ£º{correctAnswer}";
-            LogDebug($"´ğÌâ·´À¡: {feedback}");
+            string feedback = isCorrect ? "å›ç­”æ­£ç¡®ï¼" : $"å›ç­”é”™è¯¯ï¼Œæ­£ç¡®ç­”æ¡ˆæ˜¯ï¼š{correctAnswer}";
+            LogDebug($"ç­”é¢˜åé¦ˆ: {feedback}");
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[NQMC-Pure] {message}");
+                Debug.Log($"[NQMC-Fixed] {message}");
             }
         }
 
         #endregion
 
-        #region ×´Ì¬²éÑ¯ºÍµ÷ÊÔ
-
-        /// <summary>
-        /// »ñÈ¡×´Ì¬ĞÅÏ¢
-        /// </summary>
+        #region çŠ¶æ€æŸ¥è¯¢å’Œè°ƒè¯•
         public string GetStatusInfo()
         {
-            var info = "=== NQMC (´¿¶àÈË°æ) ×´Ì¬ ===\n";
-            info += $"ÒÑ³õÊ¼»¯: {isInitialized}\n";
-            info += $"ÓÎÏ·ÒÑ¿ªÊ¼: {gameStarted}\n";
-            info += $"ÎÒµÄ»ØºÏ: {isMyTurn}\n";
-            info += $"ÏÔÊ¾×´Ì¬: {currentDisplayState}\n";
-            info += $"µ±Ç°»ØºÏÍæ¼ÒID: {currentTurnPlayerId}\n";
-            info += $"ÒÑÊÕµ½»ØºÏ±ä¸ü: {hasReceivedTurnChange}\n";
-            info += $"µ±Ç°¹ÜÀíÆ÷: {(currentManager != null ? currentManager.GetType().Name : "ÎŞ")}\n";
+            var info = "=== NQMC (ä¿®å¤ç‰ˆ) çŠ¶æ€ ===\n";
+            info += $"å·²åˆå§‹åŒ–: {isInitialized}\n";
+            info += $"æ¸¸æˆå·²å¼€å§‹: {gameStarted}\n";
+            info += $"æˆ‘çš„å›åˆ: {isMyTurn}\n";
+            info += $"æ˜¾ç¤ºçŠ¶æ€: {currentDisplayState}\n";
+            info += $"å½“å‰å›åˆç©å®¶ID: {currentTurnPlayerId}\n";
+            info += $"å·²æ”¶åˆ°å›åˆå˜æ›´: {hasReceivedTurnChange}\n";
+            info += $"å½“å‰ç®¡ç†å™¨: {(currentManager != null ? currentManager.GetType().Name : "æ— ")}\n";
 
-            // PhotonÍøÂç×´Ì¬
-            info += $"PhotonÁ¬½Ó: {PhotonNetwork.IsConnected}\n";
-            info += $"ÔÚ·¿¼äÖĞ: {PhotonNetwork.InRoom}\n";
-            info += $"ÎÒµÄActorNumber: {(PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0)}\n";
-            info += $"ÊÇ·ñMasterClient: {PhotonNetwork.IsMasterClient}\n";
+            // Photonç½‘ç»œçŠ¶æ€
+            info += $"Photonè¿æ¥: {PhotonNetwork.IsConnected}\n";
+            info += $"åœ¨æˆ¿é—´ä¸­: {PhotonNetwork.InRoom}\n";
+            info += $"æˆ‘çš„ActorNumber: {(PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0)}\n";
+            info += $"æ˜¯å¦MasterClient: {PhotonNetwork.IsMasterClient}\n";
 
             if (timerManager != null)
-                info += $"¼ÆÊ±Æ÷×´Ì¬: {(timerManager.IsRunning ? "ÔËĞĞÖĞ" : "ÒÑÍ£Ö¹")}\n";
+                info += $"è®¡æ—¶å™¨çŠ¶æ€: {(timerManager.IsRunning ? "è¿è¡Œä¸­" : "å·²åœæ­¢")}\n";
 
             return info;
-        }
-
-        /// <summary>
-        /// ÖØÖÃ×´Ì¬£¨µ÷ÊÔÓÃ£©
-        /// </summary>
-        [ContextMenu("ÖØÖÃ×´Ì¬")]
-        public void ResetState()
-        {
-            if (Application.isPlaying)
-            {
-                LogDebug("ÖØÖÃ×´Ì¬");
-                StopGame();
-                CleanupCurrentManager();
-                currentNetworkQuestion = null;
-            }
-        }
-
-        /// <summary>
-        /// ÏÔÊ¾µ±Ç°×´Ì¬£¨µ÷ÊÔÓÃ£©
-        /// </summary>
-        [ContextMenu("ÏÔÊ¾µ±Ç°×´Ì¬")]
-        public void ShowCurrentStatus()
-        {
-            if (Application.isPlaying)
-            {
-                Debug.Log(GetStatusInfo());
-            }
         }
 
         #endregion
