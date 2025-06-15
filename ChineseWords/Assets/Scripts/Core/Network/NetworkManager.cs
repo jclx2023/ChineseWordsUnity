@@ -59,6 +59,16 @@ namespace Core.Network
         public static event Action<ushort> OnPlayerLeft;
         public static event Action<ushort, bool> OnPlayerReadyChanged;
 
+        //卡牌事件
+        public static event Action<ushort, int, ushort, string> OnCardUsed; // 使用者ID, 卡牌ID, 目标ID, 卡牌名称
+        public static event Action<ushort, string> OnCardEffectTriggered; // 玩家ID, 效果描述
+        public static event Action<ushort, int> OnCardAdded; // 玩家ID, 卡牌ID
+        public static event Action<ushort, int> OnCardRemoved; // 玩家ID, 卡牌ID
+        public static event Action<ushort, int> OnHandSizeChanged; // 玩家ID, 新手牌数量
+        public static event Action<string, ushort> OnCardMessage; // 消息内容, 来源玩家ID
+        public static event Action<ushort, int, ushort> OnCardTransferred; // 从玩家ID, 卡牌ID, 到玩家ID
+
+
         #endregion
 
         #region Unity生命周期
@@ -404,6 +414,128 @@ namespace Core.Network
             StartCoroutine(HandleReturnToRoom(reason));
         }
 
+        //卡牌相关RPC
+        [PunRPC]
+        void OnCardUsed_RPC(int playerId, int cardId, int targetPlayerId, string cardName)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            ushort targetPlayerIdUShort = (ushort)targetPlayerId;
+
+            LogDebug($"收到卡牌使用RPC: 玩家{playerIdUShort}使用{cardName}(ID:{cardId}), 目标:{targetPlayerIdUShort}");
+
+            // 触发静态事件
+            OnCardUsed?.Invoke(playerIdUShort, cardId, targetPlayerIdUShort, cardName);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnCardUsedReceived(playerIdUShort, cardId, targetPlayerIdUShort, cardName);
+            }
+        }
+
+        [PunRPC]
+        void OnCardEffectTriggered_RPC(int playerId, string effectDescription)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+
+            LogDebug($"收到卡牌效果RPC: 玩家{playerIdUShort} - {effectDescription}");
+
+            // 触发静态事件
+            OnCardEffectTriggered?.Invoke(playerIdUShort, effectDescription);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnCardEffectTriggeredReceived(playerIdUShort, effectDescription);
+            }
+        }
+
+        [PunRPC]
+        void OnCardAdded_RPC(int playerId, int cardId)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+
+            LogDebug($"收到卡牌添加RPC: 玩家{playerIdUShort}获得卡牌{cardId}");
+
+            // 触发静态事件
+            OnCardAdded?.Invoke(playerIdUShort, cardId);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnCardAddedReceived(playerIdUShort, cardId);
+            }
+        }
+
+        [PunRPC]
+        void OnCardRemoved_RPC(int playerId, int cardId)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+
+            LogDebug($"收到卡牌移除RPC: 玩家{playerIdUShort}失去卡牌{cardId}");
+
+            // 触发静态事件
+            OnCardRemoved?.Invoke(playerIdUShort, cardId);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnCardRemovedReceived(playerIdUShort, cardId);
+            }
+        }
+
+        [PunRPC]
+        void OnHandSizeChanged_RPC(int playerId, int newHandSize)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+
+            LogDebug($"收到手牌变化RPC: 玩家{playerIdUShort}手牌数量:{newHandSize}");
+
+            // 触发静态事件
+            OnHandSizeChanged?.Invoke(playerIdUShort, newHandSize);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnHandSizeChangedReceived(playerIdUShort, newHandSize);
+            }
+        }
+
+        [PunRPC]
+        void OnCardMessage_RPC(string message, int fromPlayerId)
+        {
+            ushort fromPlayerIdUShort = (ushort)fromPlayerId;
+
+            LogDebug($"收到卡牌消息RPC: {message} (来自玩家{fromPlayerIdUShort})");
+
+            // 触发静态事件
+            OnCardMessage?.Invoke(message, fromPlayerIdUShort);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnCardMessageReceived(message, fromPlayerIdUShort);
+            }
+        }
+
+        [PunRPC]
+        void OnCardTransferred_RPC(int fromPlayerId, int cardId, int toPlayerId)
+        {
+            ushort fromPlayerIdUShort = (ushort)fromPlayerId;
+            ushort toPlayerIdUShort = (ushort)toPlayerId;
+
+            LogDebug($"收到卡牌转移RPC: 卡牌{cardId}从玩家{fromPlayerIdUShort}转移到玩家{toPlayerIdUShort}");
+
+            // 触发静态事件
+            OnCardTransferred?.Invoke(fromPlayerIdUShort, cardId, toPlayerIdUShort);
+
+            // 转发给CardNetworkManager（如果存在）
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                Cards.Network.CardNetworkManager.Instance.OnCardTransferredReceived(fromPlayerIdUShort, cardId, toPlayerIdUShort);
+            }
+        }
+
         #endregion
 
         #region Host专用RPC发送方法 - 修复版：统一使用 RpcTarget.All
@@ -610,6 +742,119 @@ namespace Core.Network
             {
                 persistentManager.photonView.RPC("OnForceReturnToRoom_RPC", RpcTarget.All, reason);
                 LogDebug($"✓ 广播强制返回房间到所有玩家: {reason}");
+            }
+        }
+
+        //卡牌相关
+        /// <summary>
+        /// 广播卡牌使用（Host → All）
+        /// </summary>
+        public void BroadcastCardUsed(ushort playerId, int cardId, ushort targetPlayerId, string cardName)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnCardUsed_RPC", RpcTarget.All,
+                    (int)playerId, cardId, (int)targetPlayerId, cardName);
+                LogDebug($"✓ 广播卡牌使用: 玩家{playerId}使用{cardName}, 目标:{targetPlayerId}");
+            }
+        }
+
+        /// <summary>
+        /// 广播卡牌效果触发（Host → All）
+        /// </summary>
+        public void BroadcastCardEffectTriggered(ushort playerId, string effectDescription)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnCardEffectTriggered_RPC", RpcTarget.All,
+                    (int)playerId, effectDescription);
+                LogDebug($"✓ 广播卡牌效果: 玩家{playerId} - {effectDescription}");
+            }
+        }
+
+        /// <summary>
+        /// 广播卡牌添加（Host → All）
+        /// </summary>
+        public void BroadcastCardAdded(ushort playerId, int cardId)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnCardAdded_RPC", RpcTarget.All,
+                    (int)playerId, cardId);
+                LogDebug($"✓ 广播卡牌添加: 玩家{playerId}获得卡牌{cardId}");
+            }
+        }
+
+        /// <summary>
+        /// 广播卡牌移除（Host → All）
+        /// </summary>
+        public void BroadcastCardRemoved(ushort playerId, int cardId)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnCardRemoved_RPC", RpcTarget.All,
+                    (int)playerId, cardId);
+                LogDebug($"✓ 广播卡牌移除: 玩家{playerId}失去卡牌{cardId}");
+            }
+        }
+
+        /// <summary>
+        /// 广播手牌数量变化（Host → All）
+        /// </summary>
+        public void BroadcastHandSizeChanged(ushort playerId, int newHandSize)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnHandSizeChanged_RPC", RpcTarget.All,
+                    (int)playerId, newHandSize);
+                LogDebug($"✓ 广播手牌变化: 玩家{playerId}手牌数量:{newHandSize}");
+            }
+        }
+
+        /// <summary>
+        /// 广播卡牌消息（Host → All）
+        /// </summary>
+        public void BroadcastCardMessage(string message, ushort fromPlayerId)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnCardMessage_RPC", RpcTarget.All,
+                    message, (int)fromPlayerId);
+                LogDebug($"✓ 广播卡牌消息: {message} (来自玩家{fromPlayerId})");
+            }
+        }
+
+        /// <summary>
+        /// 广播卡牌转移（Host → All）
+        /// </summary>
+        public void BroadcastCardTransferred(ushort fromPlayerId, int cardId, ushort toPlayerId)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnCardTransferred_RPC", RpcTarget.All,
+                    (int)fromPlayerId, cardId, (int)toPlayerId);
+                LogDebug($"✓ 广播卡牌转移: 卡牌{cardId}从玩家{fromPlayerId}转移到玩家{toPlayerId}");
             }
         }
         #endregion

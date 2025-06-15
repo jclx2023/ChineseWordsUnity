@@ -55,6 +55,13 @@ MonoBehaviour:
   - OnGameVictory_RPC
   - OnPlayerDeath_RPC
   - OnReturnToRoomRequest_RPC
+  - OnCardAdded_RPC
+  - OnCardEffectTriggered_RPC
+  - OnCardMessage_RPC
+  - OnCardRemoved_RPC
+  - OnCardTransferred_RPC
+  - OnCardUsed_RPC
+  - OnHandSizeChanged_RPC
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
