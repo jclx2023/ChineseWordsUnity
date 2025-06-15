@@ -18,7 +18,7 @@ namespace Lobby.Core
         [Header("场景配置")]
         [SerializeField] private string mainMenuSceneName = "MainMenuScene";
         [SerializeField] private string roomSceneName = "RoomScene";
-        [SerializeField] private float roomJoinTransitionDelay = 1f;
+        [SerializeField] private float roomJoinTransitionDelay = 0.5f;
 
         [Header("数据持久化")]
         [SerializeField] private bool persistPlayerData = true;

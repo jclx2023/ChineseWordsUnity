@@ -506,22 +506,6 @@ namespace Lobby.Core
             }
         }
 
-        /// <summary>
-        /// 断开连接
-        /// </summary>
-        public void Disconnect()
-        {
-            LogDebug("断开网络连接");
-
-            if (PhotonNetworkAdapter.Instance != null)
-            {
-                if (GetRealLobbyStatus())
-                {
-                    PhotonNetworkAdapter.Instance.LeavePhotonLobby();
-                }
-                PhotonNetworkAdapter.Instance.DisconnectPhoton();
-            }
-        }
 
         #endregion
 

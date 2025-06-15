@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 using System.Collections.Generic;
 using Lobby.Core;
 using Lobby.Data;
@@ -23,6 +24,10 @@ namespace Lobby.UI
         [Header("UI配置")]
         [SerializeField] private int maxDisplayRooms = 20;
 
+        [Header("自动刷新配置")]
+        [SerializeField] private bool enableAutoRefresh = true;
+        [SerializeField] private float autoRefreshInterval = 5f; // 默认5秒刷新一次
+
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
@@ -33,16 +38,26 @@ namespace Lobby.UI
         // UI状态
         private bool isInitialized = false;
 
+        // 自动刷新
+        private Coroutine autoRefreshCoroutine;
+
         #region Unity生命周期
 
         private void Start()
         {
             InitializeUI();
             SubscribeToEvents();
+
+            // 启动自动刷新
+            if (enableAutoRefresh)
+            {
+                StartAutoRefresh();
+            }
         }
 
         private void OnDestroy()
         {
+            StopAutoRefresh();
             UnsubscribeFromEvents();
             ClearRoomItems();
         }
@@ -156,6 +171,49 @@ namespace Lobby.UI
                 LobbyNetworkManager.Instance.OnRoomListUpdated -= OnRoomListUpdated;
                 LobbyNetworkManager.Instance.OnConnectionStatusChanged -= OnConnectionStatusChanged;
                 LogDebug("已取消订阅网络事件");
+            }
+        }
+
+        #endregion
+
+        #region 自动刷新
+
+        /// <summary>
+        /// 启动自动刷新
+        /// </summary>
+        private void StartAutoRefresh()
+        {
+            StopAutoRefresh();
+            autoRefreshCoroutine = StartCoroutine(AutoRefreshCoroutine());
+            LogDebug($"自动刷新已启动，间隔: {autoRefreshInterval}秒");
+        }
+
+        /// <summary>
+        /// 停止自动刷新
+        /// </summary>
+        private void StopAutoRefresh()
+        {
+            if (autoRefreshCoroutine != null)
+            {
+                StopCoroutine(autoRefreshCoroutine);
+                autoRefreshCoroutine = null;
+            }
+        }
+
+        /// <summary>
+        /// 自动刷新协程
+        /// </summary>
+        private IEnumerator AutoRefreshCoroutine()
+        {
+            while (true)
+            {
+                yield return new WaitForSeconds(autoRefreshInterval);
+
+                if (LobbyNetworkManager.Instance != null)
+                {
+                    LobbyNetworkManager.Instance.RefreshRoomList();
+                    LogDebug("执行自动刷新");
+                }
             }
         }
 
@@ -315,66 +373,13 @@ namespace Lobby.UI
 
         #endregion
 
-        #region 公共接口
-
-        /// <summary>
-        /// 强制刷新房间列表
-        /// </summary>
-        public void ForceRefresh()
-        {
-            OnRefreshButtonClicked();
-        }
-
-        /// <summary>
-        /// 获取当前显示的房间数量
-        /// </summary>
-        public int GetDisplayedRoomCount()
-        {
-            return roomItems.Count;
-        }
-
-        /// <summary>
-        /// 检查是否有可加入的房间
-        /// </summary>
-        public bool HasJoinableRooms()
-        {
-            foreach (var room in currentRoomList)
-            {
-                if (room.CanJoin())
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        #endregion
-
         #region 调试方法
-
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
             {
                 Debug.Log($"[LobbyRoomListUI] {message}");
             }
-        }
-
-        [ContextMenu("显示房间列表状态")]
-        public void ShowRoomListStatus()
-        {
-            string status = "=== 房间列表UI状态 ===\n";
-            status += $"UI已初始化: {isInitialized}\n";
-            status += $"房间列表容器: {(roomListContent != null ? "✓" : "✗")}\n";
-            status += $"房间项预制体: {(roomItemPrefab != null ? "✓" : "✗")}\n";
-            status += $"当前房间数: {currentRoomList.Count}\n";
-            status += $"显示房间项数: {roomItems.Count}\n";
-            status += $"可加入房间: {HasJoinableRooms()}";
-
-            LogDebug(status);
         }
 
         #endregion
