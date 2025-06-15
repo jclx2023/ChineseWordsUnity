@@ -387,30 +387,6 @@ namespace Core.Network
             return new List<RoomInfo>(cachedRoomList);
         }
 
-        public int GetPhotonRoomCount()
-        {
-            return cachedRoomList.Count;
-        }
-
-        public RoomInfo FindRoomByName(string roomName)
-        {
-            if (string.IsNullOrEmpty(roomName))
-                return null;
-
-            foreach (var room in cachedRoomList)
-            {
-                if (room.Name == roomName)
-                    return room;
-            }
-
-            return null;
-        }
-
-        public void ClearRoomListCache()
-        {
-            cachedRoomList.Clear();
-            LogDebug("房间列表缓存已清空");
-        }
 
         /// <summary>
         /// 更新缓存的房间列表
