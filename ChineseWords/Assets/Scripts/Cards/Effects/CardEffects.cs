@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Cards.Core;
+using Cards.Integration;
 
 namespace Cards.Effects
 {
     /// <summary>
     /// 所有卡牌效果的具体实现
-    /// 简化版，只实现基础功能
+    /// 已更新 - 集成CardGameBridge，替换所有TODO
     /// </summary>
 
     #region 生命值类效果
@@ -18,17 +19,25 @@ namespace Cards.Effects
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // TODO: 与PlayerHealthManager集成
-            // PlayerHealthManager.Instance.AddHealth(request.userId, (int)cardData.effectValue);
+            // 通过CardGameBridge修改玩家生命值
+            bool success = CardGameBridge.ModifyPlayerHealth(request.userId, (int)cardData.effectValue);
 
-            CardUtilities.LogDebug($"玩家{request.userId}回复{cardData.effectValue}点生命值");
-            return new CardEffectResult(true, $"回复了{cardData.effectValue}点生命值");
+            if (success)
+            {
+                CardUtilities.LogDebug($"玩家{request.userId}回复{cardData.effectValue}点生命值");
+                return new CardEffectResult(true, $"回复了{cardData.effectValue}点生命值");
+            }
+            else
+            {
+                CardUtilities.LogDebug($"玩家{request.userId}回血失败 - 可能已满血或已死亡");
+                return new CardEffectResult(false, "回血失败");
+            }
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // TODO: 检查玩家是否还活着，是否已满血
-            return true;
+            // 检查玩家是否还活着
+            return CardGameBridge.IsPlayerAlive(request.userId);
         }
 
         public string GetDescription(CardData cardData)
@@ -63,8 +72,8 @@ namespace Cards.Effects
 
         private void SetDamageMultiplier(float multiplier)
         {
-            // TODO: 与游戏系统集成，设置伤害倍数
-            // GameManager.Instance.SetNextDamageMultiplier(multiplier);
+            // 通过CardGameBridge设置全局伤害倍数
+            CardGameBridge.SetGlobalDamageMultiplier(multiplier);
         }
     }
 
@@ -98,8 +107,8 @@ namespace Cards.Effects
 
         private void SetTimeBonus(int playerId, float bonusTime)
         {
-            // TODO: 与TimerManager集成
-            // TimerManager.Instance.SetTimeBonusForPlayer(playerId, bonusTime);
+            // 通过CardGameBridge设置时间加成
+            CardGameBridge.SetPlayerTimeBonus(playerId, bonusTime);
         }
     }
 
@@ -119,8 +128,10 @@ namespace Cards.Effects
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // 检查目标玩家是否有效
-            return request.targetPlayerId > 0 && request.targetPlayerId != request.userId;
+            // 检查目标玩家是否有效且存活
+            return request.targetPlayerId > 0 &&
+                   request.targetPlayerId != request.userId &&
+                   CardGameBridge.IsPlayerAlive(request.targetPlayerId);
         }
 
         public string GetDescription(CardData cardData)
@@ -130,8 +141,8 @@ namespace Cards.Effects
 
         private void SetTimePenalty(int playerId, float penaltyTime)
         {
-            // TODO: 与TimerManager集成
-            // TimerManager.Instance.SetTimePenaltyForPlayer(playerId, penaltyTime);
+            // 通过CardGameBridge设置时间减成
+            CardGameBridge.SetPlayerTimePenalty(playerId, penaltyTime);
         }
     }
 
@@ -165,8 +176,8 @@ namespace Cards.Effects
 
         private void SetSkipFlag(int playerId)
         {
-            // TODO: 与回合管理系统集成
-            // TurnManager.Instance.SetSkipFlagForPlayer(playerId);
+            // 通过CardGameBridge设置跳过标记
+            CardGameBridge.SetPlayerSkipFlag(playerId, true);
         }
     }
 
@@ -196,8 +207,8 @@ namespace Cards.Effects
 
         private void SetNextQuestionType(int playerId, string questionType)
         {
-            // TODO: 与题目管理器集成
-            // QuestionManager.Instance.SetNextQuestionTypeForPlayer(playerId, questionType);
+            // 通过CardGameBridge设置下次题目类型
+            CardGameBridge.SetPlayerNextQuestionType(playerId, questionType);
         }
     }
 
@@ -227,8 +238,8 @@ namespace Cards.Effects
 
         private void SetNextQuestionType(int playerId, string questionType)
         {
-            // TODO: 与题目管理器集成
-            // QuestionManager.Instance.SetNextQuestionTypeForPlayer(playerId, questionType);
+            // 通过CardGameBridge设置下次题目类型
+            CardGameBridge.SetPlayerNextQuestionType(playerId, questionType);
         }
     }
 
@@ -248,8 +259,10 @@ namespace Cards.Effects
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // 检查目标玩家是否有效且不是自己
-            return request.targetPlayerId > 0 && request.targetPlayerId != request.userId;
+            // 检查目标玩家是否有效且不是自己，并且存活
+            return request.targetPlayerId > 0 &&
+                   request.targetPlayerId != request.userId &&
+                   CardGameBridge.IsPlayerAlive(request.targetPlayerId);
         }
 
         public string GetDescription(CardData cardData)
@@ -259,8 +272,8 @@ namespace Cards.Effects
 
         private void SetAnswerDelegate(int originalPlayerId, int delegatePlayerId)
         {
-            // TODO: 与回合管理系统集成
-            // TurnManager.Instance.SetAnswerDelegate(originalPlayerId, delegatePlayerId);
+            // 通过CardGameBridge设置答题代理
+            CardGameBridge.SetAnswerDelegate(originalPlayerId, delegatePlayerId);
         }
     }
 
@@ -294,40 +307,60 @@ namespace Cards.Effects
 
         private void SetExtraHintFlag(int playerId)
         {
-            // TODO: 与UI系统集成
-            // UIManager.Instance.SetExtraHintForPlayer(playerId);
+            // 通过CardGameBridge设置额外提示标记
+            CardGameBridge.SetPlayerExtraHint(playerId, true);
         }
     }
 
     /// <summary>
-    /// 获得卡牌效果 - 包括随机获得和"烫手山芋"
+    /// 统一的卡牌操作效果 - 处理所有 EffectType.GetCard 的情况
+    /// 通过 effectValue 和 targetType 区分不同行为
     /// </summary>
-    public class DrawCardEffect : ICardEffect
+    public class CardManipulationEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            int cardCount = (int)cardData.effectValue;
+            int effectValue = (int)cardData.effectValue;
 
-            if (cardCount > 0)
+            // 根据 effectValue 和 targetType 判断具体行为
+            if (effectValue < 0)
             {
-                // 普通获得卡牌
-                DrawCardsForPlayer(request.userId, cardCount);
-                CardUtilities.LogDebug($"玩家{request.userId}获得{cardCount}张卡牌");
-                return new CardEffectResult(true, $"获得了{cardCount}张卡牌");
+                // effectValue < 0: 偷取卡牌 ("借下橡皮")
+                return ExecuteStealCard(request, cardData);
+            }
+            else if (cardData.targetType == TargetType.Self && effectValue > 0)
+            {
+                // targetType = Self + effectValue > 0: 自己获得随机卡牌
+                return ExecuteDrawRandomCards(request, cardData);
+            }
+            else if (cardData.targetType == TargetType.Self && effectValue == 0)
+            {
+                // 特殊情况: "烫手山芋" - 获得特定卡牌
+                return ExecuteDrawSpecificCards(request, cardData);
             }
             else
             {
-                // 这是"烫手山芋"，获得特定卡牌
-                DrawSpecificCard(request.userId, 3, 2); // 获得2张加倍卡(ID=3)
-                CardUtilities.LogDebug($"玩家{request.userId}获得2张加倍卡");
-                return new CardEffectResult(true, "获得了2张加倍卡");
+                // 默认情况: 普通获得卡牌
+                return ExecuteDrawRandomCards(request, cardData);
             }
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // TODO: 检查手牌是否已满
-            return true;
+            int effectValue = (int)cardData.effectValue;
+
+            if (effectValue < 0)
+            {
+                // 偷取卡牌: 需要有效的目标玩家
+                return request.targetPlayerId > 0 &&
+                       request.targetPlayerId != request.userId &&
+                       CardGameBridge.IsPlayerAlive(request.targetPlayerId);
+            }
+            else
+            {
+                // 获得卡牌: 总是可以使用（手牌满了也会在桥接器中处理）
+                return true;
+            }
         }
 
         public string GetDescription(CardData cardData)
@@ -335,34 +368,23 @@ namespace Cards.Effects
             return cardData.description;
         }
 
-        private void DrawCardsForPlayer(int playerId, int count)
-        {
-            // TODO: 与卡牌管理系统集成
-            // CardSystemManager.Instance.DrawCardsForPlayer(playerId, count);
-        }
+        #region 具体行为实现
 
-        private void DrawSpecificCard(int playerId, int cardId, int count)
+        /// <summary>
+        /// 执行偷取卡牌
+        /// </summary>
+        private CardEffectResult ExecuteStealCard(CardUseRequest request, CardData cardData)
         {
-            // TODO: 与卡牌管理系统集成
-            // CardSystemManager.Instance.AddSpecificCardToPlayer(playerId, cardId, count);
-        }
-    }
-
-    /// <summary>
-    /// 偷取卡牌效果 - "借下橡皮"
-    /// 从目标玩家手牌中随机偷取一张卡牌到自己手中
-    /// </summary>
-    public class StealCardEffect : ICardEffect
-    {
-        public CardEffectResult Execute(CardUseRequest request, CardData cardData)
-        {
-            // 从目标玩家手牌中偷取一张卡牌到自己手中
-            var stolenCard = StealRandomCardFromPlayer(request.targetPlayerId, request.userId);
+            var stolenCard = CardGameBridge.StealRandomCardFromPlayer(request.targetPlayerId, request.userId);
 
             if (stolenCard.HasValue)
             {
                 CardUtilities.LogDebug($"玩家{request.userId}从玩家{request.targetPlayerId}偷取了卡牌{stolenCard.Value}");
-                return new CardEffectResult(true, "成功偷取了目标玩家的一张卡牌");
+
+                var stolenCardData = CardGameBridge.GetCardDataById(stolenCard.Value);
+                string cardName = stolenCardData?.cardName ?? "未知卡牌";
+
+                return new CardEffectResult(true, $"成功偷取了目标玩家的一张卡牌：{cardName}");
             }
             else
             {
@@ -371,30 +393,47 @@ namespace Cards.Effects
             }
         }
 
-        public bool CanUse(CardUseRequest request, CardData cardData)
+        /// <summary>
+        /// 执行获得随机卡牌
+        /// </summary>
+        private CardEffectResult ExecuteDrawRandomCards(CardUseRequest request, CardData cardData)
         {
-            // 检查目标玩家是否有效且不是自己
-            if (request.targetPlayerId <= 0 || request.targetPlayerId == request.userId)
+            int cardCount = (int)cardData.effectValue;
+            bool success = CardGameBridge.GiveCardToPlayer(request.userId, 0, cardCount); // cardId=0表示随机
+
+            CardUtilities.LogDebug($"玩家{request.userId}获得{cardCount}张随机卡牌，成功:{success}");
+
+            if (success)
             {
-                return false;
+                return new CardEffectResult(true, $"获得了{cardCount}张卡牌");
             }
-
-            // TODO: 检查目标玩家是否有卡牌，自己手牌是否已满
-            // return HasCards(request.targetPlayerId) && !IsHandFull(request.userId);
-            return true;
+            else
+            {
+                return new CardEffectResult(false, "手牌已满，无法获得更多卡牌");
+            }
         }
 
-        public string GetDescription(CardData cardData)
+        /// <summary>
+        /// 执行获得特定卡牌（烫手山芋）
+        /// </summary>
+        private CardEffectResult ExecuteDrawSpecificCards(CardUseRequest request, CardData cardData)
         {
-            return cardData.description;
+            // "烫手山芋"：获得2张加倍卡(ID=3)
+            bool success = CardGameBridge.GiveCardToPlayer(request.userId, 3, 2);
+
+            CardUtilities.LogDebug($"玩家{request.userId}获得2张加倍卡，成功:{success}");
+
+            if (success)
+            {
+                return new CardEffectResult(true, "获得了2张加倍卡");
+            }
+            else
+            {
+                return new CardEffectResult(false, "手牌已满，无法获得加倍卡");
+            }
         }
 
-        private int? StealRandomCardFromPlayer(int fromPlayerId, int toPlayerId)
-        {
-            // TODO: 与卡牌管理系统集成
-            // return CardSystemManager.Instance.StealRandomCardBetweenPlayers(fromPlayerId, toPlayerId);
-            return 1; // 暂时返回假的卡牌ID
-        }
+        #endregion
     }
 
     #endregion
@@ -433,10 +472,10 @@ namespace Cards.Effects
 
             // 特殊类
             system.RegisterEffect(EffectType.ExtraChance, new ExtraHintEffect());
-            system.RegisterEffect(EffectType.GetCard, new DrawCardEffect());
-            system.RegisterEffect(EffectType.GetCard, new StealCardEffect()); // 注意：这里可能需要区分
+            system.RegisterEffect(EffectType.GetCard, new CardManipulationEffect());
 
             CardUtilities.LogDebug("所有卡牌效果注册完成");
+            CardUtilities.LogDebug("CardManipulationEffect 已注册，统一处理：随机获得卡牌、偷取卡牌、获得特定卡牌");
         }
     }
 

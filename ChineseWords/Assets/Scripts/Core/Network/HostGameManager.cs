@@ -225,6 +225,9 @@ namespace Core.Network
                 hpManager.OnHealthChanged += OnPlayerHealthChanged;
                 hpManager.OnPlayerDied += OnPlayerDied;
 
+                //初始化卡牌管理器
+                InitializeCardGameBridge();
+
                 LogDebug("所有管理器初始化完成");
             }
             catch (System.Exception e)
@@ -255,6 +258,37 @@ namespace Core.Network
             // 预加载题目数据
             questionDataService?.PreloadAllProviders();
             LogDebug("服务依赖初始化完成");
+        }
+        /// <summary>
+        /// 初始化卡牌游戏桥接器
+        /// </summary>
+        private void InitializeCardGameBridge()
+        {
+            try
+            {
+                if (Cards.Integration.CardGameBridge.Instance != null)
+                {
+                    // 刷新桥接器的系统引用
+                    Cards.Integration.CardGameBridge.Instance.RefreshSystemReferences();
+
+                    if (Cards.Integration.CardGameBridge.Instance.IsReady())
+                    {
+                        LogDebug("CardGameBridge已准备就绪");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[HostGameManager] CardGameBridge未完全准备就绪，但游戏将继续");
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("[HostGameManager] CardGameBridge实例不存在，卡牌效果可能无法正常工作");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[HostGameManager] CardGameBridge初始化失败: {e.Message}");
+            }
         }
 
         /// <summary>
@@ -381,7 +415,7 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 结束游戏 - 修改版
+        /// 结束游戏 - 添加卡牌效果清理
         /// </summary>
         public void EndGame(string reason = "游戏结束")
         {
@@ -399,7 +433,10 @@ namespace Core.Network
                 LogDebug($"获胜者: {winnerState?.playerName} (ID: {winnerId})");
             }
 
-            // **新增：广播游戏结束**
+            // **新增：清理卡牌效果状态**
+            CleanupCardEffects();
+
+            // 广播游戏结束
             BroadcastGameEnd(reason, winnerId);
 
             // 重置游戏状态
@@ -407,6 +444,21 @@ namespace Core.Network
             gameInProgress = false;
 
             LogDebug("游戏已结束");
+        }
+        private void CleanupCardEffects()
+        {
+            try
+            {
+                if (Cards.Integration.CardGameBridge.Instance != null)
+                {
+                    Cards.Integration.CardGameBridge.Instance.ClearAllEffectStates();
+                    LogDebug("已清理所有卡牌效果状态");
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"清理卡牌效果失败: {e.Message}");
+            }
         }
 
         /// <summary>
@@ -450,22 +502,40 @@ namespace Core.Network
                 return;
             }
 
+            // **新增：检查卡牌效果 - 跳过和代理**
+            if (!CheckCardEffectsBeforeQuestion())
+            {
+                return; // 如果被跳过，直接切换到下一个玩家
+            }
+
             LogDebug($"生成题目 - 当前回合: 玩家{currentTurnPlayerId}");
 
             NetworkQuestionData question = null;
 
-            // 检查是否为成语接龙延续
-            if (isIdiomChainActive && !string.IsNullOrEmpty(currentIdiomChainWord))
+            // **修改：检查卡牌指定的题目类型**
+            var specifiedQuestionType = GetCardSpecifiedQuestionType();
+
+            if (!string.IsNullOrEmpty(specifiedQuestionType))
             {
+                // 使用卡牌指定的题目类型
+                question = GenerateSpecifiedTypeQuestion(specifiedQuestionType);
+            }
+            else if (isIdiomChainActive && !string.IsNullOrEmpty(currentIdiomChainWord))
+            {
+                // 检查是否为成语接龙延续
                 question = GenerateIdiomChainContinuation();
             }
             else
             {
+                // 生成普通题目
                 question = GenerateNormalQuestion();
             }
 
             if (question != null)
             {
+                // **新增：应用时间调整效果**
+                ApplyTimeAdjustmentToQuestion(question);
+
                 currentQuestionNumber++;
                 currentQuestion = question;
 
@@ -481,7 +551,129 @@ namespace Core.Network
                 Invoke(nameof(GenerateAndSendQuestion), 1f);
             }
         }
+        private bool CheckCardEffectsBeforeQuestion()
+        {
+            try
+            {
+                if (Cards.Integration.CardGameBridge.Instance != null)
+                {
+                    int actualAnswerPlayerId;
+                    bool shouldProceed = Cards.Integration.CardGameBridge.Instance.OnQuestionStarting(
+                        currentTurnPlayerId, out actualAnswerPlayerId);
 
+                    if (!shouldProceed)
+                    {
+                        LogDebug($"玩家{currentTurnPlayerId}被跳过，切换到下一个玩家");
+                        Invoke(nameof(NextPlayerTurn), turnChangeDelay);
+                        return false;
+                    }
+
+                    if (actualAnswerPlayerId != currentTurnPlayerId)
+                    {
+                        LogDebug($"玩家{currentTurnPlayerId}的答题将由玩家{actualAnswerPlayerId}代替");
+                        // 这里可以设置代理状态，在答案处理时使用
+                        // 暂时记录代理关系
+                        if (!playerAnswerCache.ContainsKey((ushort)currentTurnPlayerId))
+                        {
+                            playerAnswerCache[(ushort)currentTurnPlayerId] = $"DELEGATE:{actualAnswerPlayerId}";
+                        }
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"检查卡牌效果失败: {e.Message}，继续正常流程");
+            }
+
+            return true;
+        }
+        private string GetCardSpecifiedQuestionType()
+        {
+            try
+            {
+                if (Cards.Integration.CardGameBridge.Instance != null)
+                {
+                    return Cards.Integration.CardGameBridge.Instance.OnQuestionTypeSelecting(currentTurnPlayerId);
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"获取卡牌指定题目类型失败: {e.Message}");
+            }
+
+            return null;
+        }
+        /// <summary>
+        /// 生成指定类型的题目
+        /// </summary>
+        private NetworkQuestionData GenerateSpecifiedTypeQuestion(string questionTypeString)
+        {
+            try
+            {
+                // 将字符串转换为QuestionType枚举
+                QuestionType questionType;
+                switch (questionTypeString)
+                {
+                    case "IdiomChain":
+                        questionType = QuestionType.IdiomChain;
+                        break;
+                    case "TrueFalse":
+                    case "SentimentTorF":
+                        questionType = QuestionType.SentimentTorF;
+                        break;
+                    case "UsageTorF":
+                        questionType = QuestionType.UsageTorF;
+                        break;
+                    default:
+                        LogDebug($"未知的题目类型字符串: {questionTypeString}，使用默认生成");
+                        return GenerateNormalQuestion();
+                }
+
+                LogDebug($"生成卡牌指定的题目类型: {questionType}");
+
+                var question = GetQuestionFromService(questionType);
+
+                // 如果是成语接龙，激活成语接龙模式
+                if (questionType == QuestionType.IdiomChain && enableIdiomChain)
+                {
+                    isIdiomChainActive = true;
+                    idiomChainCount = 0;
+                    currentIdiomChainWord = null;
+                    LogDebug("通过卡牌效果激活成语接龙模式");
+                }
+
+                return question;
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"生成指定类型题目失败: {e.Message}，使用默认生成");
+                return GenerateNormalQuestion();
+            }
+        }
+
+        /// <summary>
+        /// 应用时间调整效果到题目
+        /// </summary>
+        private void ApplyTimeAdjustmentToQuestion(NetworkQuestionData question)
+        {
+            try
+            {
+                if (Cards.Integration.CardGameBridge.Instance != null && question != null)
+                {
+                    float originalTimeLimit = question.timeLimit;
+                    Cards.Integration.CardGameBridge.Instance.OnTimerStarting(currentTurnPlayerId, ref question.timeLimit);
+
+                    if (question.timeLimit != originalTimeLimit)
+                    {
+                        LogDebug($"时间限制已调整: {originalTimeLimit}秒 → {question.timeLimit}秒");
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"应用时间调整失败: {e.Message}");
+            }
+        }
         /// <summary>
         /// 生成普通题目
         /// </summary>
@@ -589,7 +781,7 @@ namespace Core.Network
         #region 答案处理
 
         /// <summary>
-        /// 处理玩家答案
+        /// 处理玩家答案 - 添加卡牌系统通知
         /// </summary>
         public void HandlePlayerAnswer(ushort playerId, string answer)
         {
@@ -611,6 +803,7 @@ namespace Core.Network
             {
                 PlayerCardManager.Instance.OnPlayerAnswerCompleted(playerId);
             }
+
             // 更新玩家状态
             UpdatePlayerState(playerId, validationResult.isCorrect);
 
@@ -623,6 +816,7 @@ namespace Core.Network
                 Invoke(nameof(NextPlayerTurn), turnChangeDelay);
             }
         }
+
 
         /// <summary>
         /// 验证答案提交
@@ -701,11 +895,19 @@ namespace Core.Network
         {
             LogDebug($"玩家{playerId}答错了");
 
-            // 扣血处理
+            // **修改：应用卡牌伤害倍数效果**
             if (hpManager != null && hpManager.IsPlayerAlive(playerId))
             {
-                hpManager.ApplyDamage(playerId, out int newHealth, out bool isDead);
-                LogDebug($"玩家{playerId}扣血 - 新血量:{newHealth}, 是否死亡:{isDead}");
+                // 获取基础伤害值
+                int baseDamage = hpManager.GetEffectiveDamageAmount();
+
+                // 应用卡牌倍数效果
+                int finalDamage = ApplyCardDamageMultiplier(baseDamage);
+
+                // 应用最终伤害
+                bool success = hpManager.ApplyDamage(playerId, out int newHealth, out bool isDead, finalDamage);
+
+                LogDebug($"玩家{playerId}扣血 - 基础伤害:{baseDamage}, 最终伤害:{finalDamage}, 新血量:{newHealth}, 是否死亡:{isDead}");
             }
 
             // 成语接龙答错时重置
@@ -714,6 +916,32 @@ namespace Core.Network
                 LogDebug("成语接龙答错，重置接龙状态");
                 ResetIdiomChainState();
             }
+        }
+        /// <summary>
+        /// 应用卡牌伤害倍数效果
+        /// </summary>
+        private int ApplyCardDamageMultiplier(int baseDamage)
+        {
+            try
+            {
+                if (Cards.Integration.CardGameBridge.Instance != null)
+                {
+                    int finalDamage = Cards.Integration.CardGameBridge.Instance.OnDamageCalculating(baseDamage);
+
+                    if (finalDamage != baseDamage)
+                    {
+                        LogDebug($"伤害倍数已应用: {baseDamage} → {finalDamage}");
+                    }
+
+                    return finalDamage;
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogDebug($"应用伤害倍数失败: {e.Message}，使用基础伤害");
+            }
+
+            return baseDamage;
         }
 
         #endregion
