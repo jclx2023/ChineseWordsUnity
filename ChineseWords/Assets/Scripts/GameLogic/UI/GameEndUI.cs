@@ -756,26 +756,6 @@ namespace UI
 
         public bool IsPanelVisible => isPanelVisible;
 
-        /// <summary>
-        /// 强制显示面板（调试用）
-        /// </summary>
-        [ContextMenu("强制显示面板")]
-        public void ForceShowPanel()
-        {
-            LogDebug("★★★ 强制显示面板（调试） ★★★");
-            ShowGameEndPanel(true, localPlayerId, "测试获胜者", "调试测试");
-        }
-
-        /// <summary>
-        /// 强制隐藏面板（调试用）
-        /// </summary>
-        [ContextMenu("强制隐藏面板")]
-        public void ForceHidePanel()
-        {
-            LogDebug("★★★ 强制隐藏面板（调试） ★★★");
-            HideGameEndPanel();
-        }
-
         #endregion
 
         #region 调试方法
@@ -786,40 +766,6 @@ namespace UI
             {
                 Debug.Log($"[GameEndUI] {message}");
             }
-        }
-
-        /// <summary>
-        /// 获取详细状态信息（调试用）
-        /// </summary>
-        [ContextMenu("显示详细状态")]
-        public void ShowDetailedStatus()
-        {
-            string status = "=== GameEndUI 详细状态 ===\n";
-            status += $"脚本启用: {this.enabled}\n";
-            status += $"面板可见: {isPanelVisible}\n";
-            status += $"本地玩家ID: {localPlayerId}\n";
-            status += $"本地玩家存活: {isLocalPlayerAlive}\n";
-            status += $"本地玩家获胜: {isLocalPlayerWinner}\n";
-            status += $"gameEndPanel存在: {gameEndPanel != null}\n";
-
-            if (gameEndPanel != null)
-            {
-                status += $"gameEndPanel激活: {gameEndPanel.activeSelf}\n";
-                status += $"gameEndPanel在层级中激活: {gameEndPanel.activeInHierarchy}\n";
-            }
-
-            status += $"panelCanvasGroup存在: {panelCanvasGroup != null}\n";
-
-            if (panelCanvasGroup != null)
-            {
-                status += $"CanvasGroup alpha: {panelCanvasGroup.alpha}\n";
-                status += $"CanvasGroup interactable: {panelCanvasGroup.interactable}\n";
-                status += $"CanvasGroup blocksRaycasts: {panelCanvasGroup.blocksRaycasts}\n";
-            }
-
-            status += $"NetworkManager存在: {NetworkManager.Instance != null}\n";
-
-            Debug.Log(status);
         }
 
         #endregion

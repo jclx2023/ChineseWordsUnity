@@ -9,7 +9,7 @@ using Core;
 namespace UI.GameExit
 {
     /// <summary>
-    /// 游戏退出管理器
+    /// 游戏退出管理器 - 简化版
     /// 处理NetworkGameScene中的退出功能
     /// 功能：ESC键监听、退出确认、返回主界面
     /// </summary>
@@ -18,14 +18,12 @@ namespace UI.GameExit
         [Header("退出设置")]
         [SerializeField] private KeyCode exitHotkey = KeyCode.Escape;
         [SerializeField] private bool enableExitDuringGame = true;
-        [SerializeField] private float exitConfirmTimeout = 10f;
 
         [Header("UI引用")]
         [SerializeField] private GameObject exitConfirmDialog;
         [SerializeField] private Button confirmExitButton;
         [SerializeField] private Button cancelExitButton;
         [SerializeField] private TMP_Text confirmText;
-        [SerializeField] private TMP_Text countdownText;
 
         [Header("退出目标")]
         [SerializeField] private string targetScene = "RoomScene";
@@ -37,8 +35,6 @@ namespace UI.GameExit
         // 状态管理
         private bool isExitDialogOpen = false;
         private bool isExiting = false;
-        private float countdownTimer = 0f;
-        private bool isCountdownActive = false;
 
         // 网络状态缓存
         private bool wasHost = false;
@@ -54,7 +50,6 @@ namespace UI.GameExit
         private void Update()
         {
             HandleInput();
-            UpdateCountdown();
         }
 
         private void OnDestroy()
@@ -234,9 +229,6 @@ namespace UI.GameExit
                 // 更新确认文本
                 UpdateConfirmText();
 
-                // 启动倒计时
-                StartCountdown();
-
                 LogDebug("退出确认对话框已显示");
             }
             else
@@ -273,49 +265,6 @@ namespace UI.GameExit
             }
 
             confirmText.text = message;
-        }
-
-        /// <summary>
-        /// 启动倒计时
-        /// </summary>
-        private void StartCountdown()
-        {
-            countdownTimer = exitConfirmTimeout;
-            isCountdownActive = true;
-            LogDebug($"启动退出确认倒计时: {exitConfirmTimeout}秒");
-        }
-
-        /// <summary>
-        /// 更新倒计时显示
-        /// </summary>
-        private void UpdateCountdown()
-        {
-            if (!isCountdownActive) return;
-
-            countdownTimer -= Time.deltaTime;
-
-            // 更新倒计时文本
-            if (countdownText != null)
-            {
-                int seconds = Mathf.CeilToInt(countdownTimer);
-                countdownText.text = $"自动取消: {seconds}秒";
-            }
-
-            // 倒计时结束，自动取消
-            if (countdownTimer <= 0)
-            {
-                LogDebug("退出确认倒计时结束，自动取消");
-                CancelExit();
-            }
-        }
-
-        /// <summary>
-        /// 停止倒计时
-        /// </summary>
-        private void StopCountdown()
-        {
-            isCountdownActive = false;
-            countdownTimer = 0f;
         }
 
         #endregion
@@ -359,7 +308,6 @@ namespace UI.GameExit
             }
 
             isExitDialogOpen = false;
-            StopCountdown();
         }
 
         /// <summary>
@@ -485,7 +433,7 @@ namespace UI.GameExit
             if (!success)
             {
                 LogDebug("SceneTransitionManager返回主菜单失败，使用备用方案");
-                SceneManager.LoadScene("MainMenu");
+                SceneManager.LoadScene("MainMenuScene");
             }
         }
 
@@ -532,18 +480,12 @@ namespace UI.GameExit
 
         #region 公共接口
 
-        /// <summary>
-        /// 外部调用：请求退出游戏
-        /// </summary>
         public void RequestExit()
         {
             LogDebug("收到外部退出请求");
             ShowExitConfirmation();
         }
 
-        /// <summary>
-        /// 外部调用：强制退出（无确认）
-        /// </summary>
         public void ForceExit()
         {
             LogDebug("收到强制退出请求");
@@ -553,17 +495,11 @@ namespace UI.GameExit
             }
         }
 
-        /// <summary>
-        /// 检查退出管理器是否活跃
-        /// </summary>
         public bool IsActive()
         {
             return this.enabled && !isExiting;
         }
 
-        /// <summary>
-        /// 检查退出对话框是否开启
-        /// </summary>
         public bool IsExitDialogOpen()
         {
             return isExitDialogOpen;
