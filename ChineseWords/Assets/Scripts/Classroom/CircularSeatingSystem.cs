@@ -4,37 +4,53 @@ using System.Collections.Generic;
 namespace Classroom.Scene
 {
     /// <summary>
-    /// 圆弧座位系统 - 负责计算并生成面向黑板的圆弧状桌椅布局
-    /// 基于极坐标系统的位置分配算法
+    /// 独立的圆弧座位系统 - 可直接挂载使用，所有参数可在编辑器中设置
     /// </summary>
     public class CircularSeatingSystem : MonoBehaviour
     {
+        [Header("核心配置")]
+        [SerializeField] private GameObject deskChairPrefab; // 桌椅一体预制体
+        [SerializeField] private int playerCount = 4; // 玩家数量
+        [SerializeField] private bool autoGenerateOnStart = false; // 启动时自动生成
+
+        [Header("圆弧中心设置")]
+        [SerializeField] private Vector3 arcCenter = new Vector3(5, 0, 0); // 圆弧中心点（黑板底部或更后方）
+        [SerializeField] private Vector3 seatDistributionCenter = Vector3.zero; // 座位分布中心点（Z=0中线）
+        [SerializeField] private bool showArcCenterGizmo = true;
+
+        [Header("桌椅尺寸")]
+        [SerializeField] private float deskChairWidth = 0.64f; // 桌椅宽度（缩放后0.8倍）
+        [SerializeField] private float deskChairDepth = 0.48f; // 桌椅深度（缩放后0.8倍）
+        [SerializeField] private float extraSpacing = 0.3f; // 桌椅之间的额外间距
+
+        [Header("教室边界")]
+        [SerializeField] private float classroomWidth = 8f; // 教室宽度（Z轴方向）
+        [SerializeField] private float classroomDepth = 10f; // 教室深度（X轴方向）
+        [SerializeField] private float wallMargin = 0.5f; // 距离墙壁的安全边距
+        [SerializeField] private bool autoAdjustForClassroomSize = true; // 自动根据教室尺寸调整
         [Header("圆弧布局配置")]
-        [SerializeField] private float baseRadius = 3f; // 基础半径（适配8x10米教室）
+        [SerializeField] private float baseRadius = 3f; // 基础半径
         [SerializeField] private float radiusPerPlayer = 0.15f; // 每个玩家增加的半径
-        [SerializeField] private float maxRadius = 4.5f; // 最大半径限制（不超过教室边界）
+        [SerializeField] private float maxRadius = 4.5f; // 最大半径限制
         [SerializeField] private float minRadius = 2.5f; // 最小半径限制
 
         [Header("弧度范围配置")]
-        [SerializeField] private float smallGroupArc = 120f; // 2-4人弧度
-        [SerializeField] private float mediumGroupArc = 150f; // 5-8人弧度
-        [SerializeField] private float largeGroupArc = 180f; // 9+人弧度
-
-        [Header("座位偏移配置")]
-        [SerializeField] private float seatHeight = 0f; // 座位高度偏移（0表示贴地）
-        [SerializeField] private Vector3 seatRotationOffset = new Vector3(0, 180, 0); // 座位旋转偏移（让椅子面向黑板）
-        [SerializeField] private bool debugChairDirection = true; // 调试椅子朝向
-        [SerializeField] private bool enableGroundDetection = true; // 启用地面检测
-        [SerializeField] private LayerMask groundLayerMask = 1; // 地面层级遮罩
-
-        [Header("间距配置")]
+        [SerializeField] private float maxArcDegrees = 150f; // 最大弧度角度
         [SerializeField] private float minAngleBetweenSeats = 12f; // 最小角度间距（度）
-        [SerializeField] private float distanceFromBlackboard = 1.5f; // 距离黑板的最小距离（适配教室大小）
+
+        [Header("座位高度和旋转")]
+        [SerializeField] private float seatHeight = 0f; // 座位高度（Y坐标）
+        [SerializeField] private Vector3 chairDefaultDirection = Vector3.back; // 椅子默认朝向（Unity中）
+        [SerializeField] private bool lockXZRotation = true; // 锁定X和Z轴旋转，只允许Y轴旋转
+        [SerializeField] private float yRotationOffset = 180f; // Y轴旋转偏移（用于微调椅子朝向）
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
         [SerializeField] private bool showDebugGizmos = true;
-        [SerializeField] private Color gizmoColor = Color.cyan;
+        [SerializeField] private Color arcCenterColor = Color.red;
+        [SerializeField] private Color seatCenterColor = Color.green;
+        [SerializeField] private Color seatPositionColor = Color.blue;
+        [SerializeField] private Color directionRayColor = Color.yellow;
 
         // 座位数据结构
         [System.Serializable]
@@ -44,6 +60,7 @@ namespace Classroom.Scene
             public Quaternion seatRotation; // 桌椅一体的旋转
             public int seatIndex;
             public GameObject seatInstance; // 桌椅一体实例
+            public float angleFromCenter; // 从中心线的角度偏移
 
             public SeatData(int index)
             {
@@ -52,62 +69,29 @@ namespace Classroom.Scene
         }
 
         // 私有变量
-        private SceneLayoutManager sceneManager;
         private List<SeatData> generatedSeats = new List<SeatData>();
-        private Vector3 arcCenter;
         private bool isInitialized = false;
 
         // 公共属性
         public List<SeatData> GeneratedSeats => generatedSeats;
         public bool IsInitialized => isInitialized;
         public int SeatCount => generatedSeats.Count;
+        public Vector3 ArcCenter => arcCenter;
+        public Vector3 SeatDistributionCenter => seatDistributionCenter;
 
-        #region 初始化
+        #region Unity生命周期
 
-        /// <summary>
-        /// 初始化座位系统
-        /// </summary>
-        /// <param name="layoutManager">场景布局管理器引用</param>
-        public void Initialize(SceneLayoutManager layoutManager)
+        private void Awake()
         {
-            sceneManager = layoutManager;
-            CalculateArcCenter();
             isInitialized = true;
-            LogDebug("CircularSeatingSystem 初始化完成");
+            LogDebug("CircularSeatingSystem 已初始化（独立模式）");
         }
 
-        /// <summary>
-        /// 计算圆弧中心点
-        /// </summary>
-        private void CalculateArcCenter()
+        private void Start()
         {
-            if (sceneManager != null)
+            if (autoGenerateOnStart && deskChairPrefab != null)
             {
-                Vector3 blackboardPos = sceneManager.BlackboardPosition;
-                Vector3 classroomCenter = sceneManager.ClassroomCenter;
-
-                // 针对8x10米教室的优化布局
-                // 黑板在(5, 1.5, 0)，教室中心在(0, 0, 0)
-                // 圆弧中心应该在黑板前方适当距离
-
-                Vector3 directionFromBoard;
-                if (Vector3.Distance(blackboardPos, classroomCenter) < 0.1f)
-                {
-                    // 如果黑板和教室中心重合，默认黑板面向-Z方向
-                    directionFromBoard = Vector3.back;
-                }
-                else
-                {
-                    directionFromBoard = (classroomCenter - blackboardPos).normalized;
-                }
-
-                arcCenter = blackboardPos + directionFromBoard * distanceFromBlackboard;
-
-                // 确保圆弧中心在教室范围内（8x10米教室边界检查）
-                arcCenter.x = Mathf.Clamp(arcCenter.x, -3.5f, 3.5f); // 8米宽度的一半减去安全边距
-                arcCenter.z = Mathf.Clamp(arcCenter.z, -4.5f, 4.5f); // 10米深度的一半减去安全边距
-
-                LogDebug($"圆弧中心计算完成：{arcCenter}，黑板位置：{blackboardPos}");
+                GenerateSeats(playerCount);
             }
         }
 
@@ -118,33 +102,33 @@ namespace Classroom.Scene
         /// <summary>
         /// 生成指定数量的座位
         /// </summary>
-        /// <param name="playerCount">玩家数量</param>
-        public void GenerateSeats(int playerCount)
+        /// <param name="count">玩家数量</param>
+        public void GenerateSeats(int count)
         {
-            if (!isInitialized)
+            if (deskChairPrefab == null)
             {
-                LogDebug("座位系统未初始化，无法生成座位");
+                LogDebug("桌椅预制体未设置，无法生成座位");
                 return;
             }
 
-            if (playerCount <= 0)
+            if (count <= 0)
             {
                 LogDebug("玩家数量无效，无法生成座位");
                 return;
             }
 
-            LogDebug($"开始生成{playerCount}个座位...");
+            LogDebug($"开始生成{count}个座位...");
 
             // 清理现有座位
             ClearAllSeats();
 
             // 计算布局参数
-            SeatingParameters parameters = CalculateSeatingParameters(playerCount);
+            SeatingParameters parameters = CalculateSeatingParameters(count);
 
             // 生成座位
-            for (int i = 0; i < playerCount; i++)
+            for (int i = 0; i < count; i++)
             {
-                SeatData seatData = CreateSeatAtIndex(i, playerCount, parameters);
+                SeatData seatData = CreateSeatAtIndex(i, count, parameters);
                 generatedSeats.Add(seatData);
             }
 
@@ -154,47 +138,146 @@ namespace Classroom.Scene
         /// <summary>
         /// 计算座位参数
         /// </summary>
-        private SeatingParameters CalculateSeatingParameters(int playerCount)
+        private SeatingParameters CalculateSeatingParameters(int count)
         {
             SeatingParameters parameters = new SeatingParameters();
 
-            // 计算半径（针对8x10米教室优化）
+            if (autoAdjustForClassroomSize)
+            {
+                // 根据教室尺寸和玩家数量智能计算参数
+                parameters = CalculateOptimalParameters(count);
+            }
+            else
+            {
+                // 使用传统的固定参数计算
+                parameters = CalculateTraditionalParameters(count);
+            }
+
+            LogDebug($"座位参数：半径={parameters.radius:F1}m, 弧度={parameters.arcDegrees:F1}°, 玩家数={count}, 座位间距={parameters.actualSeatSpacing:F1}m");
+            return parameters;
+        }
+
+        /// <summary>
+        /// 根据教室尺寸计算最优参数
+        /// </summary>
+        private SeatingParameters CalculateOptimalParameters(int count)
+        {
+            SeatingParameters parameters = new SeatingParameters();
+
+            // 根据桌椅实际尺寸计算最小间距
+            float minSeatSpacing = Mathf.Max(deskChairWidth, deskChairDepth) + extraSpacing;
+
+            // 计算可用的教室空间
+            float availableWidth = classroomWidth - (wallMargin * 2);
+            float availableDepth = classroomDepth - (wallMargin * 2);
+
+            // 最大可用半径（考虑教室的宽度和深度限制）
+            float maxUsableRadius = Mathf.Min(availableWidth * 0.5f, availableDepth * 0.5f);
+
+            // 根据玩家数量计算所需的弧长来保证最小间距
+            float requiredArcLength = (count - 1) * minSeatSpacing;
+
+            // 尝试不同的弧度角度，找到最优解
+            float[] candidateArcs = { 60f, 90f, 120f, 150f, 180f };
+
+            foreach (float arcDegrees in candidateArcs)
+            {
+                float arcRadians = arcDegrees * Mathf.Deg2Rad;
+
+                // 根据弧长公式计算所需半径：弧长 = 半径 × 弧度
+                float requiredRadius = requiredArcLength / arcRadians;
+
+                // 检查是否在合理范围内
+                if (requiredRadius >= minRadius && requiredRadius <= maxUsableRadius && requiredRadius <= maxRadius)
+                {
+                    parameters.radius = requiredRadius;
+                    parameters.arcDegrees = arcDegrees;
+                    parameters.arcRadians = arcRadians;
+                    parameters.startAngle = -arcRadians * 0.5f;
+                    parameters.endAngle = arcRadians * 0.5f;
+
+                    // 计算实际座位间距
+                    parameters.actualSeatSpacing = (parameters.radius * arcRadians) / Mathf.Max(1, count - 1);
+
+                    LogDebug($"找到最优解：弧度{arcDegrees}°, 半径{requiredRadius:F1}m, 间距{parameters.actualSeatSpacing:F1}m, 最小需求间距{minSeatSpacing:F1}m");
+                    return parameters;
+                }
+            }
+
+            // 如果没有找到理想解，使用折中方案
+            LogDebug($"未找到理想解，使用折中方案。所需最小间距：{minSeatSpacing:F1}m");
+            return CalculateFallbackParameters(count, maxUsableRadius, minSeatSpacing);
+        }
+
+        /// <summary>
+        /// 计算折中参案
+        /// </summary>
+        private SeatingParameters CalculateFallbackParameters(int count, float maxUsableRadius, float minSeatSpacing)
+        {
+            SeatingParameters parameters = new SeatingParameters();
+
+            // 使用最大可用半径
+            parameters.radius = Mathf.Min(maxUsableRadius, maxRadius);
+
+            // 计算能容纳的最大弧度（保证最小间距）
+            float maxArcLength = parameters.radius * Mathf.PI; // 半圆弧长
+            float maxArcForSpacing = (count - 1) * minSeatSpacing;
+
+            if (maxArcForSpacing <= maxArcLength)
+            {
+                // 可以保证最小间距
+                float requiredArcRadians = maxArcForSpacing / parameters.radius;
+                parameters.arcDegrees = Mathf.Min(requiredArcRadians * Mathf.Rad2Deg, 180f);
+            }
+            else
+            {
+                // 无法保证最小间距，使用最大弧度
+                parameters.arcDegrees = 180f;
+                LogDebug($"警告：无法保证{minSeatSpacing:F1}m的最小间距，当前间距约为{(parameters.radius * Mathf.PI) / (count - 1):F1}m");
+            }
+
+            parameters.arcRadians = parameters.arcDegrees * Mathf.Deg2Rad;
+            parameters.startAngle = -parameters.arcRadians * 0.5f;
+            parameters.endAngle = parameters.arcRadians * 0.5f;
+            parameters.actualSeatSpacing = (parameters.radius * parameters.arcRadians) / Mathf.Max(1, count - 1);
+
+            return parameters;
+        }
+
+        /// <summary>
+        /// 传统的固定参数计算（保留原有逻辑）
+        /// </summary>
+        private SeatingParameters CalculateTraditionalParameters(int count)
+        {
+            SeatingParameters parameters = new SeatingParameters();
+
+            // 计算半径
             parameters.radius = Mathf.Clamp(
-                baseRadius + (playerCount * radiusPerPlayer),
+                baseRadius + (count * radiusPerPlayer),
                 minRadius,
                 maxRadius
             );
 
-            // 计算弧度范围（更保守的角度设置）
-            if (playerCount <= 3)
-                parameters.arcDegrees = 90f;  // 小组更紧凑
-            else if (playerCount <= 6)
-                parameters.arcDegrees = 120f; // 中组适中
-            else if (playerCount <= 10)
-                parameters.arcDegrees = 150f; // 大组扩展
-            else
-                parameters.arcDegrees = 180f; // 最大组
+            // 计算弧度范围，确保座位间距合理
+            float requiredArcForSpacing = minAngleBetweenSeats * (count - 1);
+            parameters.arcDegrees = Mathf.Min(maxArcDegrees, requiredArcForSpacing);
+
+            // 如果只有一个人，角度为0
+            if (count == 1)
+            {
+                parameters.arcDegrees = 0;
+            }
 
             // 转换为弧度
             parameters.arcRadians = parameters.arcDegrees * Mathf.Deg2Rad;
 
-            // 计算起始和结束角度
+            // 计算起始和结束角度（以Z轴为基准，向两侧分布）
             parameters.startAngle = -parameters.arcRadians * 0.5f;
             parameters.endAngle = parameters.arcRadians * 0.5f;
 
-            // 验证最小角度间距
-            float actualAngleStep = parameters.arcDegrees / Mathf.Max(1, playerCount - 1);
-            if (actualAngleStep < minAngleBetweenSeats && playerCount > 1)
-            {
-                LogDebug($"角度间距过小({actualAngleStep:F1}°)，调整弧度范围");
-                parameters.arcDegrees = minAngleBetweenSeats * (playerCount - 1);
-                parameters.arcDegrees = Mathf.Min(parameters.arcDegrees, 180f); // 不超过180度
-                parameters.arcRadians = parameters.arcDegrees * Mathf.Deg2Rad;
-                parameters.startAngle = -parameters.arcRadians * 0.5f;
-                parameters.endAngle = parameters.arcRadians * 0.5f;
-            }
+            // 计算实际座位间距
+            parameters.actualSeatSpacing = (parameters.radius * parameters.arcRadians) / Mathf.Max(1, count - 1);
 
-            LogDebug($"座位参数：半径={parameters.radius:F1}m, 弧度={parameters.arcDegrees:F1}°, 玩家数={playerCount}");
             return parameters;
         }
 
@@ -205,11 +288,11 @@ namespace Classroom.Scene
         {
             SeatData seatData = new SeatData(index);
 
-            // 计算当前座位的角度
+            // 计算当前座位的角度（以Z轴为0°基准）
             float currentAngle;
             if (totalCount == 1)
             {
-                currentAngle = 0; // 单人时面向黑板
+                currentAngle = 0; // 单人时在中心线上
             }
             else
             {
@@ -217,77 +300,44 @@ namespace Classroom.Scene
                 currentAngle = Mathf.Lerp(parameters.startAngle, parameters.endAngle, t);
             }
 
-            // 计算桌椅一体的基础位置
-            Vector3 basePosition = CalculatePositionOnArc(currentAngle, parameters.radius);
+            seatData.angleFromCenter = currentAngle * Mathf.Rad2Deg;
 
-            // 地面检测和高度调整
-            seatData.seatPosition = CalculateGroundPosition(basePosition);
+            // 计算座位位置（真正的圆弧布局：每个座位到圆弧中心距离相等）
+            Vector3 offsetFromArcCenter = new Vector3(
+                -parameters.radius * Mathf.Cos(currentAngle), // X轴偏移（负号因为圆弧朝向黑板）
+                0, // Y轴高度
+                parameters.radius * Mathf.Sin(currentAngle)   // Z轴偏移
+            );
 
-            // 计算朝向（椅子面向黑板）
-            Vector3 directionToBlackboard = (sceneManager.BlackboardPosition - seatData.seatPosition).normalized;
-            seatData.seatRotation = Quaternion.LookRotation(directionToBlackboard);
+            seatData.seatPosition = arcCenter + offsetFromArcCenter;
+            seatData.seatPosition.y = seatHeight;
 
-            // 应用旋转偏移
-            if (seatRotationOffset != Vector3.zero)
+            // 计算朝向（面向圆弧中心）
+            Vector3 directionToArcCenter = (arcCenter - seatData.seatPosition).normalized;
+
+            // 只保留Y轴旋转分量
+            if (lockXZRotation)
             {
-                seatData.seatRotation *= Quaternion.Euler(seatRotationOffset);
+                // 计算Y轴旋转角度
+                float yRotation = Mathf.Atan2(directionToArcCenter.x, directionToArcCenter.z) * Mathf.Rad2Deg;
+
+                // 应用Y轴旋转偏移
+                yRotation += yRotationOffset;
+
+                seatData.seatRotation = Quaternion.Euler(0, yRotation, 0);
             }
-
-            // 调试信息
-            if (debugChairDirection)
+            else
             {
-                Vector3 chairForward = seatData.seatRotation * Vector3.forward;
-                LogDebug($"座位{index}: 位置{seatData.seatPosition}, 朝向黑板方向{directionToBlackboard}, 椅子前方{chairForward}");
+                seatData.seatRotation = Quaternion.LookRotation(directionToArcCenter) * Quaternion.Euler(0, yRotationOffset, 0);
             }
 
             // 创建实际的桌椅对象
             CreatePhysicalSeat(seatData);
 
+            // 调试信息
+            LogDebug($"座位{index}: 位置{seatData.seatPosition}, 弧度角度{seatData.angleFromCenter:F1}°, Y旋转{seatData.seatRotation.eulerAngles.y:F1}°, 朝向圆弧中心{arcCenter}");
+
             return seatData;
-        }
-
-        /// <summary>
-        /// 计算圆弧上的位置
-        /// </summary>
-        private Vector3 CalculatePositionOnArc(float angle, float radius)
-        {
-            float x = arcCenter.x + radius * Mathf.Sin(angle);
-            float z = arcCenter.z + radius * Mathf.Cos(angle);
-            return new Vector3(x, arcCenter.y, z);
-        }
-
-        /// <summary>
-        /// 计算贴地位置
-        /// </summary>
-        private Vector3 CalculateGroundPosition(Vector3 basePosition)
-        {
-            Vector3 finalPosition = basePosition;
-
-            if (enableGroundDetection)
-            {
-                // 从上方向下射线检测地面
-                Vector3 rayStart = basePosition + Vector3.up * 5f; // 从5米高度开始检测
-
-                if (Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 10f, groundLayerMask))
-                {
-                    // 找到地面，将座位放置在地面上
-                    finalPosition.y = hit.point.y + seatHeight;
-                    LogDebug($"地面检测成功：{hit.point.y:F2}, 座位高度：{finalPosition.y:F2}");
-                }
-                else
-                {
-                    // 没有检测到地面，使用默认高度
-                    finalPosition.y = seatHeight;
-                    LogDebug($"未检测到地面，使用默认高度：{finalPosition.y:F2}");
-                }
-            }
-            else
-            {
-                // 不使用地面检测，直接设置高度
-                finalPosition.y = seatHeight;
-            }
-
-            return finalPosition;
         }
 
         /// <summary>
@@ -295,14 +345,17 @@ namespace Classroom.Scene
         /// </summary>
         private void CreatePhysicalSeat(SeatData seatData)
         {
-            // 创建桌椅一体对象
-            GameObject deskChairPrefab = GetDeskChairPrefab();
-            if (sceneManager != null && deskChairPrefab != null)
+            if (deskChairPrefab != null)
             {
-                seatData.seatInstance = Instantiate(deskChairPrefab, seatData.seatPosition, seatData.seatRotation);
+                seatData.seatInstance = Instantiate(deskChairPrefab, seatData.seatPosition, seatData.seatRotation, transform);
                 seatData.seatInstance.name = $"DeskChair_{seatData.seatIndex:D2}";
+                foreach (var renderer in seatData.seatInstance.GetComponentsInChildren<Renderer>())
+                {
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                }
 
-                // 可选：为座位添加标识组件，便于后续查找和管理
+                // 可选：添加座位标识组件
                 SeatIdentifier identifier = seatData.seatInstance.GetComponent<SeatIdentifier>();
                 if (identifier == null)
                 {
@@ -331,10 +384,27 @@ namespace Classroom.Scene
             foreach (SeatData seat in generatedSeats)
             {
                 if (seat.seatInstance != null)
-                    DestroyImmediate(seat.seatInstance);
+                {
+                    if (Application.isPlaying)
+                        Destroy(seat.seatInstance);
+                    else
+                        DestroyImmediate(seat.seatInstance);
+                }
             }
 
             generatedSeats.Clear();
+        }
+
+        /// <summary>
+        /// 更新座位数量（编辑器用）
+        /// </summary>
+        public void UpdatePlayerCount(int newCount)
+        {
+            playerCount = Mathf.Max(1, newCount);
+            if (Application.isPlaying || generatedSeats.Count > 0)
+            {
+                GenerateSeats(playerCount);
+            }
         }
 
         /// <summary>
@@ -347,39 +417,113 @@ namespace Classroom.Scene
             return null;
         }
 
-        /// <summary>
-        /// 获取距离指定位置最近的座位
-        /// </summary>
-        public SeatData GetNearestSeat(Vector3 position)
+        #endregion
+
+        #region 调试可视化
+
+        private void OnDrawGizmos()
         {
-            if (generatedSeats.Count == 0) return null;
+            if (!showDebugGizmos) return;
 
-            SeatData nearest = generatedSeats[0];
-            float minDistance = Vector3.Distance(position, nearest.seatPosition);
-
-            foreach (SeatData seat in generatedSeats)
+            // 绘制教室边界
+            if (autoAdjustForClassroomSize)
             {
-                float distance = Vector3.Distance(position, seat.seatPosition);
-                if (distance < minDistance)
-                {
-                    minDistance = distance;
-                    nearest = seat;
-                }
+                Gizmos.color = Color.gray;
+                Vector3 classroomSize = new Vector3(classroomDepth, 0.1f, classroomWidth);
+                Gizmos.DrawWireCube(Vector3.zero, classroomSize);
+
+                // 绘制安全边距
+                Gizmos.color = Color.yellow;
+                Vector3 safeAreaSize = new Vector3(classroomDepth - wallMargin * 2, 0.1f, classroomWidth - wallMargin * 2);
+                Gizmos.DrawWireCube(Vector3.zero, safeAreaSize);
             }
 
-            return nearest;
+            // 绘制圆弧中心
+            if (showArcCenterGizmo)
+            {
+                Gizmos.color = arcCenterColor;
+                Gizmos.DrawWireSphere(arcCenter, 0.3f);
+                Gizmos.DrawWireCube(arcCenter, Vector3.one * 0.1f);
+            }
+
+            // 绘制座位分布中心
+            Gizmos.color = seatCenterColor;
+            Gizmos.DrawWireSphere(seatDistributionCenter, 0.2f);
+
+            // 绘制连接线
+            Gizmos.color = Color.gray;
+            Gizmos.DrawLine(arcCenter, seatDistributionCenter);
+
+            // 绘制座位位置和朝向
+            foreach (SeatData seat in generatedSeats)
+            {
+                // 绘制座位位置
+                Gizmos.color = seatPositionColor;
+                Gizmos.DrawWireCube(seat.seatPosition, Vector3.one * 0.4f);
+
+                // 绘制朝向
+                Gizmos.color = directionRayColor;
+                Vector3 forward = seat.seatRotation * Vector3.forward;
+                Gizmos.DrawRay(seat.seatPosition, forward * 1.5f);
+
+                // 绘制到圆弧中心的连线
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawLine(seat.seatPosition, arcCenter);
+
+                // 绘制座位间距（相邻座位之间的连线）
+                if (seat.seatIndex < generatedSeats.Count - 1)
+                {
+                    Gizmos.color = Color.white;
+                    Gizmos.DrawLine(seat.seatPosition, generatedSeats[seat.seatIndex + 1].seatPosition);
+                }
+            }
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            // 选中时显示更详细的信息
+            Gizmos.color = Color.white;
+
+            // 绘制弧度范围
+            if (generatedSeats.Count > 1)
+            {
+                SeatingParameters parameters = CalculateSeatingParameters(playerCount);
+
+                // 绘制弧度范围线
+                Vector3 startDir = new Vector3(0, 0, parameters.radius * Mathf.Sin(parameters.startAngle));
+                Vector3 endDir = new Vector3(0, 0, parameters.radius * Mathf.Sin(parameters.endAngle));
+
+                Gizmos.DrawLine(seatDistributionCenter, seatDistributionCenter + startDir);
+                Gizmos.DrawLine(seatDistributionCenter, seatDistributionCenter + endDir);
+            }
+        }
+
+        #endregion
+
+        #region 编辑器接口
+
+        [ContextMenu("生成座位")]
+        private void TestGenerateSeats()
+        {
+            GenerateSeats(playerCount);
+        }
+
+        [ContextMenu("清理座位")]
+        private void TestClearSeats()
+        {
+            ClearAllSeats();
+        }
+
+        [ContextMenu("重新生成")]
+        private void TestRegenerateSeats()
+        {
+            ClearAllSeats();
+            GenerateSeats(playerCount);
         }
 
         #endregion
 
         #region 辅助方法
-
-        private GameObject GetDeskChairPrefab()
-        {
-            return sceneManager?.GetComponent<SceneLayoutManager>()?.GetType()
-                ?.GetField("deskChairPrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                ?.GetValue(sceneManager) as GameObject;
-        }
 
         private void LogDebug(string message)
         {
@@ -387,49 +531,6 @@ namespace Classroom.Scene
             {
                 Debug.Log($"[CircularSeatingSystem] {message}");
             }
-        }
-
-        #endregion
-
-        #region 调试可视化
-
-        private void OnDrawGizmos()
-        {
-            if (!showDebugGizmos || !isInitialized) return;
-
-            Gizmos.color = gizmoColor;
-
-            // 绘制圆弧中心
-            Gizmos.DrawWireSphere(arcCenter, 0.3f);
-
-            // 绘制座位位置
-            foreach (SeatData seat in generatedSeats)
-            {
-                // 绘制桌椅位置
-                Gizmos.color = Color.red;
-                Gizmos.DrawWireCube(seat.seatPosition, Vector3.one * 0.8f);
-
-                // 绘制朝向
-                Gizmos.color = Color.green;
-                Vector3 forward = seat.seatRotation * Vector3.forward;
-                Gizmos.DrawRay(seat.seatPosition, forward * 1.5f);
-
-                // 绘制座位编号（可选）
-                Gizmos.color = Color.white;
-                Gizmos.DrawWireSphere(seat.seatPosition + Vector3.up * 1.5f, 0.1f);
-            }
-        }
-
-        [ContextMenu("测试生成6人座位")]
-        private void TestGenerate6Seats()
-        {
-            if (sceneManager == null)
-                sceneManager = GetComponent<SceneLayoutManager>();
-
-            if (!isInitialized)
-                Initialize(sceneManager);
-
-            GenerateSeats(6);
         }
 
         #endregion
@@ -444,6 +545,7 @@ namespace Classroom.Scene
             public float arcRadians;
             public float startAngle;
             public float endAngle;
+            public float actualSeatSpacing; // 实际座位间距
         }
     }
 }

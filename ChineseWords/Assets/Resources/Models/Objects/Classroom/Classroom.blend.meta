@@ -3,7 +3,72 @@ guid: 7873ba4771d32354d9b7e388fe953f1b
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: black
+    second: {fileID: 2100000, guid: 69250dabe95fe0a4fac59f2d25049b67, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: board
+    second: {fileID: 2100000, guid: 2b211042ae1fbee448c5f6a8d9cea86d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: clockwhite
+    second: {fileID: 2100000, guid: 9c2226a53a0c7fc4aad6182b2572b9cf, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: criling
+    second: {fileID: 2100000, guid: 919d13aefc025eb47bbab3e703297a9a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: edges
+    second: {fileID: 2100000, guid: aa1b1489e79236248be8a0b7ca949c13, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: floor
+    second: {fileID: 2100000, guid: 7d832b573d506284a8dc20bc81b4db52, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: glass
+    second: {fileID: 2100000, guid: 4207eb09cdedb104d9fb0a089080109e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: light
+    second: {fileID: 2100000, guid: fe27e0c2efbcf12458537f48037c4276, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: metal
+    second: {fileID: 2100000, guid: 374ebe70d2e4e2d4bb8cae1dbeab09ba, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: podium
+    second: {fileID: 2100000, guid: 21785b5122438dc49acfc903bd25fd6f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: walls2
+    second: {fileID: 2100000, guid: 4e64b315abc8fed429a5883f64bc7465, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: window
+    second: {fileID: 2100000, guid: 82e4885d2fb38e34d993a043b0ef2025, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: wood
+    second: {fileID: 2100000, guid: 7ffabe074c2a98b4eb90edc4849a1672, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
