@@ -313,54 +313,6 @@ namespace Core.Network
 
         #endregion
 
-        #region 公共接口
-
-        /// <summary>
-        /// 检查是否已经初始化
-        /// </summary>
-        public static bool IsInitialized()
-        {
-            return hasInitialized;
-        }
-
-        /// <summary>
-        /// 强制重新初始化（调试用）
-        /// </summary>
-        public void ForceReinitialize()
-        {
-            LogDebug("强制重新初始化PersistentNetworkManager");
-
-            // 重置状态
-            hasInitialized = false;
-            isInitializing = false;
-            initializationCompleted = false;
-
-            // 查找并销毁现有实例
-            var existingManagers = FindObjectsOfType<PersistentNetworkManager>();
-            foreach (var manager in existingManagers)
-            {
-                LogDebug($"销毁现有实例: {manager.name}");
-                if (Application.isPlaying)
-                    Destroy(manager.gameObject);
-                else
-                    DestroyImmediate(manager.gameObject);
-            }
-
-            // 重新初始化
-            CheckAndInitialize();
-        }
-
-        /// <summary>
-        /// 手动触发初始化检查
-        /// </summary>
-        public void ManualInitialize()
-        {
-            LogDebug("手动触发初始化检查");
-            CheckAndInitialize();
-        }
-
-        #endregion
-
         #region 场景事件处理
 
         private void OnEnable()
@@ -392,19 +344,6 @@ namespace Core.Network
 
         #endregion
 
-        #region 静态重置方法
-
-        /// <summary>
-        /// 静态重置方法（用于测试或特殊情况）
-        /// </summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStaticFields()
-        {
-            hasInitialized = false;
-            instance = null;
-        }
-
-        #endregion
 
         #region 调试方法
 
@@ -417,12 +356,6 @@ namespace Core.Network
             {
                 Debug.Log($"[PersistentNetworkManagerInitializer] {message}");
             }
-        }
-
-        [ContextMenu("强制重新初始化")]
-        public void DebugForceReinitialize()
-        {
-            ForceReinitialize();
         }
 
         #endregion

@@ -13,8 +13,9 @@ namespace Classroom.Player
     /// 网络玩家生成器 - 负责根据房间玩家数动态生成座位和角色
     /// 主机端：生成座位+分配玩家+生成角色，然后同步给所有客户端
     /// 客户端：接收同步数据，在本地重建座位和角色布局
+    /// 使用统一的网络管理器进行RPC通信
     /// </summary>
-    public class NetworkPlayerSpawner : MonoBehaviourPun, IPunObservable
+    public class NetworkPlayerSpawner : MonoBehaviour
     {
         [Header("核心配置")]
         [SerializeField] private GameObject playerCharacterPrefab; // 玩家角色预制体（带Humanoid骨骼）
@@ -31,7 +32,6 @@ namespace Classroom.Player
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private bool showDebugGizmos = true;
 
         // 玩家-座位绑定数据
         private Dictionary<ushort, int> playerToSeatMap = new Dictionary<ushort, int>(); // PlayerID -> SeatIndex
@@ -362,16 +362,15 @@ namespace Classroom.Player
             ushort[] playerIds = playerToSeatMap.Keys.ToArray();
             int[] seatIndices = playerToSeatMap.Values.ToArray();
 
-            // 通过RPC同步
-            photonView.RPC("ReceiveSeatsAndCharactersData", RpcTarget.Others, playerIds, seatIndices);
+            // 通过NetworkManager发送RPC
+            NetworkManager.Instance.BroadcastSeatsAndCharacters(playerIds, seatIndices);
             LogDebug($"向所有客户端同步数据：{playerIds.Length} 名玩家");
         }
 
         /// <summary>
-        /// 接收主机端同步的数据
+        /// 接收主机端同步的数据（由NetworkManager调用）
         /// </summary>
-        [PunRPC]
-        private void ReceiveSeatsAndCharactersData(ushort[] playerIds, int[] seatIndices)
+        public void ReceiveSeatsAndCharactersData(ushort[] playerIds, int[] seatIndices)
         {
             if (PhotonNetwork.IsMasterClient)
             {
@@ -516,18 +515,6 @@ namespace Classroom.Player
             return null;
         }
 
-        /// <summary>
-        /// 手动触发重新生成（调试用）
-        /// </summary>
-        [ContextMenu("重新生成座位和角色")]
-        public void ManualRegenerate()
-        {
-            if (PhotonNetwork.IsMasterClient)
-            {
-                GenerateSeatsAndSpawnCharacters();
-            }
-        }
-
         #endregion
 
         #region 辅助方法
@@ -571,58 +558,6 @@ namespace Classroom.Player
             if (enableDebugLogs)
             {
                 Debug.Log($"[NetworkPlayerSpawner] {message}");
-            }
-        }
-
-        #endregion
-
-        #region Photon序列化
-
-        public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
-        {
-            // 网络同步逻辑（如果需要实时同步状态）
-            if (stream.IsWriting)
-            {
-                // 发送数据
-                stream.SendNext(hasGeneratedSeats);
-                stream.SendNext(hasSpawnedCharacters);
-            }
-            else
-            {
-                // 接收数据
-                hasGeneratedSeats = (bool)stream.ReceiveNext();
-                hasSpawnedCharacters = (bool)stream.ReceiveNext();
-            }
-        }
-
-        #endregion
-
-        #region 调试可视化
-
-        private void OnDrawGizmos()
-        {
-            if (!showDebugGizmos || !isInitialized) return;
-
-            // 绘制玩家-座位连接线
-            foreach (var kvp in playerToSeatMap)
-            {
-                ushort playerId = kvp.Key;
-                int seatIndex = kvp.Value;
-
-                if (playerCharacters.ContainsKey(playerId) && seatIndex >= 0)
-                {
-                    var character = playerCharacters[playerId];
-                    var seatData = seatingSystem.GetSeatData(seatIndex);
-
-                    if (character != null && seatData != null)
-                    {
-                        Gizmos.color = playerId == NetworkManager.Instance?.ClientId ? Color.green : Color.cyan;
-                        Gizmos.DrawLine(character.transform.position, seatData.seatPosition);
-
-                        // 绘制玩家ID标识
-                        Gizmos.DrawWireSphere(character.transform.position + Vector3.up * 2.5f, 0.2f);
-                    }
-                }
             }
         }
 

@@ -536,6 +536,43 @@ namespace Core.Network
             }
         }
 
+        [PunRPC]
+        private void OnSeatsAndCharacters_RPC(int[] playerIds, int[] seatIndices)
+        {
+            LogDebug($"收到座位和角色数据RPC: {playerIds.Length} 名玩家");
+
+            ushort[] playerIdsUShort = new ushort[playerIds.Length];
+            for (int i = 0; i < playerIds.Length; i++)
+            {
+                playerIdsUShort[i] = (ushort)playerIds[i];
+            }
+
+            var spawner = FindObjectOfType<Classroom.Player.NetworkPlayerSpawner>();
+            if (spawner != null)
+            {
+                spawner.ReceiveSeatsAndCharactersData(playerIdsUShort, seatIndices);
+            }
+        }
+
+        [PunRPC]
+        private void OnPlayerTransform_RPC(int playerId, float posX, float posY, float posZ,
+            float rotX, float rotY, float rotZ, float rotW, float velX, float velY, float velZ, float timestamp)
+        {
+            Vector3 position = new Vector3(posX, posY, posZ);
+            Quaternion rotation = new Quaternion(rotX, rotY, rotZ, rotW);
+            Vector3 velocity = new Vector3(velX, velY, velZ);
+
+            var allSyncComponents = FindObjectsOfType<Classroom.Player.PlayerNetworkSync>();
+            foreach (var syncComponent in allSyncComponents)
+            {
+                if (syncComponent.PlayerId == (ushort)playerId)
+                {
+                    syncComponent.ReceiveNetworkTransform(position, rotation, velocity, timestamp);
+                    break;
+                }
+            }
+        }
+
         #endregion
 
         #region Host专用RPC发送方法 - 修复版：统一使用 RpcTarget.All
@@ -857,9 +894,49 @@ namespace Core.Network
                 LogDebug($"✓ 广播卡牌转移: 卡牌{cardId}从玩家{fromPlayerId}转移到玩家{toPlayerId}");
             }
         }
+
+        //玩家生成相关
+        /// <summary>
+        /// 广播座位和角色数据（Host → All）
+        /// </summary>
+        public void BroadcastSeatsAndCharacters(ushort[] playerIds, int[] seatIndices)
+        {
+            if (!IsHost) return;
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                // 将ushort数组转换为int数组以兼容RPC
+                int[] playerIdsInt = new int[playerIds.Length];
+                for (int i = 0; i < playerIds.Length; i++)
+                {
+                    playerIdsInt[i] = playerIds[i];
+                }
+
+                persistentManager.photonView.RPC("OnSeatsAndCharacters_RPC", RpcTarget.All, playerIdsInt, seatIndices);
+                LogDebug($"✓ 广播座位和角色数据到所有玩家: {playerIds.Length} 名玩家");
+            }
+        }
+
+        /// <summary>
+        /// 同步玩家位置数据（Any → All）
+        /// </summary>
+        public void SyncPlayerTransform(ushort playerId, Vector3 position, Quaternion rotation, Vector3 velocity)
+        {
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnPlayerTransform_RPC", RpcTarget.Others,
+                    (int)playerId, position.x, position.y, position.z,
+                    rotation.x, rotation.y, rotation.z, rotation.w,
+                    velocity.x, velocity.y, velocity.z, Time.time);
+
+                LogDebug($"同步玩家 {playerId} 位置数据");
+            }
+        }
         #endregion
 
-        #region 🔧 修复：游戏结束和返回房间逻辑
+        #region 游戏结束和返回房间逻辑
 
         /// <summary>
         /// 通知NQMC游戏结束

@@ -1,14 +1,15 @@
 using UnityEngine;
-using Photon.Pun;
 using Core.Network;
+using Photon.Pun;
 
 namespace Classroom.Player
 {
     /// <summary>
     /// 玩家网络同步组件 - 同步玩家角色的基本变换数据
     /// 仅同步必要的位置和旋转信息，不同步摄像机视角
+    /// 使用统一的NetworkManager进行数据传输
     /// </summary>
-    public class PlayerNetworkSync : MonoBehaviourPun, IPunObservable
+    public class PlayerNetworkSync : MonoBehaviour
     {
         [Header("同步配置")]
         [SerializeField] private bool syncPosition = true; // 同步位置
@@ -23,7 +24,6 @@ namespace Classroom.Player
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = false;
-        [SerializeField] private bool showNetworkGizmos = false;
 
         // 玩家信息
         private ushort playerId;
@@ -60,17 +60,6 @@ namespace Classroom.Player
         {
             playerTransform = transform;
             playerRigidbody = GetComponent<Rigidbody>();
-
-            // PUN2中PhotonView的配置方式
-            if (photonView != null)
-            {
-                // PUN2中不再有synchronization属性，这些设置在Inspector中配置
-                // photonView.synchronization = ViewSynchronization.UnreliableOnChange; // 移除此行
-                // photonView.SendRate = sendRate; // 移除此行
-
-                // PUN2中的发送频率通过PhotonNetwork.SendRate设置（全局）
-                // 或者在PhotonView的Inspector中设置
-            }
         }
 
         private void Start()
@@ -142,7 +131,7 @@ namespace Classroom.Player
         /// </summary>
         private void CheckAndSendData()
         {
-            if (!photonView.IsMine) return;
+            if (!isLocalPlayer) return;
 
             float currentTime = Time.time;
 
@@ -152,6 +141,20 @@ namespace Classroom.Player
             // 检查是否有足够的变化
             if (HasSignificantChange())
             {
+                // 计算速度（用于预测）
+                Vector3 velocity = Vector3.zero;
+                if (enablePrediction && lastSendTime > 0)
+                {
+                    float deltaTime = currentTime - lastSendTime;
+                    if (deltaTime > 0)
+                    {
+                        velocity = (playerTransform.position - lastSentPosition) / deltaTime;
+                    }
+                }
+
+                // 发送数据
+                NetworkManager.Instance.SyncPlayerTransform(playerId, playerTransform.position, playerTransform.rotation, velocity);
+
                 // 更新最后发送的数据
                 lastSentPosition = playerTransform.position;
                 lastSentRotation = playerTransform.rotation;
@@ -194,11 +197,32 @@ namespace Classroom.Player
         #region 远程玩家数据接收和插值
 
         /// <summary>
+        /// 接收网络变换数据（由NetworkManager调用）
+        /// </summary>
+        public void ReceiveNetworkTransform(Vector3 position, Quaternion rotation, Vector3 velocity, float timestamp)
+        {
+            if (isLocalPlayer) return;
+
+            networkPosition = position;
+            networkRotation = rotation;
+            networkVelocity = velocity;
+            networkSendTime = timestamp;
+
+            targetPosition = networkPosition;
+            targetRotation = networkRotation;
+
+            // 应用网络延迟补偿
+            ApplyNetworkDelayCompensation();
+
+            LogDebug($"接收网络数据 - 位置: {networkPosition}, 旋转: {networkRotation.eulerAngles}, 速度: {networkVelocity}");
+        }
+
+        /// <summary>
         /// 插值到目标位置和旋转
         /// </summary>
         private void InterpolateToTarget()
         {
-            if (photonView.IsMine) return;
+            if (isLocalPlayer) return;
 
             float deltaTime = Time.deltaTime;
             float speed = interpolationSpeed * deltaTime;
@@ -207,15 +231,6 @@ namespace Classroom.Player
             if (syncPosition)
             {
                 Vector3 newPosition = Vector3.Lerp(playerTransform.position, targetPosition, speed);
-
-                // 如果启用预测且有速度数据，添加预测位置
-                if (enablePrediction && networkVelocity.magnitude > 0.1f)
-                {
-                    float timeSinceReceive = Time.time - networkSendTime;
-                    Vector3 predictedPosition = targetPosition + networkVelocity * timeSinceReceive;
-                    newPosition = Vector3.Lerp(newPosition, predictedPosition, 0.3f);
-                }
-
                 playerTransform.position = newPosition;
             }
 
@@ -226,110 +241,20 @@ namespace Classroom.Player
             }
         }
 
-        #endregion
-
-        #region Photon网络同步
-
-        /// <summary>
-        /// Photon数据序列化
-        /// </summary>
-        public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
-        {
-            if (stream.IsWriting)
-            {
-                // 发送数据
-                WriteDataToStream(stream);
-            }
-            else
-            {
-                // 接收数据
-                ReadDataFromStream(stream, info);
-            }
-        }
-
-        /// <summary>
-        /// 写入数据到流
-        /// </summary>
-        private void WriteDataToStream(PhotonStream stream)
-        {
-            // 发送位置
-            if (syncPosition)
-            {
-                stream.SendNext(playerTransform.position);
-
-                // 计算速度（用于预测）
-                if (enablePrediction && lastSendTime > 0)
-                {
-                    float deltaTime = Time.time - lastSendTime;
-                    if (deltaTime > 0)
-                    {
-                        Vector3 velocity = (playerTransform.position - lastSentPosition) / deltaTime;
-                        stream.SendNext(velocity);
-                    }
-                    else
-                    {
-                        stream.SendNext(Vector3.zero);
-                    }
-                }
-                else
-                {
-                    stream.SendNext(Vector3.zero);
-                }
-            }
-
-            // 发送旋转
-            if (syncRotation)
-            {
-                stream.SendNext(playerTransform.rotation);
-            }
-
-            // 发送时间戳
-            stream.SendNext(Time.time);
-        }
-
-        /// <summary>
-        /// 从流读取数据
-        /// </summary>
-        private void ReadDataFromStream(PhotonStream stream, PhotonMessageInfo info)
-        {
-            // 接收位置
-            if (syncPosition)
-            {
-                networkPosition = (Vector3)stream.ReceiveNext();
-                networkVelocity = (Vector3)stream.ReceiveNext();
-                targetPosition = networkPosition;
-            }
-
-            // 接收旋转
-            if (syncRotation)
-            {
-                networkRotation = (Quaternion)stream.ReceiveNext();
-                targetRotation = networkRotation;
-            }
-
-            // 接收时间戳
-            networkSendTime = (float)stream.ReceiveNext();
-
-            // 计算网络延迟补偿
-            ApplyNetworkDelayCompensation(info);
-
-            LogDebug($"接收网络数据 - 位置: {networkPosition}, 旋转: {networkRotation.eulerAngles}, 速度: {networkVelocity}");
-        }
-
         /// <summary>
         /// 应用网络延迟补偿
         /// </summary>
-        private void ApplyNetworkDelayCompensation(PhotonMessageInfo info)
+        private void ApplyNetworkDelayCompensation()
         {
             if (!enablePrediction) return;
 
             // 计算网络延迟
-            double lag = Mathf.Abs((float)(PhotonNetwork.Time - info.SentServerTime));
+            float lag = Time.time - networkSendTime;
 
             // 应用延迟补偿到目标位置
             if (syncPosition && networkVelocity.magnitude > 0.1f)
             {
-                targetPosition = networkPosition + networkVelocity * (float)lag;
+                targetPosition = networkPosition + networkVelocity * lag;
             }
 
             LogDebug($"网络延迟补偿: {lag:F3}s, 补偿后位置: {targetPosition}");
@@ -366,8 +291,6 @@ namespace Classroom.Player
             syncRotation = rotation;
             sendRate = rate;
 
-            // PUN2中发送频率不能直接在PhotonView上设置
-            // 需要通过PhotonNetwork.SendRate全局设置或在Inspector中配置
             LogDebug($"同步设置更新 - 位置: {syncPosition}, 旋转: {syncRotation}, 频率: {sendRate}Hz");
         }
 
@@ -395,46 +318,6 @@ namespace Classroom.Player
             if (enableDebugLogs)
             {
                 Debug.Log($"[PlayerNetworkSync-{playerId}] {message}");
-            }
-        }
-
-        [ContextMenu("显示网络状态")]
-        public void ShowNetworkStatus()
-        {
-            Debug.Log($"[PlayerNetworkSync] {GetNetworkStatus()}");
-        }
-
-        [ContextMenu("强制发送数据")]
-        public void ForceSendData()
-        {
-            if (isLocalPlayer)
-            {
-                lastSendTime = 0; // 重置时间以强制发送
-                CheckAndSendData();
-            }
-        }
-
-        #endregion
-
-        #region 调试可视化
-
-        private void OnDrawGizmos()
-        {
-            if (!showNetworkGizmos || !isInitialized) return;
-
-            // 绘制当前位置
-            Gizmos.color = isLocalPlayer ? Color.green : Color.red;
-            Gizmos.DrawWireCube(playerTransform.position, Vector3.one * 0.5f);
-
-            // 绘制目标位置（仅远程玩家）
-            if (!isLocalPlayer)
-            {
-                Gizmos.color = Color.yellow;
-                Gizmos.DrawWireCube(targetPosition, Vector3.one * 0.3f);
-
-                // 绘制连接线
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawLine(playerTransform.position, targetPosition);
             }
         }
 
