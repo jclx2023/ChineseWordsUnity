@@ -1012,6 +1012,142 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 2883500289784984979, guid: 8c30c861eb5987047a0aaeda2ca174c9, type: 3}
   m_PrefabInstance: {fileID: 816470545}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &993227897
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 993227902}
+  - component: {fileID: 993227901}
+  - component: {fileID: 993227900}
+  - component: {fileID: 993227899}
+  - component: {fileID: 993227898}
+  m_Layer: 0
+  m_Name: ClassroomController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &993227898
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 993227897}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a701efba0354f1641b10b4afd00b4359, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  deskChairPrefab: {fileID: 919132149155446097, guid: d3026e134e518574098e7ec1a223c284, type: 3}
+  playerCount: 5
+  autoGenerateOnStart: 0
+  arcCenter: {x: 8, y: 0, z: 0}
+  seatDistributionCenter: {x: 0, y: 0, z: 0}
+  showArcCenterGizmo: 1
+  deskChairWidth: 0.5
+  deskChairDepth: 0.48
+  extraSpacing: 0.5
+  classroomWidth: 8
+  classroomDepth: 10
+  wallMargin: 0.3
+  autoAdjustForClassroomSize: 0
+  baseRadius: 8
+  radiusPerPlayer: 0
+  maxRadius: 12
+  minRadius: 4
+  maxArcDegrees: 150
+  minAngleBetweenSeats: 6
+  seatHeight: 0
+  chairDefaultDirection: {x: 0, y: 0, z: -1}
+  lockXZRotation: 1
+  yRotationOffset: 180
+  enableDebugLogs: 1
+  showDebugGizmos: 1
+  arcCenterColor: {r: 1, g: 0, b: 0, a: 1}
+  seatCenterColor: {r: 0, g: 1, b: 0, a: 1}
+  seatPositionColor: {r: 0, g: 0, b: 1, a: 1}
+  directionRayColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+--- !u!114 &993227899
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 993227897}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99e5fcd15dabf984d8bec6b6afa22429, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  seatingSystem: {fileID: 993227898}
+  playerSpawner: {fileID: 993227900}
+  autoBindOnStart: 1
+  maintainBindingOnPlayerLeave: 1
+  enableDebugLogs: 1
+  showBindingGizmos: 1
+--- !u!114 &993227900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 993227897}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5fb1e395d0bcee4c8920617c67b5ade, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerCharacterPrefab: {fileID: 5415432168881156608, guid: 4e3b70e84dfc1904d85a57e42fb3d49e, type: 3}
+  seatingSystem: {fileID: 993227898}
+  spawnDelay: 1
+  characterHeight: 1.8
+  characterScale: {x: 1, y: 1, z: 1}
+  sceneLoadTimeout: 10
+  waitForAllPlayersReady: 1
+  enableDebugLogs: 1
+  showDebugGizmos: 1
+--- !u!114 &993227901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 993227897}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c337d98aac5a6f348be534dd72def272, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  seatingSystem: {fileID: 993227898}
+  playerSpawner: {fileID: 993227900}
+  seatBinder: {fileID: 993227899}
+  initializationDelay: 1
+  sceneLoadTimeout: 15
+  waitForNetworkReady: 1
+  enableDebugLogs: 1
+  showInitializationSteps: 1
+  enableTestMode: 0
+--- !u!4 &993227902
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 993227897}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1047283266
 GameObject:
   m_ObjectHideFlags: 0
@@ -1838,79 +1974,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 500}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!1 &1450466168
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1450466170}
-  - component: {fileID: 1450466169}
-  m_Layer: 0
-  m_Name: CircularSeatingSystem
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1450466169
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1450466168}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a701efba0354f1641b10b4afd00b4359, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  deskChairPrefab: {fileID: 919132149155446097, guid: d3026e134e518574098e7ec1a223c284, type: 3}
-  playerCount: 5
-  autoGenerateOnStart: 0
-  arcCenter: {x: 8, y: 0, z: 0}
-  seatDistributionCenter: {x: 0, y: 0, z: 0}
-  showArcCenterGizmo: 1
-  deskChairWidth: 0.5
-  deskChairDepth: 0.48
-  extraSpacing: 0.5
-  classroomWidth: 8
-  classroomDepth: 10
-  wallMargin: 0.3
-  autoAdjustForClassroomSize: 0
-  baseRadius: 8
-  radiusPerPlayer: 0
-  maxRadius: 12
-  minRadius: 4
-  maxArcDegrees: 150
-  minAngleBetweenSeats: 6
-  seatHeight: 0
-  chairDefaultDirection: {x: 0, y: 0, z: -1}
-  lockXZRotation: 1
-  yRotationOffset: 180
-  enableDebugLogs: 1
-  showDebugGizmos: 1
-  arcCenterColor: {r: 1, g: 0, b: 0, a: 1}
-  seatCenterColor: {r: 0, g: 1, b: 0, a: 1}
-  seatPositionColor: {r: 0, g: 0, b: 1, a: 1}
-  directionRayColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
---- !u!4 &1450466170
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1450466168}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1458251669
 GameObject:
   m_ObjectHideFlags: 0
@@ -2959,5 +3022,5 @@ SceneRoots:
   - {fileID: 1150393797}
   - {fileID: 1678533149}
   - {fileID: 1860553623}
-  - {fileID: 1450466170}
   - {fileID: 1209781531}
+  - {fileID: 993227902}
