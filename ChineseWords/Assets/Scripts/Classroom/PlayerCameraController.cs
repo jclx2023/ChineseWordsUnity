@@ -76,12 +76,15 @@ namespace Classroom.Player
                 characterAnimator = GetComponentInChildren<Animator>();
             }
 
-            // 检查是否为本地玩家
-            CheckIfLocalPlayer();
+            // 注意：不在Awake中检查本地玩家状态，延迟到Start中
+            LogDebug("PlayerCameraController Awake完成，等待初始化");
         }
 
         private void Start()
         {
+            // 延迟检查本地玩家状态，确保PlayerNetworkSync已经初始化
+            CheckIfLocalPlayer();
+
             if (isLocalPlayer)
             {
                 InitializeCameraController();

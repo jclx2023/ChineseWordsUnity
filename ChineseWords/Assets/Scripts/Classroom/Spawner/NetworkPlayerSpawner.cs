@@ -297,6 +297,7 @@ namespace Classroom.Player
             // 获取生成位置
             Vector3 spawnPosition = seatIdentifier.GetPlayerSpawnPosition();
             Quaternion spawnRotation = seatIdentifier.GetSeatRotation();
+            spawnRotation *= Quaternion.Euler(0, 180, 0);
 
             // 生成角色
             GameObject character = Instantiate(playerCharacterPrefab, spawnPosition, spawnRotation);
@@ -318,6 +319,7 @@ namespace Classroom.Player
         /// </summary>
         private void SetupCharacterForPlayer(GameObject character, ushort playerId)
         {
+            LogDebug($"设置角色 {playerId}, 本地ClientId: {NetworkManager.Instance.ClientId}, 是否匹配: {playerId == NetworkManager.Instance.ClientId}");
             // 添加PlayerCameraController（仅本地玩家）
             if (playerId == NetworkManager.Instance.ClientId)
             {

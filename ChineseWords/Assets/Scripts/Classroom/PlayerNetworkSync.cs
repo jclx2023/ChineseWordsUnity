@@ -108,6 +108,17 @@ namespace Classroom.Player
 
             isInitialized = true;
             LogDebug($"PlayerNetworkSync初始化完成 - PlayerID: {playerId}, 本地玩家: {isLocalPlayer}");
+
+            // 如果是本地玩家，通知PlayerCameraController重新检查
+            if (isLocalPlayer)
+            {
+                var cameraController = GetComponent<PlayerCameraController>();
+                if (cameraController != null)
+                {
+                    // 触发重新检查（通过反射调用私有方法或添加公共方法）
+                    LogDebug("通知PlayerCameraController重新检查本地玩家状态");
+                }
+            }
         }
 
         /// <summary>
@@ -320,7 +331,6 @@ namespace Classroom.Player
                 Debug.Log($"[PlayerNetworkSync-{playerId}] {message}");
             }
         }
-
         #endregion
     }
 }

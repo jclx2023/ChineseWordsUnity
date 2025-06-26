@@ -303,7 +303,7 @@ namespace Classroom
         private IEnumerator SetupCameraControl()
         {
             ReportStep("设置摄像机控制");
-
+            LogDebug($"当前ClientId: {NetworkManager.Instance?.ClientId}, 测试模式: {enableTestMode}");
             // 等待一帧确保所有组件准备就绪
             yield return null;
 
