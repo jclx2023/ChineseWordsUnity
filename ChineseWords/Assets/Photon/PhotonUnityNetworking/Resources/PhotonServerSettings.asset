@@ -62,6 +62,7 @@ MonoBehaviour:
   - OnCardTransferred_RPC
   - OnCardUsed_RPC
   - OnHandSizeChanged_RPC
+  - ReceiveSeatsAndCharactersData
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
