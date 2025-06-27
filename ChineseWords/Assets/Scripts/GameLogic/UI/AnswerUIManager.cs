@@ -61,7 +61,6 @@ namespace UI.Answer
         private bool cameraControllerReady = false;
 
         // 事件
-        public static event System.Action<string> OnAnswerSubmitted;
         public static event System.Action OnAnswerUIClosed;
 
         // 属性
@@ -219,19 +218,6 @@ namespace UI.Answer
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// 手动设置摄像机控制器（供外部调用）
-        /// </summary>
-        public void SetPlayerCameraController(PlayerCameraController cameraController)
-        {
-            if (cameraController != null)
-            {
-                playerCameraController = cameraController;
-                cameraControllerReady = true;
-                LogDebug($"手动设置摄像机控制器: {cameraController.name}");
-            }
         }
 
         #endregion
@@ -614,8 +600,16 @@ namespace UI.Answer
         {
             LogDebug($"用户选择了选项: {selectedOption}");
 
-            // 立即提交答案
-            OnAnswerSubmitted?.Invoke(selectedOption);
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(selectedOption);
+                LogDebug($"通过NetworkManager提交答案: {selectedOption}");
+            }
+            else
+            {
+                LogDebug("NetworkManager.Instance 为空，无法提交答案");
+            }
+
             HideAnswerUI();
         }
 
@@ -635,7 +629,18 @@ namespace UI.Answer
                 {
                     string answer = inputField.text.Trim();
                     LogDebug($"填空题答案: '{answer}'");
-                    OnAnswerSubmitted?.Invoke(answer);
+
+                    // 直接调用NetworkManager提交答案，与其他题型保持一致
+                    if (NetworkManager.Instance != null)
+                    {
+                        NetworkManager.Instance.SubmitAnswer(answer);
+                        LogDebug($"通过NetworkManager提交答案: {answer}");
+                    }
+                    else
+                    {
+                        LogDebug("NetworkManager.Instance 为空，无法提交答案");
+                    }
+
                     HideAnswerUI();
                 }
             }

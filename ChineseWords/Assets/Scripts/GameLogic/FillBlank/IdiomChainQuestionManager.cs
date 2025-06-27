@@ -8,7 +8,7 @@ using Core.Network;
 namespace GameLogic.FillBlank
 {
     /// <summary>
-    /// 成语接龙题管理器 - UI架构重构版
+    /// 成语接龙题管理器 - UI架构重构版（简化修复）
     /// 
     /// 功能说明：
     /// - 从预加载的首题候选中随机选择，玩家接龙
@@ -16,11 +16,11 @@ namespace GameLogic.FillBlank
     /// - 特殊逻辑：答对后用答案作为下一题继续接龙
     /// - Host端生成题目数据和接龙验证信息
     /// 
-    /// 重构内容：
-    /// - 移除所有UI相关代码，UI功能已转移至AnswerUIManager
-    /// - 保留数据生成、网络通信和答案验证核心功能
-    /// - 优化代码结构，统一题型管理器代码风格
-    /// - 保留成语接龙特有的连续题目生成功能
+    /// 修复内容：
+    /// - 简化题干格式，移除过度的HTML标签和字体大小设置
+    /// - 保留关键的颜色高亮（最后一个字）
+    /// - 与其他题型管理器保持一致的代码风格
+    /// - 优化显示文本生成逻辑
     /// </summary>
     public class IdiomChainQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
@@ -85,15 +85,12 @@ namespace GameLogic.FillBlank
                     return null;
                 }
 
-                // 创建基础显示文本
-                string basicDisplayText = CreateDisplayText(selectedIdiom);
-
-                // 创建增强显示文本（首题，chainCount = 0）
-                string enhancedDisplayText = CreateEnhancedIdiomChainText(basicDisplayText, 0, null);
+                // 创建简洁的显示文本（保留关键高亮）
+                string displayText = CreateSimpleDisplayText(selectedIdiom, true);
 
                 var additionalData = new IdiomChainAdditionalData
                 {
-                    displayText = enhancedDisplayText,
+                    displayText = displayText,
                     currentIdiom = selectedIdiom,
                     targetChar = selectedIdiom[selectedIdiom.Length - 1]
                 };
@@ -101,14 +98,14 @@ namespace GameLogic.FillBlank
                 var questionData = new NetworkQuestionData
                 {
                     questionType = QuestionType.IdiomChain,
-                    questionText = enhancedDisplayText,
+                    questionText = displayText,
                     correctAnswer = "",
                     options = new string[0],
                     timeLimit = 30f,
                     additionalData = JsonUtility.ToJson(additionalData)
                 };
 
-                LogDebug($"IdiomChain题目生成成功: {selectedIdiom}");
+                LogDebug($"IdiomChain题目生成成功: {selectedIdiom} -> {displayText}");
                 return questionData;
             }
             catch (System.Exception e)
@@ -130,16 +127,13 @@ namespace GameLogic.FillBlank
 
             try
             {
-                // 创建基础显示文本（高亮最后一个字）
-                string basicDisplayText = CreateDisplayText(baseIdiom);
-
-                // 创建增强的显示文本（包含接龙信息）
-                string enhancedDisplayText = CreateEnhancedIdiomChainText(basicDisplayText, chainCount, previousIdiom);
+                // 创建简洁的显示文本
+                string displayText = CreateSimpleDisplayText(baseIdiom, false, chainCount, previousIdiom);
 
                 // 创建附加数据
                 var additionalData = new IdiomChainAdditionalData
                 {
-                    displayText = enhancedDisplayText,
+                    displayText = displayText,
                     currentIdiom = baseIdiom,
                     targetChar = baseIdiom[baseIdiom.Length - 1]
                 };
@@ -148,14 +142,14 @@ namespace GameLogic.FillBlank
                 var questionData = new NetworkQuestionData
                 {
                     questionType = QuestionType.IdiomChain,
-                    questionText = enhancedDisplayText,
-                    correctAnswer = "", // 成语接龙没有固定答案
+                    questionText = displayText,
+                    correctAnswer = "",
                     options = new string[0],
                     timeLimit = 30f,
                     additionalData = JsonUtility.ToJson(additionalData)
                 };
 
-                LogDebug($"连续接龙题目创建成功: {baseIdiom}");
+                LogDebug($"连续接龙题目创建成功: {baseIdiom} -> {displayText}");
                 return questionData;
             }
             catch (System.Exception e)
@@ -171,6 +165,50 @@ namespace GameLogic.FillBlank
         public NetworkQuestionData CreateContinuationQuestion(string baseIdiom)
         {
             return CreateContinuationQuestion(baseIdiom, 0, null);
+        }
+
+        /// <summary>
+        /// 创建简洁的显示文本（保留关键高亮）
+        /// </summary>
+        private string CreateSimpleDisplayText(string idiom, bool isFirstQuestion, int chainCount = 0, string previousIdiom = null)
+        {
+            if (string.IsNullOrEmpty(idiom))
+                return "成语接龙";
+
+            // 高亮最后一个字
+            string highlightedIdiom = CreateHighlightedIdiom(idiom);
+
+            if (isFirstQuestion)
+            {
+                // 首题：简洁显示
+                return $"成语接龙：{highlightedIdiom}";
+            }
+            else
+            {
+                // 连续题目：稍微提供上下文
+                string result = $"接龙：{highlightedIdiom}";
+
+                // 可选：显示上一个成语（如果有且不太长）
+                if (!string.IsNullOrEmpty(previousIdiom) && chainCount > 0)
+                {
+                    result = $"上一个：{previousIdiom}\n{result}";
+                }
+
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// 创建高亮的成语（只高亮最后一个字）
+        /// </summary>
+        private string CreateHighlightedIdiom(string idiom)
+        {
+            if (string.IsNullOrEmpty(idiom) || idiom.Length < 2)
+                return idiom;
+
+            // 只高亮最后一个字，使用红色
+            char lastChar = idiom[idiom.Length - 1];
+            return idiom.Substring(0, idiom.Length - 1) + $"<color=red>{lastChar}</color>";
         }
 
         /// <summary>
@@ -235,52 +273,6 @@ namespace GameLogic.FillBlank
             // 随机选择（不移除，因为Host端可能需要多次抽题）
             int index = Random.Range(0, firstCandidates.Count);
             return firstCandidates[index];
-        }
-
-        /// <summary>
-        /// 创建显示文本（高亮最后一个字）
-        /// </summary>
-        private string CreateDisplayText(string idiom)
-        {
-            if (string.IsNullOrEmpty(idiom))
-                return "";
-
-            // 高亮最后一个字
-            char lastChar = idiom[idiom.Length - 1];
-            return idiom.Substring(0, idiom.Length - 1) + $"<color=red>{lastChar}</color>";
-        }
-
-        /// <summary>
-        /// 创建增强的成语接龙显示文本
-        /// </summary>
-        private string CreateEnhancedIdiomChainText(string basicText, int chainCount, string previousIdiom)
-        {
-            if (string.IsNullOrEmpty(basicText))
-                return "<color=orange><b>成语接龙</b></color>\n成语接龙题目";
-
-            string enhanced = "<color=orange><b>成语接龙</b></color>\n";
-
-            if (chainCount == 0)
-            {
-                enhanced += "<color=green>开始接龙！</color>\n";
-            }
-            else
-            {
-                enhanced += $"<color=green>接龙第 {chainCount + 1} 个</color>\n";
-                if (!string.IsNullOrEmpty(previousIdiom))
-                {
-                    enhanced += $"<color=yellow>上一个: {previousIdiom}</color>\n";
-                }
-            }
-
-            enhanced += $"\n{basicText}";
-
-            if (chainCount == 0)
-            {
-                enhanced += "\n\n<size=10><color=gray>用最后一字开头接龙</color></size>";
-            }
-
-            return enhanced;
         }
 
         #endregion
@@ -360,7 +352,7 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// 从显示文本中提取成语
+        /// 从显示文本中提取成语（优化版）
         /// </summary>
         private string ExtractIdiomFromDisplayText(string displayText)
         {
@@ -370,17 +362,36 @@ namespace GameLogic.FillBlank
             try
             {
                 // 移除HTML标签
-                string cleanText = System.Text.RegularExpressions.Regex.Replace(displayText, "<.*?>", "");
+                string cleanText = RemoveHtmlTags(displayText);
 
-                // 查找四字成语
-                var matches = System.Text.RegularExpressions.Regex.Matches(cleanText, @"[\u4e00-\u9fa5]{4}");
+                // 查找四字成语（更精确的正则）
+                var match = System.Text.RegularExpressions.Regex.Match(cleanText, @"[\u4e00-\u9fa5]{4}");
 
-                return matches.Count > 0 ? matches[0].Value : "";
+                return match.Success ? match.Value : "";
             }
             catch (System.Exception e)
             {
                 LogError($"从显示文本提取成语失败: {e.Message}");
                 return "";
+            }
+        }
+
+        /// <summary>
+        /// 移除HTML标签的工具方法
+        /// </summary>
+        private string RemoveHtmlTags(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+
+            try
+            {
+                return System.Text.RegularExpressions.Regex.Replace(input, "<.*?>", "");
+            }
+            catch (System.Exception e)
+            {
+                LogError($"移除HTML标签失败: {e.Message}");
+                return input;
             }
         }
 
@@ -530,7 +541,6 @@ namespace GameLogic.FillBlank
                 // 单机模式下继续接龙
                 currentIdiom = answer;
                 LogDebug("回答正确，继续接龙");
-                // 注意：UI相关的计时器重启等逻辑已移除，由AnswerUIManager处理
             }
             else
             {
