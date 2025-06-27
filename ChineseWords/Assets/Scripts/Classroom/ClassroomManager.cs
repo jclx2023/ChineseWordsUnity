@@ -10,6 +10,7 @@ namespace Classroom
     /// <summary>
     /// 教室管理器 - NetworkGameScene的总控制器
     /// 统一管理座位系统、玩家生成和摄像机控制的初始化流程
+    /// 修改为统一处理网络事件和同步控制
     /// </summary>
     public class ClassroomManager : MonoBehaviour
     {
@@ -38,6 +39,7 @@ namespace Classroom
             "初始化玩家生成器",
             "初始化座位绑定器",
             "生成座位和角色",
+            "同步网络数据",
             "设置摄像机控制",
             "完成初始化"
         };
@@ -53,6 +55,7 @@ namespace Classroom
         public static event System.Action OnClassroomInitialized;
         public static event System.Action<string> OnInitializationStep;
         public static event System.Action<string> OnClassroomError;
+        public static event System.Action OnCameraSetupCompleted; // 新增：摄像机设置完成事件
 
         #region Unity生命周期
 
@@ -66,6 +69,84 @@ namespace Classroom
         {
             // 开始初始化流程
             StartCoroutine(InitializeClassroomAsync());
+        }
+
+        private void OnEnable()
+        {
+            // 订阅NetworkPlayerSpawner的事件
+            SubscribeToPlayerSpawnerEvents();
+        }
+
+        private void OnDisable()
+        {
+            // 取消订阅NetworkPlayerSpawner的事件
+            UnsubscribeFromPlayerSpawnerEvents();
+        }
+
+        #endregion
+
+        #region 事件订阅管理
+
+        /// <summary>
+        /// 订阅NetworkPlayerSpawner的事件
+        /// </summary>
+        private void SubscribeToPlayerSpawnerEvents()
+        {
+            NetworkPlayerSpawner.OnPlayerJoinedEvent += OnPlayerJoinedFromSpawner;
+            NetworkPlayerSpawner.OnPlayerLeftEvent += OnPlayerLeftFromSpawner;
+        }
+
+        /// <summary>
+        /// 取消订阅NetworkPlayerSpawner的事件
+        /// </summary>
+        private void UnsubscribeFromPlayerSpawnerEvents()
+        {
+            NetworkPlayerSpawner.OnPlayerJoinedEvent -= OnPlayerJoinedFromSpawner;
+            NetworkPlayerSpawner.OnPlayerLeftEvent -= OnPlayerLeftFromSpawner;
+        }
+
+        #endregion
+
+        #region 网络事件处理
+
+        /// <summary>
+        /// 处理玩家加入事件（从NetworkPlayerSpawner转发）
+        /// </summary>
+        private void OnPlayerJoinedFromSpawner(ushort playerId)
+        {
+            LogDebug($"收到玩家 {playerId} 加入事件");
+
+            if (PhotonNetwork.IsMasterClient && isInitialized)
+            {
+                // 重新生成座位和角色
+                LogDebug("主机端：玩家加入，重新生成座位和角色");
+                StartCoroutine(DelayedRegenerateSeatsAndCharacters());
+            }
+        }
+
+        /// <summary>
+        /// 处理玩家离开事件（从NetworkPlayerSpawner转发）
+        /// </summary>
+        private void OnPlayerLeftFromSpawner(ushort playerId)
+        {
+            LogDebug($"收到玩家 {playerId} 离开事件");
+
+            // 可以根据需求决定是否重新生成
+            // 目前保持座位不变，支持断线重连
+            LogDebug("玩家离开，保持当前座位布局不变");
+        }
+
+        /// <summary>
+        /// 延迟重新生成座位和角色
+        /// </summary>
+        private IEnumerator DelayedRegenerateSeatsAndCharacters()
+        {
+            yield return new WaitForSeconds(1f); // 等待网络状态稳定
+
+            LogDebug("开始重新生成座位和角色");
+
+            // 执行完整的生成和同步流程
+            yield return StartCoroutine(ExecuteGenerateAndSync());
         }
 
         #endregion
@@ -123,35 +204,86 @@ namespace Classroom
             initializationInProgress = true;
             LogDebug("开始教室初始化流程");
 
+            // 使用单独的协程来处理可能的异常
+            yield return StartCoroutine(ExecuteInitializationSteps());
+        }
+
+        /// <summary>
+        /// 执行初始化步骤（不包含try-catch以避免编译错误）
+        /// </summary>
+        private IEnumerator ExecuteInitializationSteps()
+        {
             // 等待初始延迟
             yield return new WaitForSeconds(initializationDelay);
 
             // 步骤1: 检查网络状态
             var checkNetworkCoroutine = StartCoroutine(CheckNetworkStatus());
             yield return checkNetworkCoroutine;
+            if (!ValidateCoroutineResult("检查网络状态")) yield break;
 
             // 步骤2: 初始化座位系统
             var initSeatingCoroutine = StartCoroutine(InitializeSeatingSystem());
             yield return initSeatingCoroutine;
+            if (!ValidateCoroutineResult("初始化座位系统")) yield break;
 
             // 步骤3: 初始化玩家生成器
             var initSpawnerCoroutine = StartCoroutine(InitializePlayerSpawner());
             yield return initSpawnerCoroutine;
+            if (!ValidateCoroutineResult("初始化玩家生成器")) yield break;
 
             // 步骤4: 初始化座位绑定器
             var initBinderCoroutine = StartCoroutine(InitializeSeatBinder());
             yield return initBinderCoroutine;
+            if (!ValidateCoroutineResult("初始化座位绑定器")) yield break;
 
             // 步骤5: 生成座位和角色（仅主机）
             var generateCoroutine = StartCoroutine(GenerateSeatsAndCharacters());
             yield return generateCoroutine;
+            if (!ValidateCoroutineResult("生成座位和角色")) yield break;
 
-            // 步骤6: 设置摄像机控制
+            // 步骤6: 同步网络数据（仅主机）
+            var syncCoroutine = StartCoroutine(SyncNetworkData());
+            yield return syncCoroutine;
+            if (!ValidateCoroutineResult("同步网络数据")) yield break;
+
+            // 步骤7: 设置摄像机控制
             var setupCameraCoroutine = StartCoroutine(SetupCameraControl());
             yield return setupCameraCoroutine;
+            if (!ValidateCoroutineResult("设置摄像机控制")) yield break;
 
-            // 步骤7: 完成初始化
+            // 步骤8: 完成初始化
             CompleteInitialization();
+        }
+
+        /// <summary>
+        /// 验证协程结果（简单的错误检查）
+        /// </summary>
+        private bool ValidateCoroutineResult(string stepName)
+        {
+            // 这里可以添加更复杂的验证逻辑
+            // 目前简单检查组件状态
+            bool isValid = true;
+
+            switch (stepName)
+            {
+                case "初始化座位系统":
+                    isValid = seatingSystem != null && seatingSystem.IsInitialized;
+                    break;
+                case "初始化玩家生成器":
+                    isValid = playerSpawner != null && playerSpawner.IsInitialized;
+                    break;
+                case "初始化座位绑定器":
+                    isValid = seatBinder != null && seatBinder.IsInitialized;
+                    break;
+            }
+
+            if (!isValid)
+            {
+                HandleInitializationError($"{stepName} 验证失败");
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -192,7 +324,8 @@ namespace Classroom
 
             if (!networkReady)
             {
-                throw new System.Exception("网络连接超时");
+                HandleInitializationError("网络连接超时");
+                yield break;
             }
         }
 
@@ -205,7 +338,8 @@ namespace Classroom
 
             if (seatingSystem == null)
             {
-                throw new System.Exception("座位系统组件缺失");
+                HandleInitializationError("座位系统组件缺失");
+                yield break;
             }
 
             // 等待座位系统准备就绪
@@ -222,7 +356,8 @@ namespace Classroom
 
             if (playerSpawner == null)
             {
-                throw new System.Exception("玩家生成器组件缺失");
+                HandleInitializationError("玩家生成器组件缺失");
+                yield break;
             }
 
             // 等待玩家生成器准备就绪
@@ -239,7 +374,8 @@ namespace Classroom
 
             if (seatBinder == null)
             {
-                throw new System.Exception("座位绑定器组件缺失");
+                HandleInitializationError("座位绑定器组件缺失");
+                yield break;
             }
 
             // 手动初始化座位绑定器
@@ -269,7 +405,10 @@ namespace Classroom
             {
                 LogDebug("主机端：开始生成座位和角色");
 
-                // 主机负责生成
+                // 先执行延迟初始化
+                yield return StartCoroutine(playerSpawner.DelayedSpawnInitializationCoroutine());
+
+                // 然后生成座位和角色
                 playerSpawner.GenerateSeatsAndSpawnCharacters();
 
                 // 等待生成完成
@@ -290,11 +429,54 @@ namespace Classroom
 
                 if (timeout <= 0)
                 {
-                    throw new System.Exception("等待主机同步数据超时");
+                    HandleInitializationError("等待主机同步数据超时");
+                    yield break;
                 }
 
                 LogDebug("客户端：数据同步完成");
             }
+        }
+
+        /// <summary>
+        /// 同步网络数据
+        /// </summary>
+        private IEnumerator SyncNetworkData()
+        {
+            ReportStep("同步网络数据");
+
+            if (PhotonNetwork.IsMasterClient)
+            {
+                LogDebug("主机端：开始同步数据给所有客户端");
+                playerSpawner.SyncToAllClients();
+
+                // 等待一帧确保RPC发送
+                yield return null;
+                LogDebug("主机端：网络数据同步完成");
+            }
+            else
+            {
+                LogDebug("客户端：跳过网络数据同步");
+            }
+        }
+
+        /// <summary>
+        /// 执行生成和同步流程（供重新生成时调用）
+        /// </summary>
+        private IEnumerator ExecuteGenerateAndSync()
+        {
+            // 先执行延迟初始化
+            yield return StartCoroutine(playerSpawner.DelayedSpawnInitializationCoroutine());
+
+            // 然后生成座位和角色
+            playerSpawner.GenerateSeatsAndSpawnCharacters();
+
+            // 等待生成完成
+            yield return new WaitUntil(() => playerSpawner.HasSpawnedCharacters);
+
+            // 同步给所有客户端
+            playerSpawner.SyncToAllClients();
+
+            LogDebug("重新生成和同步完成");
         }
 
         /// <summary>
@@ -304,6 +486,7 @@ namespace Classroom
         {
             ReportStep("设置摄像机控制");
             LogDebug($"当前ClientId: {NetworkManager.Instance?.ClientId}, 测试模式: {enableTestMode}");
+
             // 等待一帧确保所有组件准备就绪
             yield return null;
 
@@ -317,6 +500,9 @@ namespace Classroom
                 if (cameraController != null && cameraController.IsInitialized)
                 {
                     LogDebug("本地玩家摄像机控制器设置完成");
+
+                    // 触发摄像机设置完成事件
+                    OnCameraSetupCompleted?.Invoke();
                 }
                 else
                 {
@@ -472,6 +658,19 @@ namespace Classroom
             return status;
         }
 
+        /// <summary>
+        /// 获取本地玩家的摄像机控制器（供其他组件调用）
+        /// </summary>
+        public PlayerCameraController GetLocalPlayerCameraController()
+        {
+            if (!isInitialized) return null;
+
+            ushort localPlayerId = enableTestMode ? (ushort)1 : NetworkManager.Instance.ClientId;
+            var localCharacter = playerSpawner.GetPlayerCharacter(localPlayerId);
+
+            return localCharacter?.GetComponent<PlayerCameraController>();
+        }
+
         #endregion
 
         #region 事件处理
@@ -558,6 +757,7 @@ namespace Classroom
         {
             // 清理资源
             StopAllCoroutines();
+            UnsubscribeFromPlayerSpawnerEvents();
 
             LogDebug("ClassroomManager已销毁");
         }

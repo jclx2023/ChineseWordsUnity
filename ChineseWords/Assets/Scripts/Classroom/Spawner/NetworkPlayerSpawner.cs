@@ -11,9 +11,8 @@ namespace Classroom.Player
 {
     /// <summary>
     /// 网络玩家生成器 - 负责根据房间玩家数动态生成座位和角色
-    /// 主机端：生成座位+分配玩家+生成角色，然后同步给所有客户端
-    /// 客户端：接收同步数据，在本地重建座位和角色布局
-    /// 使用统一的网络管理器进行RPC通信
+    /// 修改为被动响应ClassroomManager的调用，不再自动初始化
+    /// 保留网络事件监听但不自动触发重新生成
     /// </summary>
     public class NetworkPlayerSpawner : MonoBehaviour
     {
@@ -44,6 +43,9 @@ namespace Classroom.Player
         private bool hasSpawnedCharacters = false;
         private List<ushort> readyPlayerIds = new List<ushort>(); // 已准备好的玩家ID列表
 
+        // 网络事件监听状态
+        private bool networkEventsSubscribed = false;
+
         // 公共属性
         public bool IsInitialized => isInitialized;
         public bool HasGeneratedSeats => hasGeneratedSeats;
@@ -54,6 +56,8 @@ namespace Classroom.Player
         public static event System.Action<int> OnSeatsGenerated; // 座位生成完成
         public static event System.Action<ushort, GameObject> OnCharacterSpawned; // 角色生成完成
         public static event System.Action OnAllCharactersSpawned; // 所有角色生成完成
+        public static event System.Action<ushort> OnPlayerJoinedEvent; // 玩家加入事件（转发给ClassroomManager）
+        public static event System.Action<ushort> OnPlayerLeftEvent; // 玩家离开事件（转发给ClassroomManager）
 
         #region Unity生命周期
 
@@ -79,14 +83,9 @@ namespace Classroom.Player
         {
             if (!isInitialized) return;
 
-            // 订阅网络事件
+            // 只订阅网络事件，不自动开始生成流程
             SubscribeToNetworkEvents();
-
-            // 如果是主机且在房间中，开始生成流程
-            if (PhotonNetwork.IsMasterClient && PhotonNetwork.InRoom)
-            {
-                StartCoroutine(DelayedSpawnInitialization());
-            }
+            LogDebug("NetworkPlayerSpawner已订阅网络事件，等待ClassroomManager调用");
         }
 
         private void OnDestroy()
@@ -100,30 +99,90 @@ namespace Classroom.Player
 
         private void SubscribeToNetworkEvents()
         {
+            if (networkEventsSubscribed) return;
+
             if (NetworkManager.Instance != null)
             {
-                NetworkManager.OnPlayerJoined += OnPlayerJoined;
-                NetworkManager.OnPlayerLeft += OnPlayerLeft;
+                NetworkManager.OnPlayerJoined += OnPlayerJoinedInternal;
+                NetworkManager.OnPlayerLeft += OnPlayerLeftInternal;
+                networkEventsSubscribed = true;
+                LogDebug("已订阅网络事件");
             }
         }
 
         private void UnsubscribeFromNetworkEvents()
         {
+            if (!networkEventsSubscribed) return;
+
             if (NetworkManager.Instance != null)
             {
-                NetworkManager.OnPlayerJoined -= OnPlayerJoined;
-                NetworkManager.OnPlayerLeft -= OnPlayerLeft;
+                NetworkManager.OnPlayerJoined -= OnPlayerJoinedInternal;
+                NetworkManager.OnPlayerLeft -= OnPlayerLeftInternal;
+                networkEventsSubscribed = false;
+                LogDebug("已取消订阅网络事件");
             }
         }
 
         #endregion
 
-        #region 主机端：生成座位和角色
+        #region 公共接口 - 供ClassroomManager调用
 
         /// <summary>
-        /// 延迟初始化生成流程
+        /// 生成座位并分配玩家角色（由ClassroomManager调用）
         /// </summary>
-        private IEnumerator DelayedSpawnInitialization()
+        public void GenerateSeatsAndSpawnCharacters()
+        {
+            if (!PhotonNetwork.IsMasterClient)
+            {
+                LogDebug("非主机端，跳过生成逻辑");
+                return;
+            }
+
+            LogDebug("开始生成座位和角色...");
+
+            // 获取当前房间所有玩家
+            var allPlayers = PhotonNetwork.PlayerList.OrderBy(p => p.ActorNumber).ToList();
+            int playerCount = allPlayers.Count;
+
+            LogDebug($"当前房间玩家数: {playerCount}");
+
+            // 清理现有数据
+            ClearAllData();
+
+            // 1. 生成座位
+            seatingSystem.GenerateSeats(playerCount);
+            hasGeneratedSeats = true;
+
+            // 2. 分配玩家到座位
+            AssignPlayersToSeats(allPlayers);
+
+            // 3. 生成角色
+            SpawnAllCharacters();
+
+            OnSeatsGenerated?.Invoke(playerCount);
+            LogDebug("座位和角色生成完成");
+        }
+
+        /// <summary>
+        /// 同步给所有客户端（由ClassroomManager调用）
+        /// </summary>
+        public void SyncToAllClients()
+        {
+            if (!PhotonNetwork.IsMasterClient) return;
+
+            // 准备同步数据
+            ushort[] playerIds = playerToSeatMap.Keys.ToArray();
+            int[] seatIndices = playerToSeatMap.Values.ToArray();
+
+            // 通过NetworkManager发送RPC
+            NetworkManager.Instance.BroadcastSeatsAndCharacters(playerIds, seatIndices);
+            LogDebug($"向所有客户端同步数据：{playerIds.Length} 名玩家");
+        }
+
+        /// <summary>
+        /// 延迟初始化生成流程（由ClassroomManager调用）
+        /// </summary>
+        public IEnumerator DelayedSpawnInitializationCoroutine()
         {
             LogDebug("开始延迟生成初始化");
 
@@ -136,9 +195,12 @@ namespace Classroom.Player
                 yield return StartCoroutine(WaitForAllPlayersReady());
             }
 
-            // 执行完整的生成流程
-            GenerateSeatsAndSpawnCharacters();
+            LogDebug("延迟初始化完成，准备生成座位和角色");
         }
+
+        #endregion
+
+        #region 原有的生成逻辑（保持不变）
 
         /// <summary>
         /// 等待所有玩家准备就绪
@@ -175,45 +237,6 @@ namespace Classroom.Player
             // 暂时简化：认为所有在房间中的玩家都已准备就绪
             // 后续可以添加更复杂的准备就绪检查逻辑
             return PhotonNetwork.PlayerList.Length > 0;
-        }
-
-        /// <summary>
-        /// 生成座位并分配玩家角色
-        /// </summary>
-        public void GenerateSeatsAndSpawnCharacters()
-        {
-            if (!PhotonNetwork.IsMasterClient)
-            {
-                LogDebug("非主机端，跳过生成逻辑");
-                return;
-            }
-
-            LogDebug("开始生成座位和角色...");
-
-            // 获取当前房间所有玩家
-            var allPlayers = PhotonNetwork.PlayerList.OrderBy(p => p.ActorNumber).ToList();
-            int playerCount = allPlayers.Count;
-
-            LogDebug($"当前房间玩家数: {playerCount}");
-
-            // 清理现有数据
-            ClearAllData();
-
-            // 1. 生成座位
-            seatingSystem.GenerateSeats(playerCount);
-            hasGeneratedSeats = true;
-
-            // 2. 分配玩家到座位
-            AssignPlayersToSeats(allPlayers);
-
-            // 3. 生成角色
-            SpawnAllCharacters();
-
-            // 4. 同步给所有客户端
-            SyncToAllClients();
-
-            OnSeatsGenerated?.Invoke(playerCount);
-            LogDebug("座位和角色生成完成");
         }
 
         /// <summary>
@@ -352,23 +375,7 @@ namespace Classroom.Player
 
         #endregion
 
-        #region 网络同步
-
-        /// <summary>
-        /// 同步给所有客户端
-        /// </summary>
-        private void SyncToAllClients()
-        {
-            if (!PhotonNetwork.IsMasterClient) return;
-
-            // 准备同步数据
-            ushort[] playerIds = playerToSeatMap.Keys.ToArray();
-            int[] seatIndices = playerToSeatMap.Values.ToArray();
-
-            // 通过NetworkManager发送RPC
-            NetworkManager.Instance.BroadcastSeatsAndCharacters(playerIds, seatIndices);
-            LogDebug($"向所有客户端同步数据：{playerIds.Length} 名玩家");
-        }
+        #region 网络同步（保持不变）
 
         /// <summary>
         /// 接收主机端同步的数据（由NetworkManager调用）
@@ -434,26 +441,24 @@ namespace Classroom.Player
 
         #endregion
 
-        #region 网络事件处理
+        #region 网络事件处理（修改为转发事件）
 
         /// <summary>
-        /// 玩家加入房间
+        /// 玩家加入房间（内部处理，转发给ClassroomManager）
         /// </summary>
-        private void OnPlayerJoined(ushort playerId)
+        private void OnPlayerJoinedInternal(ushort playerId)
         {
-            LogDebug($"玩家 {playerId} 加入房间");
+            LogDebug($"玩家 {playerId} 加入房间，转发事件给ClassroomManager");
 
-            if (PhotonNetwork.IsMasterClient)
-            {
-                // 重新生成座位和角色
-                StartCoroutine(DelayedRegenerateSeatsAndCharacters());
-            }
+            // 移除玩家角色，但不自动重新生成
+            // 转发事件给ClassroomManager，由其决定是否重新生成
+            OnPlayerJoinedEvent?.Invoke(playerId);
         }
 
         /// <summary>
-        /// 玩家离开房间
+        /// 玩家离开房间（内部处理，转发给ClassroomManager）
         /// </summary>
-        private void OnPlayerLeft(ushort playerId)
+        private void OnPlayerLeftInternal(ushort playerId)
         {
             LogDebug($"玩家 {playerId} 离开房间");
 
@@ -465,28 +470,13 @@ namespace Classroom.Player
                 LogDebug($"已移除玩家 {playerId} 的角色");
             }
 
-            // 如果是主机，重新生成（可选，根据需求决定）
-            // 注释掉以保持座位不变，支持断线重连
-            /*
-            if (PhotonNetwork.IsMasterClient)
-            {
-                StartCoroutine(DelayedRegenerateSeatsAndCharacters());
-            }
-            */
-        }
-
-        /// <summary>
-        /// 延迟重新生成座位和角色
-        /// </summary>
-        private IEnumerator DelayedRegenerateSeatsAndCharacters()
-        {
-            yield return new WaitForSeconds(1f); // 等待网络状态稳定
-            GenerateSeatsAndSpawnCharacters();
+            // 转发事件给ClassroomManager，由其决定是否重新生成
+            OnPlayerLeftEvent?.Invoke(playerId);
         }
 
         #endregion
 
-        #region 公共接口
+        #region 公共查询接口（保持不变）
 
         /// <summary>
         /// 获取玩家的座位索引
@@ -520,7 +510,7 @@ namespace Classroom.Player
 
         #endregion
 
-        #region 辅助方法
+        #region 辅助方法（保持不变）
 
         /// <summary>
         /// 清理所有数据

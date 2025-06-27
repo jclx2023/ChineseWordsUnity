@@ -11,6 +11,7 @@ namespace UI.Blackboard
     /// <summary>
     /// 黑板显示管理器 - 基于手动配置的LayoutGroup系统
     /// 专注于显示逻辑，所有布局组件在Unity编辑器中预先配置
+    /// 修改为监听ClassroomManager的摄像机设置完成事件，确保摄像机设置后再显示题目
     /// </summary>
     public class BlackboardDisplayManager : MonoBehaviour
     {
@@ -29,12 +30,20 @@ namespace UI.Blackboard
         [SerializeField] private Color optionColor = Color.black;
         [SerializeField] private Color statusColor = Color.blue;
 
+        [Header("调试设置")]
+        [SerializeField] private bool enableDebugLogs = true;
+
         public static BlackboardDisplayManager Instance { get; private set; }
 
         // 动态创建的选项文本
         private TextMeshProUGUI[] optionTexts;
         private NetworkQuestionData currentQuestion;
         private bool isDisplaying = false;
+        private bool cameraSetupCompleted = false;
+        private bool blackboardInitialized = false;
+
+        // 待显示的题目（当摄像机还未设置时）
+        private NetworkQuestionData pendingQuestion = null;
 
         private void Awake()
         {
@@ -51,9 +60,172 @@ namespace UI.Blackboard
 
         private void Start()
         {
+            // 订阅ClassroomManager的事件
+            SubscribeToClassroomManagerEvents();
+
             // 延迟查找摄像机，确保玩家摄像机已经生成
             StartCoroutine(FindAndSetCamera());
         }
+
+        private void OnEnable()
+        {
+            SubscribeToClassroomManagerEvents();
+            SubscribeToQuestionManagerEvents();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeFromClassroomManagerEvents();
+            UnsubscribeFromQuestionManagerEvents();
+        }
+
+        #region 事件订阅管理
+
+        /// <summary>
+        /// 订阅ClassroomManager事件
+        /// </summary>
+        private void SubscribeToClassroomManagerEvents()
+        {
+            Classroom.ClassroomManager.OnCameraSetupCompleted += OnCameraSetupCompleted;
+            Classroom.ClassroomManager.OnClassroomInitialized += OnClassroomInitialized;
+        }
+
+        /// <summary>
+        /// 取消订阅ClassroomManager事件
+        /// </summary>
+        private void UnsubscribeFromClassroomManagerEvents()
+        {
+            Classroom.ClassroomManager.OnCameraSetupCompleted -= OnCameraSetupCompleted;
+            Classroom.ClassroomManager.OnClassroomInitialized -= OnClassroomInitialized;
+        }
+
+        /// <summary>
+        /// 订阅题目管理器事件
+        /// </summary>
+        private void SubscribeToQuestionManagerEvents()
+        {
+            if (NetworkQuestionManagerController.Instance != null)
+            {
+                LogDebug("已连接到NetworkQuestionManagerController，开始监控题目变化");
+
+                // 启动NQMC题目监控协程
+                StartCoroutine(MonitorNQMCQuestionChanges());
+            }
+            else
+            {
+                LogDebug("NQMC不可用，尝试订阅NetworkManager事件作为备用");
+                // 备用方案：订阅NetworkManager的题目接收事件
+                if (NetworkManager.Instance != null)
+                {
+                    NetworkManager.OnQuestionReceived += OnQuestionReceivedFromNetwork;
+                    LogDebug("已订阅NetworkManager的OnQuestionReceived事件");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 取消订阅题目管理器事件
+        /// </summary>
+        private void UnsubscribeFromQuestionManagerEvents()
+        {
+            // 取消订阅NetworkManager的题目事件
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.OnQuestionReceived -= OnQuestionReceivedFromNetwork;
+                LogDebug("已取消订阅NetworkManager的OnQuestionReceived事件");
+            }
+        }
+
+        /// <summary>
+        /// 监控NQMC的题目变化（主要方法）
+        /// </summary>
+        private IEnumerator MonitorNQMCQuestionChanges()
+        {
+            NetworkQuestionData lastQuestion = null;
+
+            while (true)
+            {
+                yield return new WaitForSeconds(0.3f); // 每0.3秒检查一次
+
+                if (NetworkQuestionManagerController.Instance != null)
+                {
+                    var currentQuestion = NetworkQuestionManagerController.Instance.GetCurrentNetworkQuestion();
+
+                    // 如果发现新题目且不同于上次的题目
+                    if (currentQuestion != null && !AreQuestionsEqual(currentQuestion, lastQuestion))
+                    {
+                        LogDebug($"NQMC题目变化检测到新题目: {currentQuestion.questionText}");
+                        DisplayQuestion(currentQuestion);
+                        lastQuestion = currentQuestion;
+                    }
+                    // 如果题目被清空了
+                    else if (currentQuestion == null && lastQuestion != null)
+                    {
+                        LogDebug("NQMC题目被清空，清空黑板显示");
+                        ClearDisplay();
+                        lastQuestion = null;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 比较两个题目是否相等
+        /// </summary>
+        private bool AreQuestionsEqual(NetworkQuestionData q1, NetworkQuestionData q2)
+        {
+            if (q1 == null && q2 == null) return true;
+            if (q1 == null || q2 == null) return false;
+
+            // 简单比较题目文本和类型
+            return q1.questionText == q2.questionText && q1.questionType == q2.questionType;
+        }
+
+        /// <summary>
+        /// 响应NetworkManager的题目接收事件（备用方案）
+        /// </summary>
+        private void OnQuestionReceivedFromNetwork(NetworkQuestionData questionData)
+        {
+            LogDebug($"从NetworkManager收到题目事件: {questionData?.questionText}");
+
+            if (questionData != null)
+            {
+                // 显示题目到黑板
+                DisplayQuestion(questionData);
+            }
+        }
+
+        /// <summary>
+        /// 响应摄像机设置完成事件
+        /// </summary>
+        private void OnCameraSetupCompleted()
+        {
+            LogDebug("收到摄像机设置完成事件");
+            cameraSetupCompleted = true;
+
+            // 如果有待显示的题目，现在显示它
+            if (pendingQuestion != null)
+            {
+                LogDebug("显示待处理的题目");
+                DisplayQuestion(pendingQuestion);
+                pendingQuestion = null;
+            }
+        }
+
+        /// <summary>
+        /// 响应教室初始化完成事件
+        /// </summary>
+        private void OnClassroomInitialized()
+        {
+            LogDebug("收到教室初始化完成事件");
+            if (!cameraSetupCompleted)
+            {
+                // 备用方案：如果摄像机设置事件没有触发，手动查找摄像机
+                StartCoroutine(FindAndSetCamera());
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// 查找并设置动态生成的玩家摄像机
@@ -62,7 +234,9 @@ namespace UI.Blackboard
         {
             Camera playerCamera = null;
             float timeoutCounter = 0f;
-            float timeout = 5f; // 5秒超时
+            float timeout = 10f; // 增加到10秒超时
+
+            LogDebug("开始查找玩家摄像机");
 
             // 循环查找玩家摄像机
             while (playerCamera == null && timeoutCounter < timeout)
@@ -72,8 +246,8 @@ namespace UI.Blackboard
 
                 if (playerCamera == null)
                 {
-                    timeoutCounter += 0.1f;
-                    yield return new WaitForSeconds(0.1f);
+                    timeoutCounter += 0.2f;
+                    yield return new WaitForSeconds(0.2f);
                 }
             }
 
@@ -81,11 +255,21 @@ namespace UI.Blackboard
             if (playerCamera != null)
             {
                 SetBlackboardCamera(playerCamera);
+                cameraSetupCompleted = true;
+
+                // 如果有待显示的题目，现在显示它
+                if (pendingQuestion != null)
+                {
+                    LogDebug("摄像机设置完成，显示待处理的题目");
+                    DisplayQuestion(pendingQuestion);
+                    pendingQuestion = null;
+                }
             }
             else
             {
-                Debug.LogWarning("[BlackboardDisplayManager] 未能找到玩家摄像机，使用主摄像机作为备用");
+                LogDebug("未能找到玩家摄像机，使用主摄像机作为备用");
                 SetBlackboardCamera(Camera.main);
+                cameraSetupCompleted = true;
             }
         }
 
@@ -94,26 +278,26 @@ namespace UI.Blackboard
         /// </summary>
         private Camera FindPlayerCamera()
         {
-            // 方式1: 通过PlayerCameraController组件查找（最可靠）
+            // 方式1: 通过ClassroomManager获取（最可靠）
+            var classroomManager = FindObjectOfType<Classroom.ClassroomManager>();
+            if (classroomManager != null && classroomManager.IsInitialized)
+            {
+                var cameraController = classroomManager.GetLocalPlayerCameraController();
+                if (cameraController != null && cameraController.PlayerCamera != null)
+                {
+                    LogDebug($"通过ClassroomManager找到摄像机: {cameraController.PlayerCamera.name}");
+                    return cameraController.PlayerCamera;
+                }
+            }
+
+            // 方式2: 通过PlayerCameraController组件查找（最可靠）
             var playerCameraControllers = FindObjectsOfType<PlayerCameraController>();
             foreach (var controller in playerCameraControllers)
             {
                 if (controller.IsLocalPlayer && controller.PlayerCamera != null)
                 {
-                    Debug.Log($"[BlackboardDisplayManager] 通过PlayerCameraController找到摄像机: {controller.PlayerCamera.name}");
+                    LogDebug($"通过PlayerCameraController找到摄像机: {controller.PlayerCamera.name}");
                     return controller.PlayerCamera;
-                }
-            }
-
-            // 方式2: 查找MainCamera标签的摄像机（PlayerCameraController会设置此标签）
-            GameObject mainCameraObj = GameObject.FindWithTag("MainCamera");
-            if (mainCameraObj != null)
-            {
-                var camera = mainCameraObj.GetComponent<Camera>();
-                if (camera != null && camera.enabled)
-                {
-                    Debug.Log($"[BlackboardDisplayManager] 通过MainCamera标签找到摄像机: {camera.name}");
-                    return camera;
                 }
             }
 
@@ -123,30 +307,17 @@ namespace UI.Blackboard
             {
                 if (cam.gameObject.name == "PlayerCamera" && cam.enabled)
                 {
-                    Debug.Log($"[BlackboardDisplayManager] 通过名称找到PlayerCamera: {cam.name}");
+                    LogDebug($"通过名称找到PlayerCamera: {cam.name}");
                     return cam;
                 }
             }
 
-            // 方式4: 查找包含"Player"、"Local"等关键词的摄像机
-            foreach (var cam in allCameras)
-            {
-                if ((cam.gameObject.name.Contains("Player") ||
-                     cam.gameObject.name.Contains("Local") ||
-                     cam.gameObject.name.Contains("FPS")) &&
-                     cam.enabled)
-                {
-                    Debug.Log($"[BlackboardDisplayManager] 通过关键词找到摄像机: {cam.name}");
-                    return cam;
-                }
-            }
-
-            // 方式5: 查找除了默认主摄像机之外的第一个激活摄像机
+            // 方式4: 查找除了默认主摄像机之外的第一个激活摄像机
             foreach (var cam in allCameras)
             {
                 if (cam != Camera.main && cam.enabled && cam.gameObject.activeInHierarchy)
                 {
-                    Debug.Log($"[BlackboardDisplayManager] 找到备用摄像机: {cam.name}");
+                    LogDebug($"找到备用摄像机: {cam.name}");
                     return cam;
                 }
             }
@@ -162,7 +333,24 @@ namespace UI.Blackboard
             if (blackboardCanvas != null && camera != null)
             {
                 blackboardCanvas.worldCamera = camera;
-                Debug.Log($"[BlackboardDisplayManager] 已设置摄像机: {camera.name}");
+                LogDebug($"已设置黑板摄像机: {camera.name}");
+
+                // 强制刷新Canvas
+                StartCoroutine(RefreshCanvasLayout());
+            }
+        }
+
+        /// <summary>
+        /// 刷新Canvas布局
+        /// </summary>
+        private IEnumerator RefreshCanvasLayout()
+        {
+            yield return new WaitForEndOfFrame();
+            Canvas.ForceUpdateCanvases();
+
+            if (blackboardArea != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(blackboardArea);
             }
         }
 
@@ -172,6 +360,7 @@ namespace UI.Blackboard
         public void SetCamera(Camera camera)
         {
             SetBlackboardCamera(camera);
+            cameraSetupCompleted = true;
         }
 
         /// <summary>
@@ -182,7 +371,8 @@ namespace UI.Blackboard
             if (cameraController != null && cameraController.IsLocalPlayer && cameraController.PlayerCamera != null)
             {
                 SetBlackboardCamera(cameraController.PlayerCamera);
-                Debug.Log($"[BlackboardDisplayManager] 已注册玩家摄像机控制器: {cameraController.PlayerCamera.name}");
+                cameraSetupCompleted = true;
+                LogDebug($"已注册玩家摄像机控制器: {cameraController.PlayerCamera.name}");
             }
         }
 
@@ -225,7 +415,8 @@ namespace UI.Blackboard
             // 初始清空显示
             ClearDisplay();
 
-            Debug.Log("[BlackboardDisplayManager] 初始化完成");
+            blackboardInitialized = true;
+            LogDebug("BlackboardDisplayManager 初始化完成");
         }
 
         /// <summary>
@@ -283,15 +474,45 @@ namespace UI.Blackboard
         }
 
         /// <summary>
-        /// 显示题目
+        /// 显示题目（修改为检查摄像机状态）
         /// </summary>
         public void DisplayQuestion(NetworkQuestionData questionData)
         {
             if (questionData == null)
             {
+                LogDebug("传入的题目数据为空，清空显示");
                 ClearDisplay();
                 return;
             }
+
+            LogDebug($"收到显示题目请求: {questionData.questionText}");
+
+            // 检查黑板是否已初始化
+            if (!blackboardInitialized)
+            {
+                LogDebug("黑板尚未初始化，等待初始化完成");
+                pendingQuestion = questionData;
+                return;
+            }
+
+            // 检查摄像机是否已设置
+            if (!cameraSetupCompleted)
+            {
+                LogDebug("摄像机尚未设置完成，将题目标记为待显示");
+                pendingQuestion = questionData;
+                return;
+            }
+
+            // 执行实际的显示逻辑
+            ExecuteDisplayQuestion(questionData);
+        }
+
+        /// <summary>
+        /// 执行实际的题目显示逻辑
+        /// </summary>
+        private void ExecuteDisplayQuestion(NetworkQuestionData questionData)
+        {
+            LogDebug($"开始显示题目: {questionData.questionText}");
 
             currentQuestion = questionData;
             isDisplaying = true;
@@ -301,6 +522,7 @@ namespace UI.Blackboard
             {
                 questionText.text = questionData.questionText;
                 questionArea.gameObject.SetActive(true);
+                LogDebug($"设置题目文本: {questionData.questionText}");
             }
 
             // 根据题型显示内容
@@ -326,6 +548,8 @@ namespace UI.Blackboard
 
             // 强制更新布局
             StartCoroutine(RefreshLayout());
+
+            LogDebug($"题目显示完成: {questionData.questionType}");
         }
 
         /// <summary>
@@ -333,8 +557,11 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayChoiceQuestion(NetworkQuestionData questionData)
         {
+            LogDebug($"显示选择题，选项数量: {questionData.options?.Length ?? 0}");
+
             if (questionData.options == null || questionData.options.Length == 0)
             {
+                LogDebug("选择题没有选项，隐藏选项区域");
                 optionsArea.gameObject.SetActive(false);
                 return;
             }
@@ -346,6 +573,7 @@ namespace UI.Blackboard
             for (int i = 0; i < optionTexts.Length; i++)
             {
                 optionTexts[i].text = $"{(char)('A' + i)}. {questionData.options[i]}";
+                LogDebug($"选项 {(char)('A' + i)}: {questionData.options[i]}");
             }
 
             optionsArea.gameObject.SetActive(true);
@@ -356,6 +584,8 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayTrueFalseQuestion(NetworkQuestionData questionData)
         {
+            LogDebug("显示判断题");
+
             CreateOptionTexts(2);
 
             optionTexts[0].text = "A. 正确";
@@ -369,6 +599,8 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayFillQuestion(NetworkQuestionData questionData)
         {
+            LogDebug("显示填空题");
+
             // 保持选项区域激活但清空内容，维持布局结构
             optionsArea.gameObject.SetActive(true);
 
@@ -391,6 +623,8 @@ namespace UI.Blackboard
         /// </summary>
         public void UpdateDisplayStatus(string status, Color color)
         {
+            LogDebug($"更新状态: {status}");
+
             if (statusText != null)
             {
                 statusText.text = status;
@@ -404,8 +638,11 @@ namespace UI.Blackboard
         /// </summary>
         public void ClearDisplay()
         {
+            LogDebug("清空黑板显示");
+
             currentQuestion = null;
             isDisplaying = false;
+            pendingQuestion = null; // 清空待显示的题目
 
             if (questionText != null)
             {
@@ -431,9 +668,9 @@ namespace UI.Blackboard
             }
 
             // 隐藏所有区域
-            questionArea.gameObject.SetActive(false);
-            optionsArea.gameObject.SetActive(false);
-            statusArea.gameObject.SetActive(false);
+            if (questionArea != null) questionArea.gameObject.SetActive(false);
+            if (optionsArea != null) optionsArea.gameObject.SetActive(false);
+            if (statusArea != null) statusArea.gameObject.SetActive(false);
         }
 
         /// <summary>
@@ -456,6 +693,8 @@ namespace UI.Blackboard
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(optionsArea);
             }
+
+            LogDebug("布局刷新完成");
         }
 
         /// <summary>
@@ -468,123 +707,18 @@ namespace UI.Blackboard
         /// </summary>
         public NetworkQuestionData CurrentQuestion => currentQuestion;
 
+        /// <summary>
+        /// 调试日志
+        /// </summary>
+        private void LogDebug(string message)
+        {
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[BlackboardDisplayManager] {message}");
+            }
+        }
+
         #region 测试方法
-
-        /// <summary>
-        /// 创建测试用的选择题数据
-        /// </summary>
-        private NetworkQuestionData CreateTestChoiceQuestion()
-        {
-            return new NetworkQuestionData
-            {
-                questionType = QuestionType.ExplanationChoice,
-                questionText = "下列哪个词语表示“非常高兴”的意思？",
-                options = new string[]
-                {
-                    "兴高采烈",
-                    "垂头丧气",
-                    "心平气和",
-                    "忐忑不安"
-                },
-                correctAnswer = "兴高采烈",
-                timeLimit = 30f
-            };
-        }
-
-        /// <summary>
-        /// 创建测试用的长选项选择题
-        /// </summary>
-        private NetworkQuestionData CreateTestLongChoiceQuestion()
-        {
-            return new NetworkQuestionData
-            {
-                questionType = QuestionType.ExplanationChoice,
-                questionText = "根据语境，下列哪个句子中成语的使用是正确的？",
-                options = new string[]
-                {
-                    "他虽然很有钱，但是为富不仁，经常帮助贫困的人",
-                    "面对这个困难的数学题，我们要迎难而上，绝不能退缩不前",
-                    "这件事情已经木已成舟，我们只能接受现实，重新制定计划",
-                    "他说话总是颠三倒四，逻辑清晰，让人很容易理解"
-                },
-                correctAnswer = "这件事情已经木已成舟，我们只能接受现实，重新制定计划",
-                timeLimit = 45f
-            };
-        }
-
-        /// <summary>
-        /// 创建测试用的判断题数据
-        /// </summary>
-        private NetworkQuestionData CreateTestTrueFalseQuestion()
-        {
-            return new NetworkQuestionData
-            {
-                questionType = QuestionType.SentimentTorF,
-                questionText = "“望梅止渴”这个成语是褒义词。",
-                correctAnswer = "A",
-                timeLimit = 20f
-            };
-        }
-
-        /// <summary>
-        /// 创建测试用的填空题数据
-        /// </summary>
-        private NetworkQuestionData CreateTestFillQuestion()
-        {
-            return new NetworkQuestionData
-            {
-                questionType = QuestionType.IdiomChain,
-                questionText = "请接龙成语：<color=yellow><b>望梅止____</b></color>\n\n(请输入一个字完成这个成语)",
-                correctAnswer = "渴",
-                timeLimit = 30f
-            };
-        }
-
-        [ContextMenu("测试 - 显示选择题")]
-        public void TestDisplayChoiceQuestion()
-        {
-            var testData = CreateTestChoiceQuestion();
-            DisplayQuestion(testData);
-        }
-
-        [ContextMenu("测试 - 显示长选项选择题")]
-        public void TestDisplayLongChoiceQuestion()
-        {
-            var testData = CreateTestLongChoiceQuestion();
-            DisplayQuestion(testData);
-        }
-
-        [ContextMenu("测试 - 显示判断题")]
-        public void TestDisplayTrueFalseQuestion()
-        {
-            var testData = CreateTestTrueFalseQuestion();
-            DisplayQuestion(testData);
-        }
-
-        [ContextMenu("测试 - 显示填空题")]
-        public void TestDisplayFillQuestion()
-        {
-            var testData = CreateTestFillQuestion();
-            DisplayQuestion(testData);
-        }
-
-        [ContextMenu("测试 - 更新状态")]
-        public void TestUpdateStatus()
-        {
-            UpdateDisplayStatus("已提交答案，等待结果...", Color.yellow);
-        }
-
-        [ContextMenu("测试 - 显示正确结果")]
-        public void TestShowCorrectResult()
-        {
-            UpdateDisplayStatus("回答正确！", Color.green);
-        }
-
-        [ContextMenu("测试 - 显示错误结果")]
-        public void TestShowWrongResult()
-        {
-            UpdateDisplayStatus("回答错误，正确答案是：兴高采烈", Color.red);
-        }
 
         [ContextMenu("测试 - 清空显示")]
         public void TestClearDisplay()
@@ -592,24 +726,34 @@ namespace UI.Blackboard
             ClearDisplay();
         }
 
-        [ContextMenu("测试 - 网格布局选择题")]
-        public void TestGridChoiceQuestion()
+        [ContextMenu("检查黑板状态")]
+        public void CheckBlackboardStatus()
         {
-            var testData = new NetworkQuestionData
-            {
-                questionType = QuestionType.ExplanationChoice,
-                questionText = "测试2x2网格布局显示效果",
-                options = new string[]
-                {
-                    "选项A",
-                    "选项B",
-                    "选项C",
-                    "选项D"
-                },
-                correctAnswer = "选项A",
-                timeLimit = 30f
-            };
-            DisplayQuestion(testData);
+            string status = "=== 黑板显示管理器状态 ===\n";
+            status += $"黑板已初始化: {blackboardInitialized}\n";
+            status += $"摄像机设置完成: {cameraSetupCompleted}\n";
+            status += $"正在显示题目: {isDisplaying}\n";
+            status += $"当前题目: {(currentQuestion != null ? currentQuestion.questionText : "null")}\n";
+            status += $"待显示题目: {(pendingQuestion != null ? pendingQuestion.questionText : "null")}\n";
+            status += $"摄像机: {(blackboardCanvas.worldCamera != null ? blackboardCanvas.worldCamera.name : "null")}\n";
+
+            Debug.Log(status);
+        }
+
+        [ContextMenu("强制查找摄像机")]
+        public void ForceSearchCamera()
+        {
+            StartCoroutine(FindAndSetCamera());
+        }
+
+        #endregion
+
+        #region 清理资源
+
+        private void OnDestroy()
+        {
+            UnsubscribeFromClassroomManagerEvents();
+            UnsubscribeFromQuestionManagerEvents();
         }
 
         #endregion

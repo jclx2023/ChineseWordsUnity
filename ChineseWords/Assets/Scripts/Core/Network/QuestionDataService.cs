@@ -15,7 +15,7 @@ namespace Core.Network
         public static QuestionDataService Instance { get; private set; }
 
         [Header("数据提供者配置")]
-        [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool enableDebugLogs = false;
         [SerializeField] private bool cacheProviders = true;
 
         [Header("Timer配置")]
