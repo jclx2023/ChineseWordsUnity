@@ -1,6 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,127 +9,186 @@ using Core.Network;
 namespace GameLogic.TorF
 {
     /// <summary>
-    /// 成语/词语褒贬义判断题管理器
-    /// - 支持单机和网络模式
-    /// - 实现IQuestionDataProvider接口，支持Host抽题
-    /// - 单机模式：从 sentiment 表随机取一条记录，生成干扰答案
-    /// - 网络模式：使用服务器提供的题目数据
-    /// - 映射 polarity 为"中性/褒义/贬义/兼有"
+    /// 成语/词语褒贬义判断题管理器 - UI架构重构版
+    /// 
+    /// 功能说明：
+    /// - 从sentiment表随机取一条记录，生成干扰答案
+    /// - 映射polarity为"中性/褒义/贬义/兼有"
     /// - 生成权重较低的"兼有"干扰或其他类型干扰答案
-    /// - 随机将正确答案和干扰答案分配到左右按钮
+    /// - 随机将正确答案和干扰答案分配到左右选项
+    /// - Host端生成题目数据和选项验证信息
     /// </summary>
     public class SentimentTorFQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
-        private string dbPath;
+        #region 配置字段
 
-        [Header("UI设置")]
-        [SerializeField] private string uiPrefabPath = "Prefabs/InGame/TorFUI";
-
-        [Header("单机模式配置")]
-        [Header("Freq 范围 (可选)")]
+        [Header("题目生成配置")]
         [SerializeField] private int freqMin = 0;
         [SerializeField] private int freqMax = 9;
 
-        [Header("UI组件引用")]
-        private TMP_Text questionText;
-        private Button buttonA;
-        private Button buttonB;
-        private TMP_Text feedbackText;
+        #endregion
 
-        private TMP_Text textA;
-        private TMP_Text textB;
+        #region 私有字段
 
+        private string dbPath;
+
+        // 当前题目数据
         private string currentWord;
         private int currentPolarity;
-        private int choiceAPolarity;
-        private int choiceBPolarity;
-        private bool hasAnswered = false;
 
-        // IQuestionDataProvider接口实现
+        #endregion
+
+        #region IQuestionDataProvider接口实现
+
         public QuestionType QuestionType => QuestionType.SentimentTorF;
+
+        #endregion
+
+        #region Unity生命周期
 
         protected override void Awake()
         {
-            base.Awake(); // 调用网络基类初始化
+            base.Awake();
             dbPath = Application.streamingAssetsPath + "/dictionary.db";
+
+            LogDebug("SentimentTorF题型管理器初始化完成");
         }
 
-        private void Start()
-        {
-            // 检查是否需要UI（Host抽题模式可能不需要UI）
-            if (NeedsUI())
-            {
-                InitializeUI();
-            }
-            else
-            {
-                Debug.Log("[SentimentTorF] Host抽题模式，跳过UI初始化");
-            }
-        }
+        #endregion
 
-        /// <summary>
-        /// 检查是否需要UI
-        /// </summary>
-        private bool NeedsUI()
-        {
-            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
-            // 或者如果是QuestionDataService的子对象，也不需要UI
-            return transform.parent == null ||
-                   (transform.parent.GetComponent<HostGameManager>() == null &&
-                    transform.parent.GetComponent<QuestionDataService>() == null);
-        }
+        #region 题目数据生成
 
         /// <summary>
         /// 获取题目数据（IQuestionDataProvider接口实现）
-        /// 专门为Host抽题使用，不显示UI
+        /// 为Host端抽题使用，生成褒贬义判断题目和选项数据
         /// </summary>
         public NetworkQuestionData GetQuestionData()
         {
-            Debug.Log("[SentimentTorF] Host请求抽题数据");
+            LogDebug("开始生成SentimentTorF题目数据");
 
-            // 1. 随机选择 sentiment 记录
-            var sentimentData = GetRandomSentimentData();
-            if (sentimentData == null)
+            try
             {
-                Debug.LogWarning("[SentimentTorF] Host抽题：暂无有效情感记录");
+                // 1. 随机选择sentiment记录
+                var sentimentData = GetRandomSentimentData();
+                if (sentimentData == null)
+                {
+                    LogError("无法获取有效情感记录");
+                    return null;
+                }
+
+                // 2. 根据source和word_id获取词条
+                string word = GetWordFromDatabase(sentimentData.source, sentimentData.wordId);
+                if (string.IsNullOrEmpty(word))
+                {
+                    LogError("找不到对应词条");
+                    return null;
+                }
+
+                // 3. 生成选项
+                var choicesData = GenerateChoicesForHost(sentimentData.polarity);
+
+                // 4. 构建附加数据
+                var additionalData = new SentimentTorFAdditionalData
+                {
+                    word = word,
+                    polarity = sentimentData.polarity,
+                    choices = choicesData.choices,
+                    correctChoiceIndex = choicesData.correctIndex,
+                    source = sentimentData.source,
+                    wordId = sentimentData.wordId
+                };
+
+                // 5. 创建题目数据
+                var questionData = new NetworkQuestionData
+                {
+                    questionType = QuestionType.SentimentTorF,
+                    questionText = FormatQuestionText(word),
+                    correctAnswer = sentimentData.polarity.ToString(),
+                    options = choicesData.choices,
+                    timeLimit = 30f,
+                    additionalData = JsonUtility.ToJson(additionalData)
+                };
+
+                LogDebug($"SentimentTorF题目生成成功: {word} (polarity: {sentimentData.polarity} -> {MapPolarity(sentimentData.polarity)})");
+                return questionData;
+            }
+            catch (System.Exception e)
+            {
+                LogError($"生成SentimentTorF题目失败: {e.Message}");
                 return null;
             }
+        }
 
-            // 2. 根据 source 和 word_id 获取词条
-            string word = GetWordFromDatabase(sentimentData.source, sentimentData.wordId);
-            if (string.IsNullOrEmpty(word))
+        /// <summary>
+        /// 获取随机情感数据
+        /// </summary>
+        private SentimentData GetRandomSentimentData()
+        {
+            try
             {
-                Debug.LogWarning("[SentimentTorF] Host抽题：找不到对应词条");
-                return null;
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = "SELECT id,source,word_id,polarity FROM sentiment ORDER BY RANDOM() LIMIT 1";
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                return new SentimentData
+                                {
+                                    id = reader.GetInt32(0),
+                                    source = reader.GetString(1),
+                                    wordId = reader.GetInt32(2),
+                                    polarity = reader.GetInt32(3)
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogError($"获取情感数据失败: {e.Message}");
             }
 
-            // 3. 生成选项
-            var choicesData = GenerateChoicesForHost(sentimentData.polarity);
+            return null;
+        }
 
-            // 4. 创建附加数据
-            var additionalData = new SentimentTorFAdditionalData
+        /// <summary>
+        /// 根据source和wordId获取词条
+        /// </summary>
+        private string GetWordFromDatabase(string source, int wordId)
+        {
+            string tableName = source.ToLower() == "word" ? "word" :
+                              source.ToLower() == "idiom" ? "idiom" : "other_idiom";
+
+            try
             {
-                word = word,
-                polarity = sentimentData.polarity,
-                choices = choicesData.choices,
-                correctChoiceIndex = choicesData.correctIndex,
-                source = sentimentData.source,
-                wordId = sentimentData.wordId
-            };
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = $"SELECT word FROM {tableName} WHERE id=@id LIMIT 1";
+                        cmd.Parameters.AddWithValue("@id", wordId);
 
-            // 5. 创建网络题目数据
-            var questionData = new NetworkQuestionData
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                                return reader.GetString(0);
+                        }
+                    }
+                }
+            }
+            catch (System.Exception e)
             {
-                questionType = QuestionType.SentimentTorF,
-                questionText = $"题目：判断下列词语的情感倾向\n    \u300c<color=red>{word}</color>\u300d",
-                correctAnswer = sentimentData.polarity.ToString(), // 使用polarity值作为答案
-                options = choicesData.choices, // 两个选项
-                timeLimit = 30f,
-                additionalData = JsonUtility.ToJson(additionalData)
-            };
+                LogError($"获取词条失败: {e.Message}");
+            }
 
-            Debug.Log($"[SentimentTorF] Host抽题成功: {word} (polarity: {sentimentData.polarity} -> {MapPolarity(sentimentData.polarity)})");
-            return questionData;
+            return null;
         }
 
         /// <summary>
@@ -171,230 +228,102 @@ namespace GameLogic.TorF
         }
 
         /// <summary>
-        /// 初始化UI组件
+        /// 格式化题目文本
         /// </summary>
-        private void InitializeUI()
+        private string FormatQuestionText(string word)
         {
-            if (UIManager.Instance == null)
-            {
-                Debug.LogError("[SentimentTorF] UIManager实例不存在");
-                return;
-            }
-
-            var ui = UIManager.Instance.LoadUI(uiPrefabPath);
-            if (ui == null)
-            {
-                Debug.LogError($"[SentimentTorF] 无法加载UI预制体: {uiPrefabPath}");
-                return;
-            }
-
-            // 获取UI组件
-            questionText = ui.Find("QuestionText")?.GetComponent<TMP_Text>();
-            buttonA = ui.Find("TrueButton")?.GetComponent<Button>();
-            buttonB = ui.Find("FalseButton")?.GetComponent<Button>();
-            feedbackText = ui.Find("FeedbackText")?.GetComponent<TMP_Text>();
-
-            if (questionText == null || buttonA == null || buttonB == null || feedbackText == null)
-            {
-                Debug.LogError("[SentimentTorF] UI组件获取失败，检查预制体结构");
-                return;
-            }
-
-            // 获取按钮文本组件
-            textA = buttonA.GetComponentInChildren<TMP_Text>();
-            textB = buttonB.GetComponentInChildren<TMP_Text>();
-
-            if (textA == null || textB == null)
-            {
-                Debug.LogError("[SentimentTorF] 按钮文本组件获取失败");
-                return;
-            }
-
-            // 绑定按钮事件
-            buttonA.onClick.RemoveAllListeners();
-            buttonB.onClick.RemoveAllListeners();
-            buttonA.onClick.AddListener(() => OnSelectChoice(choiceAPolarity));
-            buttonB.onClick.AddListener(() => OnSelectChoice(choiceBPolarity));
-
-            feedbackText.text = string.Empty;
-
-            Debug.Log("[SentimentTorF] UI初始化完成");
+            return $"题目：判断下列词语的情感倾向\n    \u300c<color=red>{word}</color>\u300d";
         }
 
-        /// <summary>
-        /// 加载本地题目（单机模式）
-        /// </summary>
-        protected override void LoadLocalQuestion()
-        {
-            Debug.Log("[SentimentTorF] 加载本地题目");
+        #endregion
 
-            // 使用GetQuestionData()方法复用抽题逻辑
-            var questionData = GetQuestionData();
-            if (questionData == null)
-            {
-                DisplayErrorMessage("暂无有效情感记录。");
-                return;
-            }
-
-            // 解析题目数据
-            currentPolarity = int.Parse(questionData.correctAnswer);
-
-            // 从附加数据中解析详细信息
-            if (!string.IsNullOrEmpty(questionData.additionalData))
-            {
-                try
-                {
-                    var additionalInfo = JsonUtility.FromJson<SentimentTorFAdditionalData>(questionData.additionalData);
-                    currentWord = additionalInfo.word;
-
-                    // 设置选项
-                    if (additionalInfo.choices != null && additionalInfo.choices.Length == 2)
-                    {
-                        SetupChoices(additionalInfo.choices, additionalInfo.correctChoiceIndex);
-                    }
-                    else
-                    {
-                        GenerateChoices();
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成题目");
-                    LoadOriginalLocalQuestion();
-                    return;
-                }
-            }
-            else
-            {
-                LoadOriginalLocalQuestion();
-                return;
-            }
-
-            // 显示题目
-            DisplayQuestion();
-        }
+        #region 网络题目处理
 
         /// <summary>
-        /// 原始的本地题目加载逻辑（备用）
-        /// </summary>
-        private void LoadOriginalLocalQuestion()
-        {
-            // 1. 随机选择 sentiment 记录
-            var sentimentData = GetRandomSentimentData();
-            if (sentimentData == null)
-            {
-                DisplayErrorMessage("暂无有效情感记录。");
-                return;
-            }
-
-            // 2. 根据 source 和 word_id 获取词条
-            currentWord = GetWordFromDatabase(sentimentData.source, sentimentData.wordId);
-            if (string.IsNullOrEmpty(currentWord))
-            {
-                Debug.Log("找不到对应词条，重新加载题目");
-                LoadQuestion(); // 递归重试
-                return;
-            }
-
-            currentPolarity = sentimentData.polarity;
-
-            // 3. 生成选项
-            GenerateChoices();
-
-            // 4. 显示题目
-            DisplayQuestion();
-        }
-
-        /// <summary>
-        /// 加载网络题目（网络模式）
+        /// 加载网络题目数据
         /// </summary>
         protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
         {
-            Debug.Log("[SentimentTorF] 加载网络题目");
+            LogDebug("加载网络SentimentTorF题目");
 
+            if (!ValidateNetworkData(networkData))
+            {
+                LogError("网络题目数据验证失败");
+                return;
+            }
+
+            if (!ParseQuestionData(networkData))
+            {
+                LogError("解析网络题目数据失败");
+                return;
+            }
+
+            LogDebug($"网络SentimentTorF题目加载完成: {currentWord}");
+        }
+
+        /// <summary>
+        /// 验证网络数据
+        /// </summary>
+        private bool ValidateNetworkData(NetworkQuestionData networkData)
+        {
             if (networkData == null)
             {
-                Debug.LogError("[SentimentTorF] 网络题目数据为空");
-                DisplayErrorMessage("网络题目数据错误");
-                return;
+                LogError("网络题目数据为空");
+                return false;
             }
 
             if (networkData.questionType != QuestionType.SentimentTorF)
             {
-                Debug.LogError($"[SentimentTorF] 题目类型不匹配: 期望{QuestionType.SentimentTorF}, 实际{networkData.questionType}");
-                DisplayErrorMessage("题目类型错误");
-                return;
+                LogError($"题目类型不匹配，期望: {QuestionType.SentimentTorF}, 实际: {networkData.questionType}");
+                return false;
             }
 
-            // 从网络数据解析题目信息
-            ParseNetworkQuestionData(networkData);
+            if (networkData.options == null || networkData.options.Length != 2)
+            {
+                LogError("选项数据错误，判断题需要2个选项");
+                return false;
+            }
 
-            // 显示题目
-            DisplayQuestion();
+            return true;
         }
 
         /// <summary>
-        /// 解析网络题目数据
+        /// 解析题目数据
         /// </summary>
-        private void ParseNetworkQuestionData(NetworkQuestionData networkData)
+        private bool ParseQuestionData(NetworkQuestionData questionData)
         {
-            // 解析正确答案（polarity值）
-            if (int.TryParse(networkData.correctAnswer, out int polarity))
+            try
             {
-                currentPolarity = polarity;
-            }
-            else
-            {
-                // 如果是文本形式，转换为polarity值
-                currentPolarity = ParsePolarityText(networkData.correctAnswer);
-            }
-
-            // 从additionalData中解析额外信息
-            if (!string.IsNullOrEmpty(networkData.additionalData))
-            {
-                try
+                // 解析正确答案（polarity值）
+                if (int.TryParse(questionData.correctAnswer, out int polarity))
                 {
-                    var additionalInfo = JsonUtility.FromJson<SentimentTorFAdditionalData>(networkData.additionalData);
+                    currentPolarity = polarity;
+                }
+                else
+                {
+                    // 如果是文本形式，转换为polarity值
+                    currentPolarity = ParsePolarityText(questionData.correctAnswer);
+                }
+
+                // 从附加数据中解析详细信息
+                if (!string.IsNullOrEmpty(questionData.additionalData))
+                {
+                    var additionalInfo = JsonUtility.FromJson<SentimentTorFAdditionalData>(questionData.additionalData);
                     currentWord = additionalInfo.word;
-
-                    // 如果有预设的选项，直接使用
-                    if (additionalInfo.choices != null && additionalInfo.choices.Length == 2)
-                    {
-                        SetupChoices(additionalInfo.choices, additionalInfo.correctChoiceIndex);
-                        return;
-                    }
                 }
-                catch (System.Exception e)
+                else
                 {
-                    Debug.LogWarning($"解析网络附加数据失败: {e.Message}");
+                    // 从题目文本中提取词语
+                    ExtractWordFromQuestionText(questionData.questionText);
                 }
+
+                LogDebug($"题目数据解析成功: 词语={currentWord}, 正确情感={MapPolarity(currentPolarity)}");
+                return true;
             }
-
-            // 如果没有附加数据，从题目文本解析
-            ExtractWordFromQuestionText(networkData.questionText);
-
-            // 生成选项
-            GenerateChoices();
-        }
-
-        /// <summary>
-        /// 设置选项（统一方法）
-        /// </summary>
-        private void SetupChoices(string[] choices, int correctIndex)
-        {
-            if (correctIndex == 0)
+            catch (System.Exception e)
             {
-                choiceAPolarity = currentPolarity;
-                choiceBPolarity = ParsePolarityText(choices[1]);
-                textA.text = choices[0];
-                textB.text = choices[1];
-            }
-            else
-            {
-                choiceAPolarity = ParsePolarityText(choices[0]);
-                choiceBPolarity = currentPolarity;
-                textA.text = choices[0];
-                textB.text = choices[1];
+                LogError($"解析题目数据失败: {e.Message}");
+                return false;
             }
         }
 
@@ -403,17 +332,23 @@ namespace GameLogic.TorF
         /// </summary>
         private void ExtractWordFromQuestionText(string questionText)
         {
-            // 简单的文本解析，提取被标红的词语
-            var startTag = "「<color=red>";
-            var endTag = "</color>」";
-
-            var startIndex = questionText.IndexOf(startTag);
-            var endIndex = questionText.IndexOf(endTag);
-
-            if (startIndex != -1 && endIndex != -1)
+            try
             {
-                startIndex += startTag.Length;
-                currentWord = questionText.Substring(startIndex, endIndex - startIndex);
+                var startTag = "「<color=red>";
+                var endTag = "</color>」";
+
+                var startIndex = questionText.IndexOf(startTag);
+                var endIndex = questionText.IndexOf(endTag);
+
+                if (startIndex != -1 && endIndex != -1)
+                {
+                    startIndex += startTag.Length;
+                    currentWord = questionText.Substring(startIndex, endIndex - startIndex);
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogError($"从题目文本提取词语失败: {e.Message}");
             }
         }
 
@@ -432,263 +367,109 @@ namespace GameLogic.TorF
             }
         }
 
-        /// <summary>
-        /// 获取随机情感数据
-        /// </summary>
-        private SentimentData GetRandomSentimentData()
-        {
-            try
-            {
-                using (var conn = new SqliteConnection("URI=file:" + dbPath))
-                {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = "SELECT id,source,word_id,polarity FROM sentiment ORDER BY RANDOM() LIMIT 1";
+        #endregion
 
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                return new SentimentData
-                                {
-                                    id = reader.GetInt32(0),
-                                    source = reader.GetString(1),
-                                    wordId = reader.GetInt32(2),
-                                    polarity = reader.GetInt32(3)
-                                };
-                            }
-                        }
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"获取情感数据失败: {e.Message}");
-            }
-
-            return null;
-        }
+        #region 答案验证
 
         /// <summary>
-        /// 根据source和wordId获取词条
+        /// 静态答案验证方法 - 供Host端调用
+        /// 基于题目数据验证答案，不依赖实例状态
         /// </summary>
-        private string GetWordFromDatabase(string source, int wordId)
+        public static bool ValidateAnswerStatic(string answer, NetworkQuestionData question)
         {
-            string tableName = source.ToLower() == "word" ? "word" :
-                              source.ToLower() == "idiom" ? "idiom" : "other_idiom";
+            Debug.Log($"[SentimentTorF] 静态验证答案: {answer}");
+
+            if (string.IsNullOrEmpty(answer?.Trim()) || question == null)
+            {
+                Debug.Log("[SentimentTorF] 静态验证: 答案为空或题目数据无效");
+                return false;
+            }
+
+            if (question.questionType != QuestionType.SentimentTorF)
+            {
+                Debug.LogError($"[SentimentTorF] 静态验证: 题目类型不匹配，期望SentimentTorF，实际{question.questionType}");
+                return false;
+            }
 
             try
             {
-                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                string correctAnswer = question.correctAnswer?.Trim();
+                if (string.IsNullOrEmpty(correctAnswer))
                 {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = $"SELECT word FROM {tableName} WHERE id=@id LIMIT 1";
-                        cmd.Parameters.AddWithValue("@id", wordId);
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                                return reader.GetString(0);
-                        }
-                    }
+                    Debug.Log("[SentimentTorF] 静态验证: 题目数据中缺少正确答案");
+                    return false;
                 }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"获取词条失败: {e.Message}");
-            }
 
-            return null;
-        }
+                // 支持两种验证方式：polarity值比较或文本比较
+                bool isCorrect = false;
 
-        /// <summary>
-        /// 生成选项（保持原有逻辑用于单机模式）
-        /// </summary>
-        private void GenerateChoices()
-        {
-            // 获取正确答案文本
-            string correctText = MapPolarity(currentPolarity);
-
-            // 生成干扰答案（权重较低的"兼有"或其他类型）
-            var candidates = new List<int> { 0, 1, 2, 3 }.Where(p => p != currentPolarity).ToList();
-            var weights = candidates.Select(p => p == 3 ? 0.2f : 1f).ToList();
-            int wrongPolarity = WeightedChoice(candidates, weights);
-            string wrongText = MapPolarity(wrongPolarity);
-
-            // 随机分配到左右按钮
-            if (Random.value < 0.5f)
-            {
-                choiceAPolarity = currentPolarity;
-                choiceBPolarity = wrongPolarity;
-                textA.text = correctText;
-                textB.text = wrongText;
-            }
-            else
-            {
-                choiceAPolarity = wrongPolarity;
-                choiceBPolarity = currentPolarity;
-                textA.text = wrongText;
-                textB.text = correctText;
-            }
-        }
-
-        /// <summary>
-        /// 显示题目
-        /// </summary>
-        private void DisplayQuestion()
-        {
-            hasAnswered = false;
-
-            if (string.IsNullOrEmpty(currentWord))
-            {
-                DisplayErrorMessage("词语数据错误");
-                return;
-            }
-
-            // 使用Unicode转义避免编译错误
-            questionText.text = $"题目：判断下列词语的情感倾向\n    \u300c<color=red>{currentWord}</color>\u300d";
-            feedbackText.text = string.Empty;
-
-            // 启用按钮
-            buttonA.interactable = true;
-            buttonB.interactable = true;
-
-            Debug.Log($"[SentimentTorF] 题目显示完成: {currentWord} (正确答案: {MapPolarity(currentPolarity)})");
-        }
-
-        /// <summary>
-        /// 显示错误信息
-        /// </summary>
-        private void DisplayErrorMessage(string message)
-        {
-            Debug.LogWarning($"[SentimentTorF] {message}");
-
-            if (questionText != null)
-                questionText.text = message;
-
-            if (feedbackText != null)
-                feedbackText.text = "";
-
-            if (buttonA != null)
-                buttonA.interactable = false;
-
-            if (buttonB != null)
-                buttonB.interactable = false;
-        }
-
-        /// <summary>
-        /// 检查本地答案（单机模式）
-        /// </summary>
-        protected override void CheckLocalAnswer(string answer)
-        {
-            // 判断题通过按钮点击处理，此方法不直接使用
-            Debug.Log("[SentimentTorF] CheckLocalAnswer 被调用，但判断题通过按钮处理");
-        }
-
-        /// <summary>
-        /// 选择选项处理
-        /// </summary>
-        private void OnSelectChoice(int selectedPolarity)
-        {
-            if (hasAnswered)
-            {
-                Debug.Log("[SentimentTorF] 已经回答过了，忽略重复点击");
-                return;
-            }
-
-            hasAnswered = true;
-
-            // 禁用按钮防止重复点击
-            buttonA.interactable = false;
-            buttonB.interactable = false;
-
-            Debug.Log($"[SentimentTorF] 选择了情感倾向: {MapPolarity(selectedPolarity)}");
-
-            if (IsNetworkMode())
-            {
-                HandleNetworkAnswer(selectedPolarity.ToString());
-            }
-            else
-            {
-                HandleLocalAnswer(selectedPolarity);
-            }
-        }
-
-        /// <summary>
-        /// 处理网络模式答案
-        /// </summary>
-        private void HandleNetworkAnswer(string answer)
-        {
-            Debug.Log($"[SentimentTorF] 网络模式提交答案: {answer}");
-
-            // 显示提交状态
-            feedbackText.text = "已提交答案，等待服务器结果...";
-            feedbackText.color = Color.yellow;
-
-            // 提交答案到服务器
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.SubmitAnswer(answer);
-            }
-            else
-            {
-                Debug.LogError("[SentimentTorF] NetworkManager实例不存在，无法提交答案");
-            }
-        }
-
-        /// <summary>
-        /// 处理单机模式答案
-        /// </summary>
-        private void HandleLocalAnswer(int selectedPolarity)
-        {
-            bool isCorrect = selectedPolarity == currentPolarity;
-            Debug.Log($"[SentimentTorF] 单机模式答题结果: {(isCorrect ? "正确" : "错误")}");
-
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
-        }
-
-        /// <summary>
-        /// 显示反馈信息并通知结果
-        /// </summary>
-        private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
-        {
-            // 显示反馈
-            if (feedbackText != null)
-            {
-                if (isCorrect)
+                // 尝试作为polarity值比较
+                if (int.TryParse(answer.Trim(), out int answerPolarity) &&
+                    int.TryParse(correctAnswer, out int correctPolarity))
                 {
-                    feedbackText.text = "回答正确！";
-                    feedbackText.color = Color.green;
+                    isCorrect = answerPolarity == correctPolarity;
                 }
                 else
                 {
-                    feedbackText.text = $"回答错误，正确答案是：{MapPolarity(currentPolarity)}";
-                    feedbackText.color = Color.red;
+                    // 作为文本比较
+                    isCorrect = answer.Trim().Equals(correctAnswer, System.StringComparison.Ordinal);
                 }
+
+                Debug.Log($"[SentimentTorF] 静态验证结果: 用户答案='{answer.Trim()}', 正确答案='{correctAnswer}', 结果={isCorrect}");
+                return isCorrect;
             }
-
-            // 等待一段时间
-            yield return new WaitForSeconds(1.5f);
-
-            // 通知答题结果
-            OnAnswerResult?.Invoke(isCorrect);
-
-            // 重新启用按钮为下一题准备
-            if (buttonA != null)
-                buttonA.interactable = true;
-            if (buttonB != null)
-                buttonB.interactable = true;
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[SentimentTorF] 静态验证异常: {e.Message}");
+                return false;
+            }
         }
 
         /// <summary>
+        /// 本地答案验证（用于单机模式或网络模式的本地验证）
+        /// </summary>
+        protected override void CheckLocalAnswer(string answer)
+        {
+            LogDebug($"验证本地答案: {answer}");
+
+            bool isCorrect = ValidateLocalAnswer(answer);
+            OnAnswerResult?.Invoke(isCorrect);
+        }
+
+        /// <summary>
+        /// 验证本地答案
+        /// </summary>
+        private bool ValidateLocalAnswer(string answer)
+        {
+            if (string.IsNullOrEmpty(answer))
+            {
+                LogDebug("答案为空");
+                return false;
+            }
+
+            // 支持polarity值验证
+            if (int.TryParse(answer.Trim(), out int selectedPolarity))
+            {
+                bool isCorrect = selectedPolarity == currentPolarity;
+                LogDebug($"本地验证结果: 选择情感={MapPolarity(selectedPolarity)}, 正确情感={MapPolarity(currentPolarity)}, 结果={isCorrect}");
+                return isCorrect;
+            }
+
+            LogDebug("答案格式无效");
+            return false;
+        }
+
+        #endregion
+
+        #region 网络结果处理
+
+        /// <summary>
         /// 显示网络答题结果（由网络系统调用）
+        /// 重要：此方法必须保留，网络系统会通过反射调用
         /// </summary>
         public void ShowNetworkResult(bool isCorrect, string correctAnswer)
         {
-            Debug.Log($"[SentimentTorF] 收到网络结果: {(isCorrect ? "正确" : "错误")}");
+            LogDebug($"收到网络答题结果: {(isCorrect ? "正确" : "错误")}");
 
             // 更新正确答案显示
             if (int.TryParse(correctAnswer, out int polarity))
@@ -696,8 +477,35 @@ namespace GameLogic.TorF
                 currentPolarity = polarity;
             }
 
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            OnAnswerResult?.Invoke(isCorrect);
         }
+
+        #endregion
+
+        #region 单机模式兼容（保留高耦合方法）
+
+        /// <summary>
+        /// 加载本地题目（单机模式）
+        /// 保留此方法因为可能被其他系统调用
+        /// </summary>
+        protected override void LoadLocalQuestion()
+        {
+            LogDebug("加载本地SentimentTorF题目");
+
+            var questionData = GetQuestionData();
+            if (questionData == null)
+            {
+                LogError("无法生成本地题目");
+                return;
+            }
+
+            ParseQuestionData(questionData);
+            LogDebug($"本地题目加载完成: {currentWord}");
+        }
+
+        #endregion
+
+        #region 工具方法
 
         /// <summary>
         /// 映射polarity值到文本
@@ -734,16 +542,22 @@ namespace GameLogic.TorF
         }
 
         /// <summary>
-        /// 清理资源
+        /// 调试日志
         /// </summary>
-        private void OnDestroy()
+        private void LogDebug(string message)
         {
-            // 清理按钮事件监听
-            if (buttonA != null)
-                buttonA.onClick.RemoveAllListeners();
-            if (buttonB != null)
-                buttonB.onClick.RemoveAllListeners();
+            Debug.Log($"[SentimentTorF] {message}");
         }
+
+        /// <summary>
+        /// 错误日志
+        /// </summary>
+        private void LogError(string message)
+        {
+            Debug.LogError($"[SentimentTorF] {message}");
+        }
+
+        #endregion
     }
 
     /// <summary>
@@ -758,7 +572,7 @@ namespace GameLogic.TorF
     }
 
     /// <summary>
-    /// 情感判断题附加数据结构（用于网络传输）
+    /// 情感判断题附加数据结构
     /// </summary>
     [System.Serializable]
     public class SentimentTorFAdditionalData

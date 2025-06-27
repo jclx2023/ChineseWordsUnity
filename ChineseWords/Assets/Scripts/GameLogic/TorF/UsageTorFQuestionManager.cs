@@ -1,6 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using Mono.Data.Sqlite;
@@ -10,333 +8,104 @@ using Core.Network;
 namespace GameLogic.TorF
 {
     /// <summary>
-    /// 成语/词语使用判断题管理器
-    /// - 支持单机和网络模式
-    /// - 实现IQuestionDataProvider接口，支持Host抽题
-    /// - 单机模式：从 simular_usage_questions 表随机取一条记录
-    /// - 网络模式：使用服务器提供的题目数据
+    /// 成语/词语使用判断题管理器 - UI架构重构版
+    /// 
+    /// 功能说明：
+    /// - 从simular_usage_questions表随机取一条记录
     /// - 随机决定展示正确示例或错误示例
     /// - 将替换后文本插入到下划线位置并高亮
     /// - 玩家选择"正确"/"错误"判定
-    /// </summary>
+    /// - Host端生成题目数据和使用验证信息
     public class UsageTorFQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
+        #region 私有字段
+
         private string dbPath;
 
-        [Header("UI设置")]
-        [SerializeField] private string uiPrefabPath = "Prefabs/InGame/TorFUI";
-
-        [Header("UI组件引用")]
-        private TMP_Text questionText;
-        private Button trueButton;
-        private Button falseButton;
-        private TMP_Text feedbackText;
-
-        private TMP_Text textTrue;
-        private TMP_Text textFalse;
-
+        // 当前题目数据
         private bool isInstanceCorrect;     // 当前实例是否正确
         private string currentStem;         // 当前题干
         private string correctFill;         // 正确填空
         private string currentFill;         // 当前使用的填空
-        private bool hasAnswered = false;
 
-        // IQuestionDataProvider接口实现
+        #endregion
+
+        #region IQuestionDataProvider接口实现
+
         public QuestionType QuestionType => QuestionType.UsageTorF;
+
+        #endregion
+
+        #region Unity生命周期
 
         protected override void Awake()
         {
-            base.Awake(); // 调用网络基类初始化
+            base.Awake();
             dbPath = Application.streamingAssetsPath + "/dictionary.db";
+
+            LogDebug("UsageTorF题型管理器初始化完成");
         }
 
-        private void Start()
-        {
-            // 检查是否需要UI（Host抽题模式可能不需要UI）
-            if (NeedsUI())
-            {
-                InitializeUI();
-            }
-            else
-            {
-                Debug.Log("[UsageTorF] Host抽题模式，跳过UI初始化");
-            }
-        }
+        #endregion
 
-        /// <summary>
-        /// 检查是否需要UI
-        /// </summary>
-        private bool NeedsUI()
-        {
-            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
-            // 或者如果是QuestionDataService的子对象，也不需要UI
-            return transform.parent == null ||
-                   (transform.parent.GetComponent<HostGameManager>() == null &&
-                    transform.parent.GetComponent<QuestionDataService>() == null);
-        }
+        #region 题目数据生成
 
         /// <summary>
         /// 获取题目数据（IQuestionDataProvider接口实现）
-        /// 专门为Host抽题使用，不显示UI
+        /// 为Host端抽题使用，生成使用判断题目和选项数据
         /// </summary>
         public NetworkQuestionData GetQuestionData()
         {
-            Debug.Log("[UsageTorF] Host请求抽题数据");
+            LogDebug("开始生成UsageTorF题目数据");
 
-            // 1. 从数据库获取使用判断题数据
-            var usageData = GetRandomUsageData();
-            if (usageData == null)
+            try
             {
-                Debug.LogWarning("[UsageTorF] Host抽题：暂无题目数据");
+                // 1. 从数据库获取使用判断题数据
+                var usageData = GetRandomUsageData();
+                if (usageData == null)
+                {
+                    LogError("无法获取使用判断题数据");
+                    return null;
+                }
+
+                // 2. 随机决定展示正确还是错误示例
+                bool isInstanceCorrect = Random.value < 0.5f;
+                string currentFill = isInstanceCorrect ?
+                    usageData.correctFill :
+                    usageData.wrongFills[Random.Range(0, usageData.wrongFills.Count)];
+
+                // 3. 构造显示文本
+                string questionText = ReplaceUnderscoreWithHighlight(usageData.stem, currentFill);
+
+                // 4. 构建附加数据
+                var additionalData = new UsageTorFAdditionalData
+                {
+                    stem = usageData.stem,
+                    correctFill = usageData.correctFill,
+                    currentFill = currentFill,
+                    isInstanceCorrect = isInstanceCorrect,
+                    wrongFills = usageData.wrongFills.ToArray()
+                };
+
+                // 5. 创建题目数据
+                var networkQuestionData = new NetworkQuestionData
+                {
+                    questionType = QuestionType.UsageTorF,
+                    questionText = questionText,
+                    correctAnswer = isInstanceCorrect.ToString().ToLower(), // "true" 或 "false"
+                    options = new string[] { "正确", "错误" }, // 固定的两个选项
+                    timeLimit = 30f,
+                    additionalData = JsonUtility.ToJson(additionalData)
+                };
+
+                LogDebug($"UsageTorF题目生成成功: {currentFill} (实例{(isInstanceCorrect ? "正确" : "错误")})");
+                return networkQuestionData;
+            }
+            catch (System.Exception e)
+            {
+                LogError($"生成UsageTorF题目失败: {e.Message}");
                 return null;
             }
-
-            // 2. 随机决定展示正确还是错误示例
-            bool isInstanceCorrect = Random.value < 0.5f;
-            string currentFill = isInstanceCorrect ?
-                usageData.correctFill :
-                usageData.wrongFills[Random.Range(0, usageData.wrongFills.Count)];
-
-            // 3. 构造显示文本
-            string questionText = ReplaceUnderscoreWithHighlight(usageData.stem, currentFill);
-
-            // 4. 创建附加数据
-            var additionalData = new UsageTorFAdditionalData
-            {
-                stem = usageData.stem,
-                correctFill = usageData.correctFill,
-                currentFill = currentFill,
-                isInstanceCorrect = isInstanceCorrect,
-                wrongFills = usageData.wrongFills.ToArray()
-            };
-
-            // 5. 创建网络题目数据
-            var networkQuestionData = new NetworkQuestionData
-            {
-                questionType = QuestionType.UsageTorF,
-                questionText = questionText,
-                correctAnswer = isInstanceCorrect.ToString().ToLower(), // "true" 或 "false"
-                options = new string[] { "正确", "错误" }, // 固定的两个选项
-                timeLimit = 30f,
-                additionalData = JsonUtility.ToJson(additionalData)
-            };
-
-            Debug.Log($"[UsageTorF] Host抽题成功: {currentFill} (实例{(isInstanceCorrect ? "正确" : "错误")})");
-            return networkQuestionData;
-        }
-
-        /// <summary>
-        /// 初始化UI组件
-        /// </summary>
-        private void InitializeUI()
-        {
-            if (UIManager.Instance == null)
-            {
-                Debug.LogError("[UsageTorF] UIManager实例不存在");
-                return;
-            }
-
-            var ui = UIManager.Instance.LoadUI(uiPrefabPath);
-            if (ui == null)
-            {
-                Debug.LogError($"[UsageTorF] 无法加载UI预制体: {uiPrefabPath}");
-                return;
-            }
-
-            // 获取UI组件
-            questionText = ui.Find("QuestionText")?.GetComponent<TMP_Text>();
-            trueButton = ui.Find("TrueButton")?.GetComponent<Button>();
-            falseButton = ui.Find("FalseButton")?.GetComponent<Button>();
-            feedbackText = ui.Find("FeedbackText")?.GetComponent<TMP_Text>();
-
-            if (questionText == null || trueButton == null || falseButton == null || feedbackText == null)
-            {
-                Debug.LogError("[UsageTorF] UI组件获取失败，检查预制体结构");
-                return;
-            }
-
-            // 获取按钮文本组件
-            textTrue = trueButton.GetComponentInChildren<TMP_Text>();
-            textFalse = falseButton.GetComponentInChildren<TMP_Text>();
-
-            if (textTrue == null || textFalse == null)
-            {
-                Debug.LogError("[UsageTorF] 按钮文本组件获取失败");
-                return;
-            }
-
-            // 绑定按钮事件
-            trueButton.onClick.RemoveAllListeners();
-            falseButton.onClick.RemoveAllListeners();
-            trueButton.onClick.AddListener(() => OnSelectAnswer(true));
-            falseButton.onClick.AddListener(() => OnSelectAnswer(false));
-
-            feedbackText.text = string.Empty;
-
-            Debug.Log("[UsageTorF] UI初始化完成");
-        }
-
-        /// <summary>
-        /// 加载本地题目（单机模式）
-        /// </summary>
-        protected override void LoadLocalQuestion()
-        {
-            Debug.Log("[UsageTorF] 加载本地题目");
-
-            // 使用GetQuestionData()方法复用抽题逻辑
-            var questionData = GetQuestionData();
-            if (questionData == null)
-            {
-                DisplayErrorMessage("暂无题目数据");
-                return;
-            }
-
-            // 解析题目数据
-            isInstanceCorrect = questionData.correctAnswer.ToLower() == "true";
-
-            // 从附加数据中解析详细信息
-            if (!string.IsNullOrEmpty(questionData.additionalData))
-            {
-                try
-                {
-                    var additionalInfo = JsonUtility.FromJson<UsageTorFAdditionalData>(questionData.additionalData);
-                    currentStem = additionalInfo.stem;
-                    correctFill = additionalInfo.correctFill;
-                    currentFill = additionalInfo.currentFill;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成题目");
-                    LoadOriginalLocalQuestion();
-                    return;
-                }
-            }
-            else
-            {
-                LoadOriginalLocalQuestion();
-                return;
-            }
-
-            // 显示题目
-            DisplayQuestion();
-        }
-
-        /// <summary>
-        /// 原始的本地题目加载逻辑（备用）
-        /// </summary>
-        private void LoadOriginalLocalQuestion()
-        {
-            // 1. 从数据库获取使用判断题数据
-            var usageData = GetRandomUsageData();
-            if (usageData == null)
-            {
-                DisplayErrorMessage("暂无题目数据");
-                return;
-            }
-
-            currentStem = usageData.stem;
-            correctFill = usageData.correctFill;
-
-            // 2. 随机决定展示正确还是错误示例
-            isInstanceCorrect = Random.value < 0.5f;
-            currentFill = isInstanceCorrect ?
-                correctFill :
-                usageData.wrongFills[Random.Range(0, usageData.wrongFills.Count)];
-
-            // 3. 显示题目
-            DisplayQuestion();
-        }
-
-        /// <summary>
-        /// 加载网络题目（网络模式）
-        /// </summary>
-        protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
-        {
-            Debug.Log("[UsageTorF] 加载网络题目");
-
-            if (networkData == null)
-            {
-                Debug.LogError("[UsageTorF] 网络题目数据为空");
-                DisplayErrorMessage("网络题目数据错误");
-                return;
-            }
-
-            if (networkData.questionType != QuestionType.UsageTorF)
-            {
-                Debug.LogError($"[UsageTorF] 题目类型不匹配: 期望{QuestionType.UsageTorF}, 实际{networkData.questionType}");
-                DisplayErrorMessage("题目类型错误");
-                return;
-            }
-
-            // 从网络数据解析题目信息
-            ParseNetworkQuestionData(networkData);
-
-            // 显示题目
-            DisplayQuestion();
-        }
-
-        /// <summary>
-        /// 解析网络题目数据
-        /// </summary>
-        private void ParseNetworkQuestionData(NetworkQuestionData networkData)
-        {
-            // 解析正确答案（true/false）
-            isInstanceCorrect = networkData.correctAnswer.ToLower() == "true";
-
-            // 从additionalData中解析额外信息
-            if (!string.IsNullOrEmpty(networkData.additionalData))
-            {
-                try
-                {
-                    var additionalInfo = JsonUtility.FromJson<UsageTorFAdditionalData>(networkData.additionalData);
-                    currentStem = additionalInfo.stem;
-                    correctFill = additionalInfo.correctFill;
-                    currentFill = additionalInfo.currentFill;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"解析网络附加数据失败: {e.Message}");
-                    // 从题目文本解析
-                    ExtractInfoFromQuestionText(networkData.questionText);
-                }
-            }
-            else
-            {
-                // 从题目文本解析
-                ExtractInfoFromQuestionText(networkData.questionText);
-            }
-
-            Debug.Log($"[UsageTorF] 网络题目解析完成: isCorrect={isInstanceCorrect}, fill={currentFill}");
-        }
-
-        /// <summary>
-        /// 从题目文本中提取信息
-        /// </summary>
-        private void ExtractInfoFromQuestionText(string questionText)
-        {
-            // 尝试从高亮标签中提取当前填空内容
-            var colorTagStart = questionText.IndexOf("<color=red>");
-            var colorTagEnd = questionText.IndexOf("</color>");
-
-            if (colorTagStart != -1 && colorTagEnd != -1)
-            {
-                colorTagStart += "<color=red>".Length;
-                currentFill = questionText.Substring(colorTagStart, colorTagEnd - colorTagStart);
-
-                // 重构原始题干（将高亮部分替换为下划线）
-                var before = questionText.Substring(0, colorTagStart - "<color=red>".Length);
-                var after = questionText.Substring(colorTagEnd + "</color>".Length);
-                currentStem = before + new string('_', currentFill.Length) + after;
-            }
-            else
-            {
-                // 如果没有高亮标签，直接使用题目文本
-                currentStem = questionText;
-                currentFill = "未知";
-            }
-
-            // 设置正确填空为当前填空（网络模式下无法确定）
-            correctFill = currentFill;
         }
 
         /// <summary>
@@ -380,39 +149,10 @@ namespace GameLogic.TorF
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"获取使用判断题数据失败: {e.Message}");
+                LogError($"获取使用判断题数据失败: {e.Message}");
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// 显示题目
-        /// </summary>
-        private void DisplayQuestion()
-        {
-            hasAnswered = false;
-
-            if (string.IsNullOrEmpty(currentStem) || string.IsNullOrEmpty(currentFill))
-            {
-                DisplayErrorMessage("题目数据错误");
-                return;
-            }
-
-            // 构造题干：替换第一个下划线段并高亮填空内容
-            string displayText = ReplaceUnderscoreWithHighlight(currentStem, currentFill);
-            questionText.text = displayText;
-            feedbackText.text = string.Empty;
-
-            // 设置按钮文本
-            textTrue.text = "正确";
-            textFalse.text = "错误";
-
-            // 启用按钮
-            trueButton.interactable = true;
-            falseButton.interactable = true;
-
-            Debug.Log($"[UsageTorF] 题目显示完成: {displayText} (实例{(isInstanceCorrect ? "正确" : "错误")})");
         }
 
         /// <summary>
@@ -440,148 +180,291 @@ namespace GameLogic.TorF
             }
         }
 
-        /// <summary>
-        /// 显示错误信息
-        /// </summary>
-        private void DisplayErrorMessage(string message)
-        {
-            Debug.LogWarning($"[UsageTorF] {message}");
+        #endregion
 
-            if (questionText != null)
-                questionText.text = message;
-
-            if (feedbackText != null)
-                feedbackText.text = "";
-
-            if (trueButton != null)
-                trueButton.interactable = false;
-
-            if (falseButton != null)
-                falseButton.interactable = false;
-        }
+        #region 网络题目处理
 
         /// <summary>
-        /// 检查本地答案（单机模式）
+        /// 加载网络题目数据
         /// </summary>
-        protected override void CheckLocalAnswer(string answer)
+        protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
         {
-            // 判断题通过按钮点击处理，此方法不直接使用
-            Debug.Log("[UsageTorF] CheckLocalAnswer 被调用，但判断题通过按钮处理");
-        }
+            LogDebug("加载网络UsageTorF题目");
 
-        /// <summary>
-        /// 选择答案处理
-        /// </summary>
-        private void OnSelectAnswer(bool selectedTrue)
-        {
-            if (hasAnswered)
+            if (!ValidateNetworkData(networkData))
             {
-                Debug.Log("[UsageTorF] 已经回答过了，忽略重复点击");
+                LogError("网络题目数据验证失败");
                 return;
             }
 
-            hasAnswered = true;
-
-            // 禁用按钮防止重复点击
-            trueButton.interactable = false;
-            falseButton.interactable = false;
-
-            Debug.Log($"[UsageTorF] 选择了答案: {(selectedTrue ? "正确" : "错误")}");
-
-            if (IsNetworkMode())
+            if (!ParseQuestionData(networkData))
             {
-                HandleNetworkAnswer(selectedTrue.ToString().ToLower());
+                LogError("解析网络题目数据失败");
+                return;
             }
-            else
+
+            LogDebug($"网络UsageTorF题目加载完成: {currentFill}");
+        }
+
+        /// <summary>
+        /// 验证网络数据
+        /// </summary>
+        private bool ValidateNetworkData(NetworkQuestionData networkData)
+        {
+            if (networkData == null)
             {
-                HandleLocalAnswer(selectedTrue);
+                LogError("网络题目数据为空");
+                return false;
+            }
+
+            if (networkData.questionType != QuestionType.UsageTorF)
+            {
+                LogError($"题目类型不匹配，期望: {QuestionType.UsageTorF}, 实际: {networkData.questionType}");
+                return false;
+            }
+
+            if (networkData.options == null || networkData.options.Length != 2)
+            {
+                LogError("选项数据错误，判断题需要2个选项");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 解析题目数据
+        /// </summary>
+        private bool ParseQuestionData(NetworkQuestionData questionData)
+        {
+            try
+            {
+                // 解析正确答案（true/false）
+                isInstanceCorrect = questionData.correctAnswer.ToLower() == "true";
+
+                // 从附加数据中解析详细信息
+                if (!string.IsNullOrEmpty(questionData.additionalData))
+                {
+                    var additionalInfo = JsonUtility.FromJson<UsageTorFAdditionalData>(questionData.additionalData);
+                    currentStem = additionalInfo.stem;
+                    correctFill = additionalInfo.correctFill;
+                    currentFill = additionalInfo.currentFill;
+                }
+                else
+                {
+                    // 从题目文本解析
+                    ExtractInfoFromQuestionText(questionData.questionText);
+                }
+
+                LogDebug($"题目数据解析成功: 实例正确={isInstanceCorrect}, 当前填空={currentFill}");
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                LogError($"解析题目数据失败: {e.Message}");
+                return false;
             }
         }
 
         /// <summary>
-        /// 处理网络模式答案
+        /// 从题目文本中提取信息
         /// </summary>
-        private void HandleNetworkAnswer(string answer)
+        private void ExtractInfoFromQuestionText(string questionText)
         {
-            Debug.Log($"[UsageTorF] 网络模式提交答案: {answer}");
-
-            // 显示提交状态
-            if (feedbackText != null)
+            try
             {
-                feedbackText.text = "已提交答案，等待服务器结果...";
-                feedbackText.color = Color.yellow;
+                // 尝试从高亮标签中提取当前填空内容
+                var colorTagStart = questionText.IndexOf("<color=red>");
+                var colorTagEnd = questionText.IndexOf("</color>");
+
+                if (colorTagStart != -1 && colorTagEnd != -1)
+                {
+                    colorTagStart += "<color=red>".Length;
+                    currentFill = questionText.Substring(colorTagStart, colorTagEnd - colorTagStart);
+
+                    // 重构原始题干（将高亮部分替换为下划线）
+                    var before = questionText.Substring(0, colorTagStart - "<color=red>".Length);
+                    var after = questionText.Substring(colorTagEnd + "</color>".Length);
+                    currentStem = before + new string('_', currentFill.Length) + after;
+                }
+                else
+                {
+                    // 如果没有高亮标签，直接使用题目文本
+                    currentStem = questionText;
+                    currentFill = "未知";
+                }
+
+                // 设置正确填空为当前填空（网络模式下无法确定）
+                correctFill = currentFill;
+            }
+            catch (System.Exception e)
+            {
+                LogError($"从题目文本提取信息失败: {e.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 答案验证
+
+        /// <summary>
+        /// 静态答案验证方法 - 供Host端调用
+        /// 基于题目数据验证答案，不依赖实例状态
+        /// </summary>
+        public static bool ValidateAnswerStatic(string answer, NetworkQuestionData question)
+        {
+            Debug.Log($"[UsageTorF] 静态验证答案: {answer}");
+
+            if (string.IsNullOrEmpty(answer?.Trim()) || question == null)
+            {
+                Debug.Log("[UsageTorF] 静态验证: 答案为空或题目数据无效");
+                return false;
             }
 
-            // 提交答案到服务器
-            if (NetworkManager.Instance != null)
+            if (question.questionType != QuestionType.UsageTorF)
             {
-                NetworkManager.Instance.SubmitAnswer(answer);
+                Debug.LogError($"[UsageTorF] 静态验证: 题目类型不匹配，期望UsageTorF，实际{question.questionType}");
+                return false;
             }
-            else
+
+            try
             {
-                Debug.LogError("[UsageTorF] NetworkManager实例不存在，无法提交答案");
+                string correctAnswer = question.correctAnswer?.Trim().ToLower();
+                if (string.IsNullOrEmpty(correctAnswer))
+                {
+                    Debug.Log("[UsageTorF] 静态验证: 题目数据中缺少正确答案");
+                    return false;
+                }
+
+                // 标准化用户答案
+                string normalizedAnswer = NormalizeAnswer(answer.Trim());
+
+                bool isCorrect = normalizedAnswer == correctAnswer;
+                Debug.Log($"[UsageTorF] 静态验证结果: 用户答案='{answer.Trim()}', 标准化='{normalizedAnswer}', 正确答案='{correctAnswer}', 结果={isCorrect}");
+
+                return isCorrect;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[UsageTorF] 静态验证异常: {e.Message}");
+                return false;
             }
         }
 
         /// <summary>
-        /// 处理单机模式答案
+        /// 标准化答案格式
         /// </summary>
-        private void HandleLocalAnswer(bool selectedTrue)
+        private static string NormalizeAnswer(string answer)
         {
-            // 判断逻辑：选择"正确"且实例正确，或选择"错误"且实例错误
-            bool isCorrect = (selectedTrue && isInstanceCorrect) || (!selectedTrue && !isInstanceCorrect);
-
-            Debug.Log($"[UsageTorF] 单机模式答题结果: {(isCorrect ? "正确" : "错误")}");
-
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            // 处理各种可能的答案格式
+            switch (answer.ToLower())
+            {
+                case "true":
+                case "正确":
+                case "对":
+                case "是":
+                    return "true";
+                case "false":
+                case "错误":
+                case "错":
+                case "否":
+                    return "false";
+                default:
+                    return answer.ToLower();
+            }
         }
 
         /// <summary>
-        /// 显示反馈信息并通知结果
+        /// 本地答案验证（用于单机模式或网络模式的本地验证）
         /// </summary>
-        private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
+        protected override void CheckLocalAnswer(string answer)
         {
-            // 显示反馈
-            if (feedbackText != null)
-            {
-                feedbackText.color = isCorrect ? Color.green : Color.red;
-                feedbackText.text = isCorrect ? "回答正确！" : "回答错误！";
-            }
+            LogDebug($"验证本地答案: {answer}");
 
-            // 等待一段时间
-            yield return new WaitForSeconds(1.5f);
-
-            // 通知答题结果
+            bool isCorrect = ValidateLocalAnswer(answer);
             OnAnswerResult?.Invoke(isCorrect);
-
-            // 重新启用按钮为下一题准备
-            if (trueButton != null)
-                trueButton.interactable = true;
-            if (falseButton != null)
-                falseButton.interactable = true;
         }
+
+        /// <summary>
+        /// 验证本地答案
+        /// </summary>
+        private bool ValidateLocalAnswer(string answer)
+        {
+            if (string.IsNullOrEmpty(answer))
+            {
+                LogDebug("答案为空");
+                return false;
+            }
+
+            // 标准化答案
+            string normalizedAnswer = NormalizeAnswer(answer.Trim());
+            string expectedAnswer = isInstanceCorrect ? "true" : "false";
+
+            bool isCorrect = normalizedAnswer == expectedAnswer;
+            LogDebug($"本地验证结果: 标准化答案='{normalizedAnswer}', 期望答案='{expectedAnswer}', 结果={isCorrect}");
+
+            return isCorrect;
+        }
+
+        #endregion
+
+        #region 网络结果处理
 
         /// <summary>
         /// 显示网络答题结果（由网络系统调用）
+        /// 重要：此方法必须保留，网络系统会通过反射调用
         /// </summary>
         public void ShowNetworkResult(bool isCorrect, string correctAnswer)
         {
-            Debug.Log($"[UsageTorF] 收到网络结果: {(isCorrect ? "正确" : "错误")}");
+            LogDebug($"收到网络答题结果: {(isCorrect ? "正确" : "错误")}");
 
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            OnAnswerResult?.Invoke(isCorrect);
+        }
+
+        #endregion
+
+        #region 单机模式兼容（保留高耦合方法）
+
+        /// <summary>
+        /// 加载本地题目（单机模式）
+        /// 保留此方法因为可能被其他系统调用
+        /// </summary>
+        protected override void LoadLocalQuestion()
+        {
+            LogDebug("加载本地UsageTorF题目");
+
+            var questionData = GetQuestionData();
+            if (questionData == null)
+            {
+                LogError("无法生成本地题目");
+                return;
+            }
+
+            ParseQuestionData(questionData);
+            LogDebug($"本地题目加载完成: {currentFill}");
+        }
+
+        #endregion
+
+        #region 工具方法
+
+        /// <summary>
+        /// 调试日志
+        /// </summary>
+        private void LogDebug(string message)
+        {
+            Debug.Log($"[UsageTorF] {message}");
         }
 
         /// <summary>
-        /// 清理资源
+        /// 错误日志
         /// </summary>
-        private void OnDestroy()
+        private void LogError(string message)
         {
-            // 清理按钮事件监听
-            if (trueButton != null)
-                trueButton.onClick.RemoveAllListeners();
-            if (falseButton != null)
-                falseButton.onClick.RemoveAllListeners();
+            Debug.LogError($"[UsageTorF] {message}");
         }
+
+        #endregion
     }
 
     /// <summary>
@@ -595,7 +478,7 @@ namespace GameLogic.TorF
     }
 
     /// <summary>
-    /// 使用判断题附加数据结构（用于网络传输）
+    /// 使用判断题附加数据结构
     /// </summary>
     [System.Serializable]
     public class UsageTorFAdditionalData

@@ -1,6 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI;
-using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,124 +10,155 @@ using Core.Network;
 namespace GameLogic.FillBlank
 {
     /// <summary>
-    /// 软性单词补全题管理器
-    /// - 支持单机和网络模式
-    /// - 实现IQuestionDataProvider接口，支持Host抽题
-    /// - 单机模式：随机抽词，生成通配符模式 (*任意长度，_单个字符)
-    /// - 网络模式：使用服务器提供的题目数据和模式
-    /// - 玩家输入答案，使用正则表达式匹配模式，再验证词库存在性
+    /// 软性单词补全题管理器 - UI架构重构版
+    /// 
+    /// 功能说明：
+    /// - 随机抽词生成通配符模式（*表示任意长度，_表示单个字符）
+    /// - 使用正则表达式匹配答案，验证词库存在性
+    /// - Host端生成题目数据和通配符模式
+    /// - 支持网络模式下的题目生成和答案验证
+    /// 
+    /// 重构内容：
+    /// - 移除所有UI相关代码，UI功能已转移至AnswerUIManager
+    /// - 保留数据生成、网络通信和答案验证核心功能
+    /// - 优化代码结构，统一题型管理器代码风格
     /// </summary>
     public class SoftFillQuestionManager : NetworkQuestionManagerBase, IQuestionDataProvider
     {
-        private string dbPath;
+        #region 配置字段
 
-        [Header("UI设置")]
-        [SerializeField] private string uiPrefabPath = "Prefabs/InGame/HardFillUI";
-
-        [Header("单机模式配置")]
-        [Header("Freq范围")]
+        [Header("题目生成配置")]
         [SerializeField] private int freqMin = 0;
         [SerializeField] private int freqMax = 8;
+        [SerializeField] private int revealCount = 2; // 已知字符数量
 
-        [Header("已知字数量 (0 < x < L)")]
-        [SerializeField] private int revealCount = 2;
+        #endregion
 
-        [Header("UI组件引用")]
-        private TMP_Text questionText;
-        private TMP_InputField answerInput;
-        private Button submitButton;
-        private Button surrenderButton;
-        private TMP_Text feedbackText;
+        #region 私有字段
 
+        private string dbPath;
+
+        // 当前题目数据
         private string currentWord;
         private string stemPattern;
         private Regex matchRegex;
-        private bool hasAnswered = false;
 
-        // IQuestionDataProvider接口实现
+        #endregion
+
+        #region IQuestionDataProvider接口实现
+
         public QuestionType QuestionType => QuestionType.SoftFill;
+
+        #endregion
+
+        #region Unity生命周期
 
         protected override void Awake()
         {
-            base.Awake(); // 调用网络基类初始化
+            base.Awake();
             dbPath = Application.streamingAssetsPath + "/dictionary.db";
+
+            LogDebug("SoftFill题型管理器初始化完成");
         }
 
-        private void Start()
-        {
-            // 检查是否需要UI（Host抽题模式可能不需要UI）
-            if (NeedsUI())
-            {
-                InitializeUI();
-            }
-            else
-            {
-                Debug.Log("[SoftFill] Host抽题模式，跳过UI初始化");
-            }
-        }
+        #endregion
 
-        /// <summary>
-        /// 检查是否需要UI
-        /// </summary>
-        private bool NeedsUI()
-        {
-            // 如果是HostGameManager的子对象，说明是用于抽题的临时管理器，不需要UI
-            // 或者如果是QuestionDataService的子对象，也不需要UI
-            return transform.parent == null ||
-                   (transform.parent.GetComponent<HostGameManager>() == null &&
-                    transform.parent.GetComponent<QuestionDataService>() == null);
-        }
+        #region 题目数据生成
 
         /// <summary>
         /// 获取题目数据（IQuestionDataProvider接口实现）
-        /// 专门为Host抽题使用，不显示UI
+        /// 为Host端抽题使用，生成通配符模式和答案
         /// </summary>
         public NetworkQuestionData GetQuestionData()
         {
-            Debug.Log("[SoftFill] Host请求抽题数据");
+            LogDebug("开始生成SoftFill题目数据");
 
-            // 1. 随机抽词
-            string word = GetRandomWord();
-
-            if (string.IsNullOrEmpty(word))
+            try
             {
-                Debug.LogWarning("[SoftFill] Host抽题：暂无符合条件的词条");
-                return null;
+                // 1. 随机获取单词
+                string word = GetRandomWordFromDatabase();
+                if (string.IsNullOrEmpty(word))
+                {
+                    LogError("无法找到符合条件的词语");
+                    return CreateFallbackQuestion();
+                }
+
+                // 2. 生成通配符模式
+                string pattern = GenerateWildcardPattern(word);
+                if (string.IsNullOrEmpty(pattern))
+                {
+                    LogError("通配符模式生成失败");
+                    return CreateFallbackQuestion();
+                }
+
+                // 3. 创建正则表达式模式
+                string regexPattern = CreateRegexPattern(pattern);
+
+                // 4. 构建附加数据
+                var additionalData = new SoftFillAdditionalData
+                {
+                    stemPattern = pattern,
+                    regexPattern = regexPattern,
+                    revealIndices = ExtractRevealIndices(word, pattern)
+                };
+
+                // 5. 创建题目数据
+                var questionData = new NetworkQuestionData
+                {
+                    questionType = QuestionType.SoftFill,
+                    questionText = FormatQuestionText(pattern),
+                    correctAnswer = word,
+                    options = new string[0],
+                    timeLimit = 30f,
+                    additionalData = JsonUtility.ToJson(additionalData)
+                };
+
+                LogDebug($"SoftFill题目生成成功: {pattern} (示例答案: {word})");
+                return questionData;
+            }
+            catch (System.Exception e)
+            {
+                LogError($"生成SoftFill题目失败: {e.Message}");
+                return CreateFallbackQuestion();
+            }
+        }
+
+        /// <summary>
+        /// 从数据库随机获取单词
+        /// </summary>
+        private string GetRandomWordFromDatabase()
+        {
+            try
+            {
+                using (var conn = new SqliteConnection("URI=file:" + dbPath))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+                            SELECT word FROM (
+                                SELECT word FROM word WHERE Freq BETWEEN @min AND @max
+                                UNION ALL
+                                SELECT word FROM idiom WHERE Freq BETWEEN @min AND @max
+                            ) ORDER BY RANDOM() LIMIT 1";
+
+                        cmd.Parameters.AddWithValue("@min", freqMin);
+                        cmd.Parameters.AddWithValue("@max", freqMax);
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                                return reader.GetString(0);
+                        }
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogError($"数据库查询失败: {e.Message}");
             }
 
-            // 2. 生成通配符模式
-            string pattern = GenerateWildcardPattern(word);
-
-            if (string.IsNullOrEmpty(pattern))
-            {
-                Debug.LogWarning("[SoftFill] Host抽题：通配符模式生成失败");
-                return null;
-            }
-
-            // 3. 创建正则表达式模式（用于验证）
-            string regexPattern = CreateRegexPattern(pattern);
-
-            // 4. 创建附加数据
-            var additionalData = new SoftFillAdditionalData
-            {
-                stemPattern = pattern,
-                regexPattern = regexPattern,
-                revealIndices = ExtractRevealIndices(word, pattern)
-            };
-
-            // 5. 创建网络题目数据
-            var questionData = new NetworkQuestionData
-            {
-                questionType = QuestionType.SoftFill,
-                questionText = $"题目：请输入一个符合<color=red>{pattern}</color>格式的单词\nHint：*为任意个字，_为单个字",
-                correctAnswer = word,
-                options = new string[0], // 填空题不需要选项
-                timeLimit = 30f,
-                additionalData = JsonUtility.ToJson(additionalData)
-            };
-
-            Debug.Log($"[SoftFill] Host抽题成功: {pattern} (示例答案: {word})");
-            return questionData;
+            return null;
         }
 
         /// <summary>
@@ -141,7 +170,7 @@ namespace GameLogic.FillBlank
                 return "";
 
             int wordLength = word.Length;
-            int x = Mathf.Clamp(revealCount, 1, wordLength - 1);
+            int revealedCount = Mathf.Clamp(revealCount, 1, wordLength - 1);
 
             // 随机选择要显示的字符位置
             var indices = Enumerable.Range(0, wordLength).ToArray();
@@ -155,7 +184,7 @@ namespace GameLogic.FillBlank
                 indices[j] = temp;
             }
 
-            var selectedIndices = indices.Take(x).OrderBy(i => i).ToArray();
+            var selectedIndices = indices.Take(revealedCount).OrderBy(i => i).ToArray();
 
             // 构造通配符题干
             var sb = new System.Text.StringBuilder();
@@ -170,6 +199,7 @@ namespace GameLogic.FillBlank
             }
             sb.Append("*");
 
+            LogDebug($"生成通配符模式: {sb} (基于词语: {word})");
             return sb.ToString();
         }
 
@@ -183,8 +213,6 @@ namespace GameLogic.FillBlank
 
             try
             {
-                // 构建正则表达式模式
-                // * -> .*, _ -> .
                 var pattern = "^" + string.Concat(stemPattern.Select(c =>
                 {
                     if (c == '*') return ".*";
@@ -196,7 +224,7 @@ namespace GameLogic.FillBlank
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"创建正则表达式失败: {e.Message}");
+                LogError($"创建正则表达式失败: {e.Message}");
                 return "";
             }
         }
@@ -208,8 +236,7 @@ namespace GameLogic.FillBlank
         {
             var indices = new List<int>();
 
-            // 这是一个简化的提取逻辑，实际可能需要更复杂的解析
-            // 对于软填空题，主要是为了传输完整信息
+            // 简化的提取逻辑，主要用于完整信息传输
             for (int i = 0; i < word.Length && i < pattern.Length; i++)
             {
                 if (pattern[i] != '*' && pattern[i] != '_')
@@ -222,153 +249,113 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// 初始化UI组件
+        /// 格式化题目文本
         /// </summary>
-        private void InitializeUI()
+        private string FormatQuestionText(string pattern)
         {
-            if (UIManager.Instance == null)
-            {
-                Debug.LogError("[SoftFill] UIManager实例不存在");
-                return;
-            }
-
-            var ui = UIManager.Instance.LoadUI(uiPrefabPath);
-            if (ui == null)
-            {
-                Debug.LogError($"[SoftFill] 无法加载UI预制体: {uiPrefabPath}");
-                return;
-            }
-
-            // 获取UI组件
-            questionText = ui.Find("QuestionText")?.GetComponent<TMP_Text>();
-            answerInput = ui.Find("AnswerInput")?.GetComponent<TMP_InputField>();
-            submitButton = ui.Find("SubmitButton")?.GetComponent<Button>();
-            surrenderButton = ui.Find("SurrenderButton")?.GetComponent<Button>();
-            feedbackText = ui.Find("FeedbackText")?.GetComponent<TMP_Text>();
-
-            if (questionText == null || answerInput == null || submitButton == null ||
-                surrenderButton == null || feedbackText == null)
-            {
-                Debug.LogError("[SoftFill] UI组件获取失败，检查预制体结构");
-                return;
-            }
-
-            // 绑定按钮事件
-            submitButton.onClick.RemoveAllListeners();
-            submitButton.onClick.AddListener(OnSubmit);
-
-            surrenderButton.onClick.RemoveAllListeners();
-            surrenderButton.onClick.AddListener(OnSurrender);
-
-            // 绑定输入框回车事件
-            answerInput.onSubmit.RemoveAllListeners();
-            answerInput.onSubmit.AddListener(OnInputSubmit);
-
-            feedbackText.text = string.Empty;
-
-            Debug.Log("[SoftFill] UI初始化完成");
+            return $"题目：请输入一个符合<color=red>{pattern}</color>格式的单词\nHint：*为任意个字，_为单个字";
         }
 
         /// <summary>
-        /// 加载本地题目（单机模式）
+        /// 创建备用题目
         /// </summary>
-        protected override void LoadLocalQuestion()
+        private NetworkQuestionData CreateFallbackQuestion()
         {
-            Debug.Log("[SoftFill] 加载本地题目");
+            LogDebug("创建SoftFill备用题目");
 
-            // 使用GetQuestionData()方法复用抽题逻辑
-            var questionData = GetQuestionData();
-            if (questionData == null)
+            return new NetworkQuestionData
             {
-                DisplayErrorMessage("没有符合条件的词条。");
-                return;
-            }
-
-            // 解析题目数据
-            currentWord = questionData.correctAnswer;
-
-            // 从附加数据中解析通配符模式
-            if (!string.IsNullOrEmpty(questionData.additionalData))
-            {
-                try
+                questionType = QuestionType.SoftFill,
+                questionText = "题目：请输入一个符合<color=red>*中_国*</color>格式的单词\nHint：*为任意个字，_为单个字",
+                correctAnswer = "中华人民共和国",
+                options = new string[0],
+                timeLimit = 30f,
+                additionalData = JsonUtility.ToJson(new SoftFillAdditionalData
                 {
-                    var additionalInfo = JsonUtility.FromJson<SoftFillAdditionalData>(questionData.additionalData);
-                    stemPattern = additionalInfo.stemPattern;
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning($"解析附加数据失败: {e.Message}，重新生成模式");
-                    stemPattern = GenerateWildcardPattern(currentWord);
-                }
-            }
-            else
-            {
-                stemPattern = GenerateWildcardPattern(currentWord);
-            }
-
-            // 创建正则表达式
-            CreateMatchRegex();
-
-            // 显示题目
-            DisplayQuestion();
+                    stemPattern = "*中_国*",
+                    regexPattern = "^.*中.国.*$",
+                    revealIndices = new int[] { 0, 2 }
+                })
+            };
         }
 
+        #endregion
+
+        #region 网络题目处理
+
         /// <summary>
-        /// 加载网络题目（网络模式）
+        /// 加载网络题目数据
         /// </summary>
         protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
         {
-            Debug.Log("[SoftFill] 加载网络题目");
+            LogDebug("加载网络SoftFill题目");
 
+            if (!ValidateNetworkData(networkData))
+            {
+                LogError("网络题目数据验证失败");
+                return;
+            }
+
+            if (!ParseQuestionData(networkData))
+            {
+                LogError("解析网络题目数据失败");
+                return;
+            }
+
+            // 创建正则表达式用于本地验证
+            CreateMatchRegex();
+
+            LogDebug($"网络SoftFill题目加载完成: {stemPattern}");
+        }
+
+        /// <summary>
+        /// 验证网络数据
+        /// </summary>
+        private bool ValidateNetworkData(NetworkQuestionData networkData)
+        {
             if (networkData == null)
             {
-                Debug.LogError("[SoftFill] 网络题目数据为空");
-                DisplayErrorMessage("网络题目数据错误");
-                return;
+                LogError("网络题目数据为空");
+                return false;
             }
 
             if (networkData.questionType != QuestionType.SoftFill)
             {
-                Debug.LogError($"[SoftFill] 题目类型不匹配: 期望{QuestionType.SoftFill}, 实际{networkData.questionType}");
-                DisplayErrorMessage("题目类型错误");
-                return;
+                LogError($"题目类型不匹配，期望: {QuestionType.SoftFill}, 实际: {networkData.questionType}");
+                return false;
             }
 
-            // 从网络数据解析题目信息
-            ParseNetworkQuestionData(networkData);
-
-            // 创建正则表达式
-            CreateMatchRegex();
-
-            // 显示题目
-            DisplayQuestion();
+            return true;
         }
 
         /// <summary>
-        /// 解析网络题目数据
+        /// 解析题目数据
         /// </summary>
-        private void ParseNetworkQuestionData(NetworkQuestionData networkData)
+        private bool ParseQuestionData(NetworkQuestionData questionData)
         {
-            currentWord = networkData.correctAnswer;
-
-            // 从additionalData中解析通配符模式
-            if (!string.IsNullOrEmpty(networkData.additionalData))
+            try
             {
-                try
+                currentWord = questionData.correctAnswer;
+
+                // 从附加数据中解析通配符模式
+                if (!string.IsNullOrEmpty(questionData.additionalData))
                 {
-                    var additionalInfo = JsonUtility.FromJson<SoftFillAdditionalData>(networkData.additionalData);
+                    var additionalInfo = JsonUtility.FromJson<SoftFillAdditionalData>(questionData.additionalData);
                     stemPattern = additionalInfo.stemPattern;
                 }
-                catch (System.Exception e)
+                else
                 {
-                    Debug.LogWarning($"解析网络附加数据失败: {e.Message}，从题目文本解析");
-                    ExtractPatternFromQuestionText(networkData.questionText);
+                    // 从题目文本中提取模式
+                    ExtractPatternFromQuestionText(questionData.questionText);
                 }
+
+                LogDebug($"题目数据解析成功: 模式={stemPattern}, 答案={currentWord}");
+                return true;
             }
-            else
+            catch (System.Exception e)
             {
-                // 如果没有附加数据，从questionText中解析
-                ExtractPatternFromQuestionText(networkData.questionText);
+                LogError($"解析题目数据失败: {e.Message}");
+                return false;
             }
         }
 
@@ -377,38 +364,76 @@ namespace GameLogic.FillBlank
         /// </summary>
         private void ExtractPatternFromQuestionText(string questionText)
         {
-            // 尝试从题目文本中提取模式（简单的文本解析）
-            var match = Regex.Match(questionText, @"([*_\u4e00-\u9fa5]+)");
-            if (match.Success)
+            try
             {
-                stemPattern = match.Groups[1].Value;
+                // 寻找 <color=red>模式</color> 格式
+                var colorMatch = Regex.Match(questionText, @"<color=red>([^<]+)</color>");
+                if (colorMatch.Success)
+                {
+                    stemPattern = colorMatch.Groups[1].Value;
+                    return;
+                }
+
+                // 寻找通配符模式
+                var wildcardMatch = Regex.Match(questionText, @"([*_\u4e00-\u9fa5]+)");
+                if (wildcardMatch.Success)
+                {
+                    stemPattern = wildcardMatch.Groups[1].Value;
+                    return;
+                }
+
+                LogError("无法从题目文本解析模式，使用默认模式");
+                stemPattern = GenerateWildcardPattern(currentWord);
             }
-            else
+            catch (System.Exception e)
             {
-                Debug.LogWarning("无法从题目文本解析模式，使用默认模式");
+                LogError($"从题目文本提取模式失败: {e.Message}");
                 stemPattern = GenerateWildcardPattern(currentWord);
             }
         }
 
         /// <summary>
-        /// 静态验证方法（为AnswerValidationManager提供支持）
+        /// 创建匹配的正则表达式
         /// </summary>
-        /// <param name="answer">玩家答案</param>
-        /// <param name="question">题目数据</param>
-        /// <returns>是否正确</returns>
+        private void CreateMatchRegex()
+        {
+            if (string.IsNullOrEmpty(stemPattern))
+                return;
+
+            try
+            {
+                string regexPattern = CreateRegexPattern(stemPattern);
+                matchRegex = new Regex(regexPattern);
+                LogDebug($"创建正则表达式: {regexPattern}");
+            }
+            catch (System.Exception e)
+            {
+                LogError($"创建正则表达式失败: {e.Message}");
+                matchRegex = null;
+            }
+        }
+
+        #endregion
+
+        #region 答案验证
+
+        /// <summary>
+        /// 静态答案验证方法 - 供Host端调用
+        /// 基于题目数据验证答案，不依赖实例状态
+        /// </summary>
         public static bool ValidateAnswerStatic(string answer, NetworkQuestionData question)
         {
             Debug.Log($"[SoftFill] 静态验证答案: {answer}");
 
             if (string.IsNullOrEmpty(answer?.Trim()) || question == null)
             {
-                Debug.Log("[SoftFill] 静态验证：答案为空或题目数据无效");
+                Debug.Log("[SoftFill] 静态验证: 答案为空或题目数据无效");
                 return false;
             }
 
             if (question.questionType != QuestionType.SoftFill)
             {
-                Debug.LogError($"[SoftFill] 静态验证：题目类型不匹配，期望SoftFill，实际{question.questionType}");
+                Debug.LogError($"[SoftFill] 静态验证: 题目类型不匹配，期望SoftFill，实际{question.questionType}");
                 return false;
             }
 
@@ -419,8 +444,7 @@ namespace GameLogic.FillBlank
 
                 if (string.IsNullOrEmpty(stemPattern))
                 {
-                    Debug.LogWarning("[SoftFill] 静态验证：无法获取通配符模式，使用直接比较");
-                    // 回退到直接比较
+                    Debug.Log("[SoftFill] 静态验证: 无法获取通配符模式，使用直接比较");
                     return answer.Trim().Equals(question.correctAnswer?.Trim(), System.StringComparison.OrdinalIgnoreCase);
                 }
 
@@ -431,7 +455,7 @@ namespace GameLogic.FillBlank
 
                 if (!patternMatches)
                 {
-                    Debug.Log($"[SoftFill] 静态验证：答案 '{answer}' 不匹配模式 '{stemPattern}'");
+                    Debug.Log($"[SoftFill] 静态验证: 答案 '{answer}' 不匹配模式 '{stemPattern}'");
                     return false;
                 }
 
@@ -440,7 +464,7 @@ namespace GameLogic.FillBlank
 
                 if (!wordExists)
                 {
-                    Debug.Log($"[SoftFill] 静态验证：答案 '{answer}' 不在词库中");
+                    Debug.Log($"[SoftFill] 静态验证: 答案 '{answer}' 不在词库中");
                     return false;
                 }
 
@@ -457,8 +481,6 @@ namespace GameLogic.FillBlank
         /// <summary>
         /// 静态提取通配符模式
         /// </summary>
-        /// <param name="question">题目数据</param>
-        /// <returns>通配符模式</returns>
         private static string ExtractStemPatternStatic(NetworkQuestionData question)
         {
             try
@@ -503,9 +525,6 @@ namespace GameLogic.FillBlank
         /// <summary>
         /// 静态模式匹配验证
         /// </summary>
-        /// <param name="answer">答案</param>
-        /// <param name="stemPattern">模式</param>
-        /// <returns>是否匹配</returns>
         private static bool ValidatePatternMatchStatic(string answer, string stemPattern)
         {
             try
@@ -529,11 +548,9 @@ namespace GameLogic.FillBlank
         }
 
         /// <summary>
-        /// 静态词库检查
+        /// 静态词库检查 - 供Host端调用
         /// </summary>
-        /// <param name="word">单词</param>
-        /// <returns>是否存在</returns>
-        private static bool IsWordInDatabaseStatic(string word)
+        public static bool IsWordInDatabaseStatic(string word)
         {
             if (string.IsNullOrEmpty(word))
                 return false;
@@ -544,7 +561,7 @@ namespace GameLogic.FillBlank
             {
                 if (!System.IO.File.Exists(dbPath))
                 {
-                    Debug.LogWarning($"[SoftFill] 静态验证：数据库文件不存在: {dbPath}");
+                    Debug.LogWarning($"[SoftFill] 静态验证: 数据库文件不存在: {dbPath}");
                     return false;
                 }
 
@@ -554,11 +571,11 @@ namespace GameLogic.FillBlank
                     using (var cmd = conn.CreateCommand())
                     {
                         cmd.CommandText = @"
-                    SELECT COUNT(*) FROM (
-                        SELECT word FROM word WHERE word = @word
-                        UNION ALL
-                        SELECT word FROM idiom WHERE word = @word
-                    )";
+                            SELECT COUNT(*) FROM (
+                                SELECT word FROM word WHERE word = @word
+                                UNION ALL
+                                SELECT word FROM idiom WHERE word = @word
+                            )";
                         cmd.Parameters.AddWithValue("@word", word);
 
                         long count = (long)cmd.ExecuteScalar();
@@ -572,168 +589,47 @@ namespace GameLogic.FillBlank
                 return false;
             }
         }
-        /// <summary>
-        /// 从数据库随机获取单词
-        /// </summary>
-        private string GetRandomWord()
-        {
-            string word = null;
-
-            try
-            {
-                using (var conn = new SqliteConnection("URI=file:" + dbPath))
-                {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        cmd.CommandText = @"
-                            SELECT word FROM (
-                                SELECT word, Freq FROM word
-                                UNION ALL
-                                SELECT word, Freq FROM idiom
-                            ) WHERE Freq BETWEEN @min AND @max
-                            ORDER BY RANDOM() LIMIT 1";
-                        cmd.Parameters.AddWithValue("@min", freqMin);
-                        cmd.Parameters.AddWithValue("@max", freqMax);
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                                word = reader.GetString(0);
-                        }
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"数据库查询失败: {e.Message}");
-            }
-
-            return word;
-        }
 
         /// <summary>
-        /// 生成通配符模式（保持原有逻辑用于单机模式）
-        /// </summary>
-        private void GenerateWildcardPattern()
-        {
-            stemPattern = GenerateWildcardPattern(currentWord);
-        }
-
-        /// <summary>
-        /// 创建匹配的正则表达式
-        /// </summary>
-        private void CreateMatchRegex()
-        {
-            if (string.IsNullOrEmpty(stemPattern))
-                return;
-
-            try
-            {
-                // 构建正则表达式模式
-                // * -> .*, _ -> .
-                var pattern = "^" + string.Concat(stemPattern.Select(c =>
-                {
-                    if (c == '*') return ".*";
-                    if (c == '_') return ".";
-                    return Regex.Escape(c.ToString());
-                })) + "$";
-
-                matchRegex = new Regex(pattern);
-                Debug.Log($"[SoftFill] 创建正则表达式: {pattern}");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"创建正则表达式失败: {e.Message}");
-                matchRegex = null;
-            }
-        }
-
-        /// <summary>
-        /// 显示题目
-        /// </summary>
-        private void DisplayQuestion()
-        {
-            hasAnswered = false;
-
-            if (string.IsNullOrEmpty(stemPattern))
-            {
-                DisplayErrorMessage("题目模式生成失败");
-                return;
-            }
-
-            questionText.text = $"题目：请输入一个符合<color=red>{stemPattern}</color>格式的单词\nHint：*为任意个字，_为单个字";
-
-            // 重置输入和反馈
-            answerInput.text = string.Empty;
-            feedbackText.text = string.Empty;
-            answerInput.interactable = true;
-            submitButton.interactable = true;
-            surrenderButton.interactable = true;
-
-            // 激活输入框
-            answerInput.ActivateInputField();
-
-            Debug.Log($"[SoftFill] 题目显示完成，模式: {stemPattern} (示例答案: {currentWord})");
-        }
-
-        /// <summary>
-        /// 显示错误信息
-        /// </summary>
-        private void DisplayErrorMessage(string message)
-        {
-            Debug.LogWarning($"[SoftFill] {message}");
-
-            if (questionText != null)
-                questionText.text = message;
-
-            if (feedbackText != null)
-                feedbackText.text = "";
-
-            if (answerInput != null)
-            {
-                answerInput.text = "";
-                answerInput.interactable = false;
-            }
-
-            if (submitButton != null)
-                submitButton.interactable = false;
-
-            if (surrenderButton != null)
-                surrenderButton.interactable = false;
-        }
-
-        /// <summary>
-        /// 检查本地答案（单机模式）
+        /// 本地答案验证（用于单机模式或网络模式的本地验证）
         /// </summary>
         protected override void CheckLocalAnswer(string answer)
         {
-            Debug.Log($"[SoftFill] 检查本地答案: {answer}");
+            LogDebug($"验证本地答案: {answer}");
 
-            bool isCorrect = ValidateAnswer(answer.Trim());
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            bool isCorrect = ValidateLocalAnswer(answer.Trim());
+            OnAnswerResult?.Invoke(isCorrect);
         }
 
         /// <summary>
-        /// 验证答案
+        /// 验证本地答案
         /// </summary>
-        private bool ValidateAnswer(string answer)
+        private bool ValidateLocalAnswer(string answer)
         {
             if (string.IsNullOrEmpty(answer))
+            {
+                LogDebug("答案为空");
                 return false;
+            }
 
-            // 1. 检查是否匹配通配符模式
+            // 检查是否匹配通配符模式
             if (matchRegex == null || !matchRegex.IsMatch(answer))
+            {
+                LogDebug($"答案不匹配模式: {stemPattern}");
                 return false;
+            }
 
-            // 2. 检查词是否存在于词库中
-            return IsWordInDatabase(answer);
+            // 检查词语是否在数据库中
+            bool existsInDB = IsWordInLocalDatabase(answer);
+            LogDebug($"词语'{answer}'在数据库中: {existsInDB}");
+
+            return existsInDB;
         }
 
         /// <summary>
-        /// 检查词是否在数据库中
+        /// 检查词语是否在本地数据库中
         /// </summary>
-        private bool IsWordInDatabase(string word)
+        private bool IsWordInLocalDatabase(string word)
         {
             try
             {
@@ -744,10 +640,10 @@ namespace GameLogic.FillBlank
                     {
                         cmd.CommandText = @"
                             SELECT COUNT(*) FROM (
-                                SELECT word FROM word
+                                SELECT word FROM word WHERE word = @word
                                 UNION ALL
-                                SELECT word FROM idiom
-                            ) WHERE word = @word";
+                                SELECT word FROM idiom WHERE word = @word
+                            )";
                         cmd.Parameters.AddWithValue("@word", word);
 
                         long count = (long)cmd.ExecuteScalar();
@@ -757,162 +653,76 @@ namespace GameLogic.FillBlank
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"数据库查询失败: {e.Message}");
+                LogError($"本地数据库查询失败: {e.Message}");
                 return false;
             }
         }
 
-        /// <summary>
-        /// 提交按钮点击
-        /// </summary>
-        private void OnSubmit()
-        {
-            if (hasAnswered)
-                return;
+        #endregion
 
-            string userAnswer = answerInput.text.Trim();
-            if (string.IsNullOrEmpty(userAnswer))
-                return;
-
-            SubmitAnswer(userAnswer);
-        }
-
-        /// <summary>
-        /// 输入框回车提交
-        /// </summary>
-        private void OnInputSubmit(string value)
-        {
-            if (!hasAnswered && !string.IsNullOrEmpty(value.Trim()))
-            {
-                SubmitAnswer(value.Trim());
-            }
-        }
-
-        /// <summary>
-        /// 投降按钮点击
-        /// </summary>
-        private void OnSurrender()
-        {
-            if (hasAnswered)
-                return;
-
-            Debug.Log("[SoftFill] 玩家投降");
-            SubmitAnswer(""); // 提交空答案表示投降
-        }
-
-        /// <summary>
-        /// 提交答案
-        /// </summary>
-        private void SubmitAnswer(string answer)
-        {
-            if (hasAnswered)
-                return;
-
-            hasAnswered = true;
-            StopAllCoroutines();
-
-            // 禁用交互
-            answerInput.interactable = false;
-            submitButton.interactable = false;
-            surrenderButton.interactable = false;
-
-            Debug.Log($"[SoftFill] 提交答案: '{answer}'");
-
-            if (IsNetworkMode())
-            {
-                HandleNetworkAnswer(answer);
-            }
-            else
-            {
-                HandleLocalAnswer(answer);
-            }
-        }
-
-        /// <summary>
-        /// 处理网络模式答案
-        /// </summary>
-        private void HandleNetworkAnswer(string answer)
-        {
-            Debug.Log($"[SoftFill] 网络模式提交答案: {answer}");
-
-            // 显示提交状态
-            feedbackText.text = "已提交答案，等待服务器结果...";
-            feedbackText.color = Color.yellow;
-
-            // 提交答案到服务器
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.SubmitAnswer(answer);
-            }
-            else
-            {
-                Debug.LogError("[SoftFill] NetworkManager实例不存在，无法提交答案");
-            }
-        }
-
-        /// <summary>
-        /// 处理单机模式答案
-        /// </summary>
-        private void HandleLocalAnswer(string answer)
-        {
-            CheckLocalAnswer(answer);
-        }
-
-        /// <summary>
-        /// 显示反馈信息并通知结果
-        /// </summary>
-        private IEnumerator ShowFeedbackAndNotify(bool isCorrect)
-        {
-            // 显示反馈
-            if (feedbackText != null)
-            {
-                if (isCorrect)
-                {
-                    feedbackText.text = "回答正确！";
-                    feedbackText.color = Color.green;
-                }
-                else
-                {
-                    feedbackText.text = $"回答错误，可接受示例：{currentWord}";
-                    feedbackText.color = Color.red;
-                }
-            }
-
-            // 等待一段时间
-            yield return new WaitForSeconds(1.5f);
-
-            // 通知答题结果
-            OnAnswerResult?.Invoke(isCorrect);
-        }
+        #region 网络结果处理
 
         /// <summary>
         /// 显示网络答题结果（由网络系统调用）
+        /// 重要：此方法必须保留，网络系统会通过反射调用
         /// </summary>
         public void ShowNetworkResult(bool isCorrect, string correctAnswer)
         {
-            Debug.Log($"[SoftFill] 收到网络结果: {(isCorrect ? "正确" : "错误")}");
+            LogDebug($"收到网络答题结果: {(isCorrect ? "正确" : "错误")}");
 
             currentWord = correctAnswer;
-            StartCoroutine(ShowFeedbackAndNotify(isCorrect));
+            OnAnswerResult?.Invoke(isCorrect);
+        }
+
+        #endregion
+
+        #region 单机模式兼容（保留高耦合方法）
+
+        /// <summary>
+        /// 加载本地题目（单机模式）
+        /// 保留此方法因为可能被其他系统调用
+        /// </summary>
+        protected override void LoadLocalQuestion()
+        {
+            LogDebug("加载本地SoftFill题目");
+
+            var questionData = GetQuestionData();
+            if (questionData == null)
+            {
+                LogError("无法生成本地题目");
+                return;
+            }
+
+            ParseQuestionData(questionData);
+            CreateMatchRegex();
+            LogDebug($"本地题目加载完成: {stemPattern}");
+        }
+
+        #endregion
+
+        #region 工具方法
+
+        /// <summary>
+        /// 调试日志
+        /// </summary>
+        private void LogDebug(string message)
+        {
+            Debug.Log($"[SoftFill] {message}");
         }
 
         /// <summary>
-        /// 清理资源
+        /// 错误日志
         /// </summary>
-        private void OnDestroy()
+        private void LogError(string message)
         {
-            // 清理事件监听
-            if (submitButton != null)
-                submitButton.onClick.RemoveAllListeners();
-            if (surrenderButton != null)
-                surrenderButton.onClick.RemoveAllListeners();
-            if (answerInput != null)
-                answerInput.onSubmit.RemoveAllListeners();
+            Debug.LogError($"[SoftFill] {message}");
         }
+
+        #endregion
     }
 
     /// <summary>
-    /// 软填空题附加数据结构（用于网络传输）
+    /// 软填空题附加数据结构
     /// </summary>
     [System.Serializable]
     public class SoftFillAdditionalData

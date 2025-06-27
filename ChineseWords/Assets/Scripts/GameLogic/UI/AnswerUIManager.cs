@@ -109,13 +109,6 @@ namespace UI.Answer
                 answerCanvasGroup.blocksRaycasts = false;
             }
 
-            // 确保ContentArea存在
-            if (contentArea == null)
-            {
-                LogDebug("警告：ContentArea未设置，尝试自动查找");
-                contentArea = answerPanel?.Find("ContentArea")?.GetComponent<RectTransform>();
-            }
-
             // 隐藏答题面板
             if (answerPanel != null)
             {
@@ -307,14 +300,11 @@ namespace UI.Answer
         {
             return questionType switch
             {
-                // 填空类题型
                 QuestionType.HardFill or QuestionType.SoftFill or
                 QuestionType.IdiomChain or QuestionType.TextPinyin => fillBlankUIPrefab,
 
-                // 选择类题型
                 QuestionType.ExplanationChoice or QuestionType.SimularWordChoice => chooseUIPrefab,
 
-                // 判断类题型
                 QuestionType.SentimentTorF or QuestionType.UsageTorF => torFUIPrefab,
 
                 _ => null
@@ -349,7 +339,6 @@ namespace UI.Answer
                 }
             }
 
-            // 方式2：通过事件传递数据（如果答题UI组件监听了特定事件）
             LogDebug("使用默认方式传递题目数据");
         }
 
@@ -401,10 +390,7 @@ namespace UI.Answer
         /// </summary>
         private bool IsFillBlankType(QuestionType questionType)
         {
-            return questionType == QuestionType.HardFill ||
-                   questionType == QuestionType.SoftFill ||
-                   questionType == QuestionType.IdiomChain ||
-                   questionType == QuestionType.TextPinyin;
+            return questionType == QuestionType.HardFill || questionType == QuestionType.SoftFill || questionType == QuestionType.IdiomChain || questionType == QuestionType.TextPinyin;
         }
 
         /// <summary>
@@ -416,11 +402,9 @@ namespace UI.Answer
 
             if (!string.IsNullOrEmpty(answer))
             {
-                LogDebug($"收到答题界面提交的答案: {answer}");
-
                 // 触发答案提交事件
                 OnAnswerSubmitted?.Invoke(answer);
-
+                LogDebug($"提交答题界面提交的答案: {answer}");
                 // 隐藏答题UI
                 HideAnswerUI();
             }
