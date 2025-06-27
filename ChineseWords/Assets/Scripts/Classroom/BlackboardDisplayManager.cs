@@ -3,39 +3,36 @@ using UnityEngine.UI;
 using TMPro;
 using Core;
 using Core.Network;
-using System.Collections.Generic;
+using System.Collections;
+using Classroom.Player;
 
 namespace UI.Blackboard
 {
     /// <summary>
-    /// 黑板显示管理器
-    /// 负责在3D场景中的黑板上显示题目内容
+    /// 黑板显示管理器 - 基于手动配置的LayoutGroup系统
+    /// 专注于显示逻辑，所有布局组件在Unity编辑器中预先配置
     /// </summary>
     public class BlackboardDisplayManager : MonoBehaviour
     {
-        [Header("黑板配置")]
+        [Header("预配置的UI组件引用")]
         [SerializeField] private Canvas blackboardCanvas;
         [SerializeField] private RectTransform blackboardArea;
-
-        [Header("显示区域")]
         [SerializeField] private RectTransform questionArea;
         [SerializeField] private RectTransform optionsArea;
         [SerializeField] private RectTransform statusArea;
-
-        [Header("UI组件")]
         [SerializeField] private TextMeshProUGUI questionText;
-        [SerializeField] private TextMeshProUGUI[] optionTexts;
         [SerializeField] private TextMeshProUGUI statusText;
+        [SerializeField] private GameObject optionTemplate;
 
         [Header("显示配置")]
-        [SerializeField] private float questionFontSize = 24f;
-        [SerializeField] private float optionFontSize = 20f;
         [SerializeField] private Color questionColor = Color.black;
         [SerializeField] private Color optionColor = Color.black;
+        [SerializeField] private Color statusColor = Color.blue;
 
         public static BlackboardDisplayManager Instance { get; private set; }
 
-        // 当前显示状态
+        // 动态创建的选项文本
+        private TextMeshProUGUI[] optionTexts;
         private NetworkQuestionData currentQuestion;
         private bool isDisplaying = false;
 
@@ -52,76 +49,235 @@ namespace UI.Blackboard
             }
         }
 
+        private void Start()
+        {
+            // 延迟查找摄像机，确保玩家摄像机已经生成
+            StartCoroutine(FindAndSetCamera());
+        }
+
         /// <summary>
-        /// 初始化黑板组件
+        /// 查找并设置动态生成的玩家摄像机
+        /// </summary>
+        private IEnumerator FindAndSetCamera()
+        {
+            Camera playerCamera = null;
+            float timeoutCounter = 0f;
+            float timeout = 5f; // 5秒超时
+
+            // 循环查找玩家摄像机
+            while (playerCamera == null && timeoutCounter < timeout)
+            {
+                // 尝试多种可能的摄像机查找方式
+                playerCamera = FindPlayerCamera();
+
+                if (playerCamera == null)
+                {
+                    timeoutCounter += 0.1f;
+                    yield return new WaitForSeconds(0.1f);
+                }
+            }
+
+            // 设置找到的摄像机
+            if (playerCamera != null)
+            {
+                SetBlackboardCamera(playerCamera);
+            }
+            else
+            {
+                Debug.LogWarning("[BlackboardDisplayManager] 未能找到玩家摄像机，使用主摄像机作为备用");
+                SetBlackboardCamera(Camera.main);
+            }
+        }
+
+        /// <summary>
+        /// 查找玩家摄像机的多种方式（基于PlayerCameraController的逻辑优化）
+        /// </summary>
+        private Camera FindPlayerCamera()
+        {
+            // 方式1: 通过PlayerCameraController组件查找（最可靠）
+            var playerCameraControllers = FindObjectsOfType<PlayerCameraController>();
+            foreach (var controller in playerCameraControllers)
+            {
+                if (controller.IsLocalPlayer && controller.PlayerCamera != null)
+                {
+                    Debug.Log($"[BlackboardDisplayManager] 通过PlayerCameraController找到摄像机: {controller.PlayerCamera.name}");
+                    return controller.PlayerCamera;
+                }
+            }
+
+            // 方式2: 查找MainCamera标签的摄像机（PlayerCameraController会设置此标签）
+            GameObject mainCameraObj = GameObject.FindWithTag("MainCamera");
+            if (mainCameraObj != null)
+            {
+                var camera = mainCameraObj.GetComponent<Camera>();
+                if (camera != null && camera.enabled)
+                {
+                    Debug.Log($"[BlackboardDisplayManager] 通过MainCamera标签找到摄像机: {camera.name}");
+                    return camera;
+                }
+            }
+
+            // 方式3: 查找名称为"PlayerCamera"的摄像机
+            Camera[] allCameras = FindObjectsOfType<Camera>();
+            foreach (var cam in allCameras)
+            {
+                if (cam.gameObject.name == "PlayerCamera" && cam.enabled)
+                {
+                    Debug.Log($"[BlackboardDisplayManager] 通过名称找到PlayerCamera: {cam.name}");
+                    return cam;
+                }
+            }
+
+            // 方式4: 查找包含"Player"、"Local"等关键词的摄像机
+            foreach (var cam in allCameras)
+            {
+                if ((cam.gameObject.name.Contains("Player") ||
+                     cam.gameObject.name.Contains("Local") ||
+                     cam.gameObject.name.Contains("FPS")) &&
+                     cam.enabled)
+                {
+                    Debug.Log($"[BlackboardDisplayManager] 通过关键词找到摄像机: {cam.name}");
+                    return cam;
+                }
+            }
+
+            // 方式5: 查找除了默认主摄像机之外的第一个激活摄像机
+            foreach (var cam in allCameras)
+            {
+                if (cam != Camera.main && cam.enabled && cam.gameObject.activeInHierarchy)
+                {
+                    Debug.Log($"[BlackboardDisplayManager] 找到备用摄像机: {cam.name}");
+                    return cam;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 设置黑板Canvas的摄像机
+        /// </summary>
+        private void SetBlackboardCamera(Camera camera)
+        {
+            if (blackboardCanvas != null && camera != null)
+            {
+                blackboardCanvas.worldCamera = camera;
+                Debug.Log($"[BlackboardDisplayManager] 已设置摄像机: {camera.name}");
+            }
+        }
+
+        /// <summary>
+        /// 手动设置摄像机（供外部调用，特别是PlayerCameraController）
+        /// </summary>
+        public void SetCamera(Camera camera)
+        {
+            SetBlackboardCamera(camera);
+        }
+
+        /// <summary>
+        /// 注册玩家摄像机控制器（推荐方式）
+        /// </summary>
+        public void RegisterPlayerCameraController(PlayerCameraController cameraController)
+        {
+            if (cameraController != null && cameraController.IsLocalPlayer && cameraController.PlayerCamera != null)
+            {
+                SetBlackboardCamera(cameraController.PlayerCamera);
+                Debug.Log($"[BlackboardDisplayManager] 已注册玩家摄像机控制器: {cameraController.PlayerCamera.name}");
+            }
+        }
+
+        /// <summary>
+        /// 初始化黑板（验证组件引用）
         /// </summary>
         private void InitializeBlackboard()
         {
-            // 确保Canvas为World Space模式
-            if (blackboardCanvas != null)
+            // 验证必要的组件引用
+            if (blackboardCanvas == null)
             {
-                blackboardCanvas.renderMode = RenderMode.WorldSpace;
+                Debug.LogError("[BlackboardDisplayManager] BlackboardCanvas引用缺失");
+                return;
             }
 
-            // 初始化选项文本数组
-            if (optionTexts == null || optionTexts.Length == 0)
+            if (questionText == null)
             {
-                SetupOptionTexts();
+                Debug.LogError("[BlackboardDisplayManager] QuestionText引用缺失");
+                return;
             }
 
-            // 设置初始字体大小和颜色
-            ApplyDisplaySettings();
+            if (statusText == null)
+            {
+                Debug.LogError("[BlackboardDisplayManager] StatusText引用缺失");
+                return;
+            }
+
+            if (optionTemplate == null)
+            {
+                Debug.LogError("[BlackboardDisplayManager] OptionTemplate引用缺失");
+                return;
+            }
+
+            // 确保模板处于非激活状态
+            optionTemplate.SetActive(false);
+
+            // 应用颜色设置
+            ApplyColorSettings();
 
             // 初始清空显示
             ClearDisplay();
+
+            Debug.Log("[BlackboardDisplayManager] 初始化完成");
         }
 
         /// <summary>
-        /// 设置选项文本组件
+        /// 应用颜色设置
         /// </summary>
-        private void SetupOptionTexts()
-        {
-            if (optionsArea == null) return;
-
-            var existingTexts = optionsArea.GetComponentsInChildren<TextMeshProUGUI>();
-            optionTexts = new TextMeshProUGUI[4];
-
-            for (int i = 0; i < 4; i++)
-            {
-                if (i < existingTexts.Length)
-                {
-                    optionTexts[i] = existingTexts[i];
-                }
-                else
-                {
-                    // 动态创建选项文本
-                    GameObject optionObj = new GameObject($"Option{i + 1}");
-                    optionObj.transform.SetParent(optionsArea, false);
-                    optionTexts[i] = optionObj.AddComponent<TextMeshProUGUI>();
-                }
-            }
-        }
-
-        /// <summary>
-        /// 应用显示设置
-        /// </summary>
-        private void ApplyDisplaySettings()
+        private void ApplyColorSettings()
         {
             if (questionText != null)
             {
-                questionText.fontSize = questionFontSize;
                 questionText.color = questionColor;
             }
 
+            if (statusText != null)
+            {
+                statusText.color = statusColor;
+            }
+        }
+
+        /// <summary>
+        /// 创建选项文本组件
+        /// </summary>
+        private void CreateOptionTexts(int count)
+        {
+            // 清理旧的选项文本
             if (optionTexts != null)
             {
                 foreach (var optionText in optionTexts)
                 {
                     if (optionText != null)
                     {
-                        optionText.fontSize = optionFontSize;
-                        optionText.color = optionColor;
+                        DestroyImmediate(optionText.gameObject);
                     }
+                }
+            }
+
+            // 创建新的选项文本
+            optionTexts = new TextMeshProUGUI[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                // 从模板实例化
+                GameObject optionObj = Instantiate(optionTemplate, optionsArea);
+                optionObj.name = $"Option{i + 1}";
+                optionObj.SetActive(true);
+
+                var optionText = optionObj.GetComponent<TextMeshProUGUI>();
+                optionTexts[i] = optionText;
+
+                // 应用颜色设置
+                if (optionText != null)
+                {
+                    optionText.color = optionColor;
                 }
             }
         }
@@ -140,6 +296,13 @@ namespace UI.Blackboard
             currentQuestion = questionData;
             isDisplaying = true;
 
+            // 显示题干
+            if (questionText != null)
+            {
+                questionText.text = questionData.questionText;
+                questionArea.gameObject.SetActive(true);
+            }
+
             // 根据题型显示内容
             switch (questionData.questionType)
             {
@@ -148,29 +311,21 @@ namespace UI.Blackboard
                     DisplayChoiceQuestion(questionData);
                     break;
 
-                case QuestionType.HardFill:
-                case QuestionType.SoftFill:
-                case QuestionType.IdiomChain:
-                case QuestionType.TextPinyin:
-                    DisplayFillQuestion(questionData);
-                    break;
-
                 case QuestionType.SentimentTorF:
                 case QuestionType.UsageTorF:
                     DisplayTrueFalseQuestion(questionData);
                     break;
 
                 default:
-                    DisplayGenericQuestion(questionData);
+                    DisplayFillQuestion(questionData);
                     break;
             }
 
             // 显示状态
-            if (statusText != null)
-            {
-                statusText.text = "请作答";
-                statusText.color = Color.blue;
-            }
+            UpdateDisplayStatus("请作答", statusColor);
+
+            // 强制更新布局
+            StartCoroutine(RefreshLayout());
         }
 
         /// <summary>
@@ -178,46 +333,22 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayChoiceQuestion(NetworkQuestionData questionData)
         {
-            // 显示题干
-            if (questionText != null)
+            if (questionData.options == null || questionData.options.Length == 0)
             {
-                questionText.text = questionData.questionText;
+                optionsArea.gameObject.SetActive(false);
+                return;
             }
 
-            // 显示选项
-            if (optionTexts != null && questionData.options != null)
+            // 创建选项文本
+            CreateOptionTexts(questionData.options.Length);
+
+            // 设置选项内容
+            for (int i = 0; i < optionTexts.Length; i++)
             {
-                for (int i = 0; i < optionTexts.Length; i++)
-                {
-                    if (i < questionData.options.Length)
-                    {
-                        optionTexts[i].text = $"{(char)('A' + i)}. {questionData.options[i]}";
-                        optionTexts[i].gameObject.SetActive(true);
-                    }
-                    else
-                    {
-                        optionTexts[i].gameObject.SetActive(false);
-                    }
-                }
+                optionTexts[i].text = $"{(char)('A' + i)}. {questionData.options[i]}";
             }
 
-            // 隐藏不需要的区域
-            SetAreaVisibility(true, true, false);
-        }
-
-        /// <summary>
-        /// 显示填空题
-        /// </summary>
-        private void DisplayFillQuestion(NetworkQuestionData questionData)
-        {
-            // 显示题干（可能包含下划线或高亮）
-            if (questionText != null)
-            {
-                questionText.text = questionData.questionText;
-            }
-
-            // 隐藏选项区域
-            SetAreaVisibility(true, false, false);
+            optionsArea.gameObject.SetActive(true);
         }
 
         /// <summary>
@@ -225,56 +356,34 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayTrueFalseQuestion(NetworkQuestionData questionData)
         {
-            // 显示题干
-            if (questionText != null)
-            {
-                questionText.text = questionData.questionText;
-            }
+            CreateOptionTexts(2);
 
-            // 显示是/否选项
-            if (optionTexts != null)
-            {
-                optionTexts[0].text = "A. 正确";
-                optionTexts[0].gameObject.SetActive(true);
-                optionTexts[1].text = "B. 错误";
-                optionTexts[1].gameObject.SetActive(true);
+            optionTexts[0].text = "A. 正确";
+            optionTexts[1].text = "B. 错误";
 
-                // 隐藏其他选项
-                for (int i = 2; i < optionTexts.Length; i++)
-                {
-                    optionTexts[i].gameObject.SetActive(false);
-                }
-            }
-
-            SetAreaVisibility(true, true, false);
+            optionsArea.gameObject.SetActive(true);
         }
 
         /// <summary>
-        /// 显示通用题目
+        /// 显示填空题
         /// </summary>
-        private void DisplayGenericQuestion(NetworkQuestionData questionData)
+        private void DisplayFillQuestion(NetworkQuestionData questionData)
         {
-            if (questionText != null)
-            {
-                questionText.text = questionData.questionText;
-            }
-
-            SetAreaVisibility(true, false, false);
+            // 隐藏选项区域，填空题通过沉浸式答题界面输入
+            optionsArea.gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// 设置区域可见性
+        /// 更新显示状态
         /// </summary>
-        private void SetAreaVisibility(bool showQuestion, bool showOptions, bool showStatus)
+        public void UpdateDisplayStatus(string status, Color color)
         {
-            if (questionArea != null)
-                questionArea.gameObject.SetActive(showQuestion);
-
-            if (optionsArea != null)
-                optionsArea.gameObject.SetActive(showOptions);
-
-            if (statusArea != null)
-                statusArea.gameObject.SetActive(showStatus);
+            if (statusText != null)
+            {
+                statusText.text = status;
+                statusText.color = color;
+                statusArea.gameObject.SetActive(true);
+            }
         }
 
         /// <summary>
@@ -290,37 +399,60 @@ namespace UI.Blackboard
                 questionText.text = "";
             }
 
+            if (statusText != null)
+            {
+                statusText.text = "";
+            }
+
+            // 清理选项文本
             if (optionTexts != null)
             {
                 foreach (var optionText in optionTexts)
                 {
                     if (optionText != null)
                     {
-                        optionText.text = "";
-                        optionText.gameObject.SetActive(false);
+                        DestroyImmediate(optionText.gameObject);
                     }
                 }
+                optionTexts = null;
             }
 
-            if (statusText != null)
-            {
-                statusText.text = "";
-            }
-
-            SetAreaVisibility(false, false, false);
+            // 隐藏所有区域
+            questionArea.gameObject.SetActive(false);
+            optionsArea.gameObject.SetActive(false);
+            statusArea.gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// 更新显示状态
+        /// 强制刷新布局
         /// </summary>
-        public void UpdateDisplayStatus(string status, Color color)
+        private IEnumerator RefreshLayout()
         {
-            if (statusText != null)
+            yield return new WaitForEndOfFrame();
+
+            // 强制更新Canvas布局
+            Canvas.ForceUpdateCanvases();
+
+            // 重建所有布局
+            if (blackboardArea != null)
             {
-                statusText.text = status;
-                statusText.color = color;
-                statusArea.gameObject.SetActive(true);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(blackboardArea);
+            }
+
+            if (optionsArea != null && optionsArea.gameObject.activeInHierarchy)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(optionsArea);
             }
         }
+
+        /// <summary>
+        /// 检查是否正在显示题目
+        /// </summary>
+        public bool IsDisplaying => isDisplaying;
+
+        /// <summary>
+        /// 获取当前显示的题目
+        /// </summary>
+        public NetworkQuestionData CurrentQuestion => currentQuestion;
     }
 }
