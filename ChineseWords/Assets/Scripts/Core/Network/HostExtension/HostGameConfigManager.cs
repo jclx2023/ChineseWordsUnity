@@ -11,7 +11,7 @@ namespace Core.Network
     public class GameConfigManager
     {
         [Header("调试设置")]
-        private bool enableDebugLogs = true;
+        private bool enableDebugLogs = false;
 
         // 配置引用
         private TimerConfig timerConfig;

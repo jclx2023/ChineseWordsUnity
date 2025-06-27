@@ -328,18 +328,19 @@ namespace Classroom.Player
                 {
                     cameraController = character.AddComponent<PlayerCameraController>();
                 }
-
                 // 获取对应的座位信息设置摄像机
                 int seatIndex = playerToSeatMap[playerId];
                 var seatData = seatingSystem.GetSeatData(seatIndex);
                 var seatIdentifier = seatData.seatInstance.GetComponent<SeatIdentifier>();
 
-                // 传递座位朝向给摄像机控制器
-                // 注意：这里不直接设置CameraMount，让PlayerCameraController自己查找角色的头部挂载点
-                cameraController.SetCameraMount(null, seatIdentifier.GetSeatRotation());
-                LogDebug($"为本地玩家 {playerId} 设置摄像机控制器");
-            }
+                // 获取座位原始旋转并绕Y轴旋转180°
+                Quaternion originalRotation = seatIdentifier.GetSeatRotation();
+                Quaternion rotatedRotation = originalRotation * Quaternion.Euler(0, 180, 0);
 
+                // 传递旋转后的朝向给摄像机控制器
+                cameraController.SetCameraMount(null, rotatedRotation);
+                LogDebug($"为本地玩家 {playerId} 设置摄像机控制器，已应用180°Y轴旋转");
+            }
             // 添加其他角色组件（如动画、网络同步等）
             var networkSync = character.GetComponent<PlayerNetworkSync>();
             if (networkSync == null)
