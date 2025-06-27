@@ -17,7 +17,7 @@ namespace UI.Answer
     public class AnswerUIManager : MonoBehaviour
     {
         [Header("答题触发设置")]
-        [SerializeField] private KeyCode answerTriggerKey = KeyCode.Return;
+        [SerializeField] private KeyCode answerTriggerKey = KeyCode.Mouse1;
 
         [Header("UI组件引用")]
         [SerializeField] private Canvas answerCanvas;
@@ -269,7 +269,7 @@ namespace UI.Answer
             }
 
             // Esc键取消答题
-            if (currentState == AnswerUIState.Active && Input.GetKeyDown(KeyCode.Escape))
+            if (currentState == AnswerUIState.Active && (Input.GetKeyDown(KeyCode.Escape)||Input.GetKeyDown(KeyCode.Mouse1)))
             {
                 HideAnswerUI();
             }
