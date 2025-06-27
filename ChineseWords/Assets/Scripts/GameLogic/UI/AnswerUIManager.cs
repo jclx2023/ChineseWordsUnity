@@ -12,6 +12,7 @@ namespace UI.Answer
     /// <summary>
     /// 沉浸式答题界面管理器 - 简化版本
     /// 职责：显示题目信息，实例化对应的答题界面，传递提交事件
+    /// 修改为监听ClassroomManager的摄像机设置完成事件
     /// </summary>
     public class AnswerUIManager : MonoBehaviour
     {
@@ -57,6 +58,7 @@ namespace UI.Answer
 
         // 摄像机控制
         private PlayerCameraController playerCameraController;
+        private bool cameraControllerReady = false;
 
         // 事件
         public static event System.Action<string> OnAnswerSubmitted;
@@ -64,7 +66,7 @@ namespace UI.Answer
 
         // 属性
         public bool IsAnswerUIVisible => currentState == AnswerUIState.Active || currentState == AnswerUIState.FadingIn;
-        public bool CanShowAnswerUI => currentState == AnswerUIState.Hidden && HasValidQuestion() && IsMyTurn();
+        public bool CanShowAnswerUI => currentState == AnswerUIState.Hidden && HasValidQuestion() && IsMyTurn() && cameraControllerReady;
 
         private void Awake()
         {
@@ -81,13 +83,158 @@ namespace UI.Answer
 
         private void Start()
         {
-            FindPlayerCameraController();
+            // 只订阅ClassroomManager的事件，不再过早查找摄像机
+            // 摄像机查找将在OnCameraSetupCompleted事件中进行
+        }
+
+        private void OnEnable()
+        {
+            SubscribeToClassroomManagerEvents();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeFromClassroomManagerEvents();
         }
 
         private void Update()
         {
             HandleInput();
         }
+
+        #region 事件订阅管理
+
+        /// <summary>
+        /// 订阅ClassroomManager事件
+        /// </summary>
+        private void SubscribeToClassroomManagerEvents()
+        {
+            Classroom.ClassroomManager.OnCameraSetupCompleted += OnCameraSetupCompleted;
+            Classroom.ClassroomManager.OnClassroomInitialized += OnClassroomInitialized;
+        }
+
+        /// <summary>
+        /// 取消订阅ClassroomManager事件
+        /// </summary>
+        private void UnsubscribeFromClassroomManagerEvents()
+        {
+            Classroom.ClassroomManager.OnCameraSetupCompleted -= OnCameraSetupCompleted;
+            Classroom.ClassroomManager.OnClassroomInitialized -= OnClassroomInitialized;
+        }
+
+        /// <summary>
+        /// 响应摄像机设置完成事件
+        /// </summary>
+        private void OnCameraSetupCompleted()
+        {
+            LogDebug("收到摄像机设置完成事件，开始查找摄像机控制器");
+            StartCoroutine(FindPlayerCameraControllerCoroutine());
+        }
+
+        /// <summary>
+        /// 响应教室初始化完成事件（备用方案）
+        /// </summary>
+        private void OnClassroomInitialized()
+        {
+            if (!cameraControllerReady)
+            {
+                LogDebug("教室初始化完成，尝试查找摄像机控制器（备用方案）");
+                StartCoroutine(FindPlayerCameraControllerCoroutine());
+            }
+        }
+
+        #endregion
+
+        #region 摄像机控制器查找
+
+        /// <summary>
+        /// 协程方式查找玩家摄像机控制器
+        /// </summary>
+        private IEnumerator FindPlayerCameraControllerCoroutine()
+        {
+            LogDebug("开始查找玩家摄像机控制器");
+
+            float timeout = 5f; // 5秒超时
+            float elapsed = 0f;
+
+            while (elapsed < timeout && playerCameraController == null)
+            {
+                playerCameraController = FindPlayerCameraController();
+
+                if (playerCameraController != null)
+                {
+                    cameraControllerReady = true;
+                    LogDebug($"成功找到摄像机控制器: {playerCameraController.name}");
+                    break;
+                }
+
+                elapsed += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            if (playerCameraController == null)
+            {
+                LogDebug("未能找到摄像机控制器，将使用备用方案");
+                // 可以添加备用查找逻辑或错误处理
+            }
+        }
+
+        /// <summary>
+        /// 查找玩家摄像机控制器
+        /// </summary>
+        private PlayerCameraController FindPlayerCameraController()
+        {
+            // 方式1: 通过ClassroomManager获取（推荐方式）
+            var classroomManager = FindObjectOfType<Classroom.ClassroomManager>();
+            if (classroomManager != null && classroomManager.IsInitialized)
+            {
+                var cameraController = classroomManager.GetLocalPlayerCameraController();
+                if (cameraController != null)
+                {
+                    LogDebug($"通过ClassroomManager找到摄像机控制器: {cameraController.name}");
+                    return cameraController;
+                }
+            }
+
+            // 方式2: 遍历所有PlayerCameraController找到本地玩家的
+            var controllers = FindObjectsOfType<PlayerCameraController>();
+            foreach (var controller in controllers)
+            {
+                if (controller.IsLocalPlayer)
+                {
+                    LogDebug($"通过遍历找到本地玩家摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            // 方式3: 查找包含"Local"、"Player"等关键词的摄像机控制器
+            foreach (var controller in controllers)
+            {
+                if (controller.gameObject.name.Contains("Local") ||
+                    controller.gameObject.name.Contains("Player"))
+                {
+                    LogDebug($"通过关键词找到摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 手动设置摄像机控制器（供外部调用）
+        /// </summary>
+        public void SetPlayerCameraController(PlayerCameraController cameraController)
+        {
+            if (cameraController != null)
+            {
+                playerCameraController = cameraController;
+                cameraControllerReady = true;
+                LogDebug($"手动设置摄像机控制器: {cameraController.name}");
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// 初始化答题UI
@@ -116,28 +263,6 @@ namespace UI.Answer
             }
 
             LogDebug("AnswerUIManager 初始化完成");
-        }
-
-        /// <summary>
-        /// 查找玩家摄像机控制器
-        /// </summary>
-        private void FindPlayerCameraController()
-        {
-            var controllers = FindObjectsOfType<PlayerCameraController>();
-            foreach (var controller in controllers)
-            {
-                if (controller.IsLocalPlayer)
-                {
-                    playerCameraController = controller;
-                    LogDebug($"找到本地玩家摄像机控制器: {controller.name}");
-                    break;
-                }
-            }
-
-            if (playerCameraController == null)
-            {
-                LogDebug("未找到本地玩家摄像机控制器");
-            }
         }
 
         /// <summary>
@@ -171,7 +296,7 @@ namespace UI.Answer
         {
             if (!CanShowAnswerUI)
             {
-                LogDebug($"无法显示答题UI - 状态: {currentState}, 有题目: {HasValidQuestion()}, 我的回合: {IsMyTurn()}");
+                LogDebug($"无法显示答题UI - 状态: {currentState}, 有题目: {HasValidQuestion()}, 我的回合: {IsMyTurn()}, 摄像机就绪: {cameraControllerReady}");
                 return false;
             }
 
@@ -259,33 +384,26 @@ namespace UI.Answer
 
             if (prefabToLoad != null && contentArea != null)
             {
-                try
+                // 实例化答题界面
+                currentAnswerUIInstance = Instantiate(prefabToLoad, contentArea);
+
+                // 设置RectTransform以填满ContentArea
+                var rectTransform = currentAnswerUIInstance.GetComponent<RectTransform>();
+                if (rectTransform != null)
                 {
-                    // 实例化答题界面
-                    currentAnswerUIInstance = Instantiate(prefabToLoad, contentArea);
-
-                    // 设置RectTransform以填满ContentArea
-                    var rectTransform = currentAnswerUIInstance.GetComponent<RectTransform>();
-                    if (rectTransform != null)
-                    {
-                        rectTransform.anchorMin = Vector2.zero;
-                        rectTransform.anchorMax = Vector2.one;
-                        rectTransform.offsetMin = Vector2.zero;
-                        rectTransform.offsetMax = Vector2.zero;
-                    }
-
-                    // 传递题目数据给答题界面（通过公共方法或事件）
-                    SendQuestionDataToAnswerUI(currentAnswerUIInstance, currentQuestion);
-
-                    // 绑定答题界面的提交事件
-                    BindAnswerUIEvents(currentAnswerUIInstance);
-
-                    LogDebug($"成功实例化答题界面: {prefabToLoad.name}");
+                    rectTransform.anchorMin = Vector2.zero;
+                    rectTransform.anchorMax = Vector2.one;
+                    rectTransform.offsetMin = Vector2.zero;
+                    rectTransform.offsetMax = Vector2.zero;
                 }
-                catch (System.Exception e)
-                {
-                    LogDebug($"实例化答题界面失败: {e.Message}");
-                }
+
+                // 传递题目数据给答题界面（通过公共方法或事件）
+                SendQuestionDataToAnswerUI(currentAnswerUIInstance, currentQuestion);
+
+                // 绑定答题界面的提交事件
+                BindAnswerUIEvents(currentAnswerUIInstance);
+
+                LogDebug($"成功实例化答题界面: {prefabToLoad.name}");
             }
             else
             {
@@ -316,30 +434,211 @@ namespace UI.Answer
         /// </summary>
         private void SendQuestionDataToAnswerUI(GameObject answerUIInstance, NetworkQuestionData questionData)
         {
-            // 方式1：通过组件接口传递数据
-            var answerUIComponent = answerUIInstance.GetComponent<MonoBehaviour>();
-            if (answerUIComponent != null)
-            {
-                // 尝试调用SetQuestionData方法（如果存在）
-                var setQuestionMethod = answerUIComponent.GetType().GetMethod("SetQuestionData");
-                if (setQuestionMethod != null)
-                {
-                    setQuestionMethod.Invoke(answerUIComponent, new object[] { questionData });
-                    LogDebug("通过SetQuestionData方法传递题目数据");
-                    return;
-                }
+            LogDebug($"开始向答题界面传递数据: {questionData.questionType}");
 
-                // 尝试调用Initialize方法（如果存在）
-                var initializeMethod = answerUIComponent.GetType().GetMethod("Initialize");
-                if (initializeMethod != null)
-                {
-                    initializeMethod.Invoke(answerUIComponent, new object[] { questionData });
-                    LogDebug("通过Initialize方法传递题目数据");
-                    return;
-                }
+            // 根据题型使用不同的数据传递方式
+            switch (questionData.questionType)
+            {
+                case QuestionType.ExplanationChoice:
+                case QuestionType.SimularWordChoice:
+                    SetupChoiceUI(answerUIInstance, questionData);
+                    break;
+
+                case QuestionType.SentimentTorF:
+                case QuestionType.UsageTorF:
+                    SetupTrueFalseUI(answerUIInstance, questionData);
+                    break;
+
+                case QuestionType.HardFill:
+                case QuestionType.SoftFill:
+                case QuestionType.IdiomChain:
+                case QuestionType.TextPinyin:
+                    SetupFillBlankUI(answerUIInstance, questionData);
+                    break;
+
+                default:
+                    LogDebug($"未知题型: {questionData.questionType}");
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// 设置选择题UI
+        /// </summary>
+        private void SetupChoiceUI(GameObject choiceUIInstance, NetworkQuestionData questionData)
+        {
+            LogDebug("设置选择题UI");
+
+            if (questionData.options == null || questionData.options.Length == 0)
+            {
+                LogDebug("选择题选项为空");
+                return;
             }
 
-            LogDebug("使用默认方式传递题目数据");
+            // 查找选项按钮 OptionButton1-4
+            for (int i = 0; i < questionData.options.Length && i < 4; i++)
+            {
+                string buttonName = $"OptionButton{i + 1}";
+                Transform buttonTransform = choiceUIInstance.transform.Find(buttonName);
+
+                if (buttonTransform != null)
+                {
+                    var button = buttonTransform.GetComponent<Button>();
+                    var textComponent = buttonTransform.GetComponentInChildren<TextMeshProUGUI>();
+
+                    if (textComponent != null)
+                    {
+                        string optionText = $"{(char)('A' + i)}. {questionData.options[i]}";
+                        textComponent.text = optionText;
+                        LogDebug($"设置选项按钮 {buttonName}: {optionText}");
+                    }
+
+                    if (button != null)
+                    {
+                        // 绑定点击事件
+                        string optionAnswer = ((char)('A' + i)).ToString();
+                        button.onClick.RemoveAllListeners();
+                        button.onClick.AddListener(() => OnOptionSelected(optionAnswer, choiceUIInstance));
+                        LogDebug($"绑定选项按钮 {buttonName} 点击事件: {optionAnswer}");
+                    }
+                }
+                else
+                {
+                    LogDebug($"未找到选项按钮: {buttonName}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 设置判断题UI
+        /// </summary>
+        private void SetupTrueFalseUI(GameObject torFUIInstance, NetworkQuestionData questionData)
+        {
+            LogDebug("设置判断题UI");
+
+            // 查找TrueButton和FalseButton
+            Transform trueButtonTransform = torFUIInstance.transform.Find("TrueButton");
+            Transform falseButtonTransform = torFUIInstance.transform.Find("FalseButton");
+
+            if (trueButtonTransform != null)
+            {
+                var trueButton = trueButtonTransform.GetComponent<Button>();
+                var trueText = trueButtonTransform.GetComponentInChildren<TextMeshProUGUI>();
+
+                if (trueText != null)
+                {
+                    trueText.text = "A. 正确";
+                }
+
+                if (trueButton != null)
+                {
+                    trueButton.onClick.RemoveAllListeners();
+                    trueButton.onClick.AddListener(() => OnOptionSelected("A", torFUIInstance));
+                    LogDebug("绑定TrueButton点击事件");
+                }
+            }
+            else
+            {
+                LogDebug("未找到TrueButton");
+            }
+
+            if (falseButtonTransform != null)
+            {
+                var falseButton = falseButtonTransform.GetComponent<Button>();
+                var falseText = falseButtonTransform.GetComponentInChildren<TextMeshProUGUI>();
+
+                if (falseText != null)
+                {
+                    falseText.text = "B. 错误";
+                }
+
+                if (falseButton != null)
+                {
+                    falseButton.onClick.RemoveAllListeners();
+                    falseButton.onClick.AddListener(() => OnOptionSelected("B", torFUIInstance));
+                    LogDebug("绑定FalseButton点击事件");
+                }
+            }
+            else
+            {
+                LogDebug("未找到FalseButton");
+            }
+        }
+
+        /// <summary>
+        /// 设置填空题UI
+        /// </summary>
+        private void SetupFillBlankUI(GameObject fillBlankUIInstance, NetworkQuestionData questionData)
+        {
+            LogDebug("设置填空题UI");
+
+            // 查找answerinput输入框
+            Transform inputTransform = fillBlankUIInstance.transform.Find("AnswerInput");
+            if (inputTransform != null)
+            {
+                var inputField = inputTransform.GetComponent<TMP_InputField>();
+                if (inputField != null)
+                {
+                    inputField.text = "";
+                    inputField.placeholder.GetComponent<TextMeshProUGUI>().text = "请输入答案...";
+                    LogDebug("设置输入框成功");
+                }
+            }
+            else
+            {
+                LogDebug("未找到answerinput输入框");
+            }
+
+            // 查找submitbutton提交按钮
+            Transform submitTransform = fillBlankUIInstance.transform.Find("SubmitButton");
+            if (submitTransform != null)
+            {
+                var submitButton = submitTransform.GetComponent<Button>();
+                if (submitButton != null)
+                {
+                    submitButton.onClick.RemoveAllListeners();
+                    submitButton.onClick.AddListener(() => OnFillBlankSubmit(fillBlankUIInstance));
+                    LogDebug("绑定填空题提交按钮");
+                }
+            }
+            else
+            {
+                LogDebug("未找到submitbutton提交按钮");
+            }
+        }
+
+        /// <summary>
+        /// 选项被选中时的处理
+        /// </summary>
+        private void OnOptionSelected(string selectedOption, GameObject answerUIInstance)
+        {
+            LogDebug($"用户选择了选项: {selectedOption}");
+
+            // 立即提交答案
+            OnAnswerSubmitted?.Invoke(selectedOption);
+            HideAnswerUI();
+        }
+
+        /// <summary>
+        /// 填空题提交处理
+        /// </summary>
+        private void OnFillBlankSubmit(GameObject fillBlankUIInstance)
+        {
+            LogDebug("填空题提交按钮被点击");
+
+            // 获取输入框内容
+            Transform inputTransform = fillBlankUIInstance.transform.Find("AnswerInput");
+            if (inputTransform != null)
+            {
+                var inputField = inputTransform.GetComponent<TMP_InputField>();
+                if (inputField != null)
+                {
+                    string answer = inputField.text.Trim();
+                    LogDebug($"填空题答案: '{answer}'");
+                    OnAnswerSubmitted?.Invoke(answer);
+                    HideAnswerUI();
+                }
+            }
         }
 
         /// <summary>
@@ -347,101 +646,13 @@ namespace UI.Answer
         /// </summary>
         private void BindAnswerUIEvents(GameObject answerUIInstance)
         {
-            // 对于填空题，查找提交按钮并绑定事件
-            if (IsFillBlankType(currentQuestion.questionType))
-            {
-                Button submitButton = FindSubmitButton(answerUIInstance);
-                if (submitButton != null)
-                {
-                    submitButton.onClick.AddListener(() => OnAnswerUISubmitted(answerUIInstance));
-                    LogDebug($"绑定填空题提交按钮事件: {submitButton.name}");
-                }
-            }
-            // 对于选择题和判断题，可以直接点击选项提交，也可以保留提交按钮作为备选
-            else
-            {
-                Button submitButton = FindSubmitButton(answerUIInstance);
-                if (submitButton != null)
-                {
-                    submitButton.onClick.AddListener(() => OnAnswerUISubmitted(answerUIInstance));
-                    LogDebug($"绑定选择/判断题提交按钮事件: {submitButton.name}");
-                }
-            }
+            LogDebug($"绑定答题界面事件，题型: {currentQuestion.questionType}");
+
+            // 事件绑定已经在SetupXXXUI方法中完成
+            // 这里只需要记录日志
+            LogDebug("答题界面事件绑定完成");
         }
 
-        /// <summary>
-        /// 查找提交按钮
-        /// </summary>
-        private Button FindSubmitButton(GameObject answerUIInstance)
-        {
-            Button[] buttons = answerUIInstance.GetComponentsInChildren<Button>();
-            foreach (var btn in buttons)
-            {
-                if (btn.name.Contains("Submit") || btn.name.Contains("提交") || btn.name.Contains("确认"))
-                {
-                    return btn;
-                }
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// 判断是否是填空类题型
-        /// </summary>
-        private bool IsFillBlankType(QuestionType questionType)
-        {
-            return questionType == QuestionType.HardFill || questionType == QuestionType.SoftFill || questionType == QuestionType.IdiomChain || questionType == QuestionType.TextPinyin;
-        }
-
-        /// <summary>
-        /// 答题界面提交事件处理
-        /// </summary>
-        private void OnAnswerUISubmitted(GameObject answerUIInstance)
-        {
-            string answer = GetAnswerFromUI(answerUIInstance);
-
-            if (!string.IsNullOrEmpty(answer))
-            {
-                // 触发答案提交事件
-                OnAnswerSubmitted?.Invoke(answer);
-                LogDebug($"提交答题界面提交的答案: {answer}");
-                // 隐藏答题UI
-                HideAnswerUI();
-            }
-            else
-            {
-                LogDebug("答题界面返回的答案为空");
-            }
-        }
-
-        /// <summary>
-        /// 从答题界面获取答案
-        /// </summary>
-        private string GetAnswerFromUI(GameObject answerUIInstance)
-        {
-            var answerUIComponent = answerUIInstance.GetComponent<MonoBehaviour>();
-            if (answerUIComponent != null)
-            {
-                // 尝试调用GetAnswer方法
-                var getAnswerMethod = answerUIComponent.GetType().GetMethod("GetAnswer");
-                if (getAnswerMethod != null)
-                {
-                    var result = getAnswerMethod.Invoke(answerUIComponent, null);
-                    return result?.ToString() ?? "";
-                }
-
-                // 尝试获取Answer属性
-                var answerProperty = answerUIComponent.GetType().GetProperty("Answer");
-                if (answerProperty != null)
-                {
-                    var result = answerProperty.GetValue(answerUIComponent);
-                    return result?.ToString() ?? "";
-                }
-            }
-
-            LogDebug("无法从答题界面获取答案");
-            return "";
-        }
 
         /// <summary>
         /// 清理当前答题界面
@@ -464,6 +675,10 @@ namespace UI.Answer
             {
                 playerCameraController.SetControlEnabled(enabled);
                 LogDebug($"摄像机控制: {(enabled ? "启用" : "禁用")}");
+            }
+            else
+            {
+                LogDebug("摄像机控制器不可用，无法控制摄像机");
             }
         }
 
@@ -597,6 +812,8 @@ namespace UI.Answer
         private void OnDestroy()
         {
             ClearCurrentAnswerUI();
+            UnsubscribeFromClassroomManagerEvents();
         }
+
     }
 }
