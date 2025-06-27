@@ -482,7 +482,7 @@ namespace UI.Answer
                     if (button != null)
                     {
                         // 绑定点击事件
-                        string optionAnswer = ((char)('A' + i)).ToString();
+                        string optionAnswer = questionData.options[i];
                         button.onClick.RemoveAllListeners();
                         button.onClick.AddListener(() => OnOptionSelected(optionAnswer, choiceUIInstance));
                         LogDebug($"绑定选项按钮 {buttonName} 点击事件: {optionAnswer}");
@@ -506,6 +506,16 @@ namespace UI.Answer
             Transform trueButtonTransform = torFUIInstance.transform.Find("TrueButton");
             Transform falseButtonTransform = torFUIInstance.transform.Find("FalseButton");
 
+            // 根据题型和选项内容决定按钮显示文本
+            string trueButtonText = "A. 正确";
+            string falseButtonText = "B. 错误";
+
+            if (questionData.options != null && questionData.options.Length >= 2)
+            {
+                trueButtonText = $"A. {questionData.options[0]}";
+                falseButtonText = $"B. {questionData.options[1]}";
+            }
+
             if (trueButtonTransform != null)
             {
                 var trueButton = trueButtonTransform.GetComponent<Button>();
@@ -513,14 +523,14 @@ namespace UI.Answer
 
                 if (trueText != null)
                 {
-                    trueText.text = "A. 正确";
+                    trueText.text = trueButtonText;
                 }
 
                 if (trueButton != null)
                 {
                     trueButton.onClick.RemoveAllListeners();
-                    trueButton.onClick.AddListener(() => OnOptionSelected("A", torFUIInstance));
-                    LogDebug("绑定TrueButton点击事件");
+                    trueButton.onClick.AddListener(() => OnTrueFalseOptionSelected(0, questionData, torFUIInstance));
+                    LogDebug($"绑定TrueButton点击事件: {trueButtonText}");
                 }
             }
             else
@@ -535,20 +545,77 @@ namespace UI.Answer
 
                 if (falseText != null)
                 {
-                    falseText.text = "B. 错误";
+                    falseText.text = falseButtonText;
                 }
 
                 if (falseButton != null)
                 {
                     falseButton.onClick.RemoveAllListeners();
-                    falseButton.onClick.AddListener(() => OnOptionSelected("B", torFUIInstance));
-                    LogDebug("绑定FalseButton点击事件");
+                    falseButton.onClick.AddListener(() => OnTrueFalseOptionSelected(1, questionData, torFUIInstance));
+                    LogDebug($"绑定FalseButton点击事件: {falseButtonText}");
                 }
             }
             else
             {
                 LogDebug("未找到FalseButton");
             }
+        }
+        /// <summary>
+        /// 判断题选项被选中时的处理（新增方法 - 支持多种判断题类型）
+        /// </summary>
+        private void OnTrueFalseOptionSelected(int optionIndex, NetworkQuestionData questionData, GameObject answerUIInstance)
+        {
+            LogDebug($"用户选择了判断题选项索引: {optionIndex}");
+
+            string answerToSubmit = "";
+
+            // 根据具体题型确定提交策略
+            switch (questionData.questionType)
+            {
+                case QuestionType.SentimentTorF:
+                    // SentimentTorF：提交选项内容（如 "褒义", "贬义"）
+                    if (optionIndex >= 0 && optionIndex < questionData.options.Length)
+                    {
+                        answerToSubmit = questionData.options[optionIndex];
+                        LogDebug($"SentimentTorF提交选项内容: {answerToSubmit}");
+                    }
+                    break;
+
+                case QuestionType.UsageTorF:
+                    // UsageTorF：也提交选项内容（如 "正确", "错误"），因为验证器支持标准化
+                    if (optionIndex >= 0 && optionIndex < questionData.options.Length)
+                    {
+                        answerToSubmit = questionData.options[optionIndex];
+                        LogDebug($"UsageTorF提交选项内容: {answerToSubmit}");
+                    }
+                    break;
+
+                default:
+                    // 其他判断题类型：提交标准化的 true/false
+                    answerToSubmit = optionIndex == 0 ? "true" : "false";
+                    LogDebug($"标准判断题提交: {answerToSubmit}");
+                    break;
+            }
+
+            // 验证答案不为空
+            if (string.IsNullOrEmpty(answerToSubmit))
+            {
+                LogDebug($"无效的选项索引: {optionIndex}，题型: {questionData.questionType}");
+                return;
+            }
+
+            // 提交答案
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.SubmitAnswer(answerToSubmit);
+                LogDebug($"通过NetworkManager提交答案: {answerToSubmit}");
+            }
+            else
+            {
+                LogDebug("NetworkManager.Instance 为空，无法提交答案");
+            }
+
+            HideAnswerUI();
         }
 
         /// <summary>
