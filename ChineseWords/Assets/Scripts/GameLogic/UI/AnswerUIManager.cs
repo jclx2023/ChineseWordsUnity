@@ -10,8 +10,8 @@ using UI.Blackboard;
 namespace UI.Answer
 {
     /// <summary>
-    /// 沉浸式答题界面管理器
-    /// 提供统一的半透明答题UI，支持所有题型
+    /// 沉浸式答题界面管理器 - 简化版本
+    /// 职责：显示题目信息，实例化对应的答题界面，传递提交事件
     /// </summary>
     public class AnswerUIManager : MonoBehaviour
     {
@@ -22,19 +22,15 @@ namespace UI.Answer
         [SerializeField] private Canvas answerCanvas;
         [SerializeField] private CanvasGroup answerCanvasGroup;
         [SerializeField] private RectTransform answerPanel;
-        [SerializeField] private Button submitButton;
+        [SerializeField] private RectTransform contentArea; // 动态加载答题界面的容器
 
-        [Header("输入类UI")]
-        [SerializeField] private GameObject inputUIPanel;
-        [SerializeField] private TMP_InputField answerInputField;
+        [Header("题型答题界面预制体")]
+        [SerializeField] private GameObject fillBlankUIPrefab;   // 填空题UI
+        [SerializeField] private GameObject chooseUIPrefab;      // 选择题UI
+        [SerializeField] private GameObject torFUIPrefab;        // 判断题UI
 
-        [Header("选项类UI")]
-        [SerializeField] private GameObject optionsUIPanel;
-        [SerializeField] private Transform optionsContainer;
-        [SerializeField] private GameObject optionButtonPrefab;
-
-        [Header("提示文本")]
-        [SerializeField] private TextMeshProUGUI instructionText;
+        [Header("题目显示")]
+        [SerializeField] private TextMeshProUGUI questionDisplayText; // 题目文本显示
 
         [Header("动画设置")]
         [SerializeField] private float fadeInDuration = 0.3f;
@@ -57,9 +53,7 @@ namespace UI.Answer
 
         private AnswerUIState currentState = AnswerUIState.Hidden;
         private NetworkQuestionData currentQuestion;
-        private string selectedAnswer = "";
-        private int selectedOptionIndex = -1;
-        private Button[] optionButtons;
+        private GameObject currentAnswerUIInstance; // 当前实例化的答题界面
 
         // 摄像机控制
         private PlayerCameraController playerCameraController;
@@ -104,7 +98,7 @@ namespace UI.Answer
             if (answerCanvas != null)
             {
                 answerCanvas.renderMode = RenderMode.ScreenSpaceCamera;
-                answerCanvas.sortingOrder = 100; // 确保在最前面
+                answerCanvas.sortingOrder = 100;
             }
 
             // 设置初始状态
@@ -115,14 +109,18 @@ namespace UI.Answer
                 answerCanvasGroup.blocksRaycasts = false;
             }
 
-            // 绑定提交按钮
-            if (submitButton != null)
+            // 确保ContentArea存在
+            if (contentArea == null)
             {
-                submitButton.onClick.AddListener(OnSubmitButtonClicked);
+                LogDebug("警告：ContentArea未设置，尝试自动查找");
+                contentArea = answerPanel?.Find("ContentArea")?.GetComponent<RectTransform>();
             }
 
-            // 隐藏所有UI面板
-            SetPanelVisibility(false, false);
+            // 隐藏答题面板
+            if (answerPanel != null)
+            {
+                answerPanel.gameObject.SetActive(false);
+            }
 
             LogDebug("AnswerUIManager 初始化完成");
         }
@@ -166,21 +164,10 @@ namespace UI.Answer
                 }
             }
 
-            // 快捷键支持
-            if (currentState == AnswerUIState.Active)
+            // Esc键取消答题
+            if (currentState == AnswerUIState.Active && Input.GetKeyDown(KeyCode.Escape))
             {
-                if (Input.GetKeyDown(KeyCode.Escape))
-                {
-                    HideAnswerUI();
-                }
-                else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
-                {
-                    // 在输入框中回车时提交答案
-                    if (IsInputType() && answerInputField != null && answerInputField.isFocused)
-                    {
-                        OnSubmitButtonClicked();
-                    }
-                }
+                HideAnswerUI();
             }
         }
 
@@ -192,7 +179,6 @@ namespace UI.Answer
             if (!CanShowAnswerUI)
             {
                 LogDebug($"无法显示答题UI - 状态: {currentState}, 有题目: {HasValidQuestion()}, 我的回合: {IsMyTurn()}");
-                // TODO: 后续添加提示信息显示
                 return false;
             }
 
@@ -220,8 +206,11 @@ namespace UI.Answer
                 return;
             }
 
-            // 设置UI内容
-            SetupUIForQuestion(currentQuestion);
+            // 显示题目信息
+            DisplayQuestionInfo(currentQuestion);
+
+            // 实例化对应的答题界面
+            InstantiateAnswerUI(currentQuestion.questionType);
 
             // 禁用摄像机控制
             SetCameraControl(false);
@@ -254,196 +243,232 @@ namespace UI.Answer
         }
 
         /// <summary>
-        /// 为题目设置UI
+        /// 显示题目信息
         /// </summary>
-        private void SetupUIForQuestion(NetworkQuestionData question)
+        private void DisplayQuestionInfo(NetworkQuestionData question)
         {
-            bool isInput = IsInputType(question.questionType);
-            bool isOptions = IsOptionType(question.questionType);
-
-            // 设置面板可见性
-            SetPanelVisibility(isInput, isOptions);
-
-            if (isInput)
+            // 显示题目文本
+            if (questionDisplayText != null)
             {
-                SetupInputUI();
-            }
-            else if (isOptions)
-            {
-                SetupOptionsUI(question.options);
-            }
-
-            // 设置提示文本
-            SetInstructionText();
-
-            // 重置答案状态
-            ResetAnswerState();
-        }
-
-        /// <summary>
-        /// 设置输入类UI
-        /// </summary>
-        private void SetupInputUI()
-        {
-            if (answerInputField != null)
-            {
-                answerInputField.text = "";
-                answerInputField.placeholder.GetComponent<TextMeshProUGUI>().text = "请输入答案...";
+                questionDisplayText.text = question.questionText;
             }
         }
 
         /// <summary>
-        /// 设置选项类UI
+        /// 根据题型实例化对应的答题界面
         /// </summary>
-        private void SetupOptionsUI(string[] options)
+        private void InstantiateAnswerUI(QuestionType questionType)
         {
-            // 清理现有选项按钮
-            ClearOptionButtons();
+            // 清理现有的答题界面
+            ClearCurrentAnswerUI();
 
-            if (options == null || options.Length == 0)
-                return;
+            GameObject prefabToLoad = GetAnswerUIPrefab(questionType);
 
-            // 创建选项按钮
-            optionButtons = new Button[options.Length];
-
-            for (int i = 0; i < options.Length; i++)
+            if (prefabToLoad != null && contentArea != null)
             {
-                GameObject optionObj = Instantiate(optionButtonPrefab, optionsContainer);
-                Button optionButton = optionObj.GetComponent<Button>();
-                TextMeshProUGUI optionText = optionObj.GetComponentInChildren<TextMeshProUGUI>();
-
-                if (optionText != null)
+                try
                 {
-                    optionText.text = $"{(char)('A' + i)}. {options[i]}";
+                    // 实例化答题界面
+                    currentAnswerUIInstance = Instantiate(prefabToLoad, contentArea);
+
+                    // 设置RectTransform以填满ContentArea
+                    var rectTransform = currentAnswerUIInstance.GetComponent<RectTransform>();
+                    if (rectTransform != null)
+                    {
+                        rectTransform.anchorMin = Vector2.zero;
+                        rectTransform.anchorMax = Vector2.one;
+                        rectTransform.offsetMin = Vector2.zero;
+                        rectTransform.offsetMax = Vector2.zero;
+                    }
+
+                    // 传递题目数据给答题界面（通过公共方法或事件）
+                    SendQuestionDataToAnswerUI(currentAnswerUIInstance, currentQuestion);
+
+                    // 绑定答题界面的提交事件
+                    BindAnswerUIEvents(currentAnswerUIInstance);
+
+                    LogDebug($"成功实例化答题界面: {prefabToLoad.name}");
+                }
+                catch (System.Exception e)
+                {
+                    LogDebug($"实例化答题界面失败: {e.Message}");
+                }
+            }
+            else
+            {
+                LogDebug($"无法找到题型 {questionType} 对应的预制体或ContentArea为空");
+            }
+        }
+
+        /// <summary>
+        /// 获取对应题型的答题UI预制体
+        /// </summary>
+        private GameObject GetAnswerUIPrefab(QuestionType questionType)
+        {
+            return questionType switch
+            {
+                // 填空类题型
+                QuestionType.HardFill or QuestionType.SoftFill or
+                QuestionType.IdiomChain or QuestionType.TextPinyin => fillBlankUIPrefab,
+
+                // 选择类题型
+                QuestionType.ExplanationChoice or QuestionType.SimularWordChoice => chooseUIPrefab,
+
+                // 判断类题型
+                QuestionType.SentimentTorF or QuestionType.UsageTorF => torFUIPrefab,
+
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// 向答题界面传递题目数据
+        /// </summary>
+        private void SendQuestionDataToAnswerUI(GameObject answerUIInstance, NetworkQuestionData questionData)
+        {
+            // 方式1：通过组件接口传递数据
+            var answerUIComponent = answerUIInstance.GetComponent<MonoBehaviour>();
+            if (answerUIComponent != null)
+            {
+                // 尝试调用SetQuestionData方法（如果存在）
+                var setQuestionMethod = answerUIComponent.GetType().GetMethod("SetQuestionData");
+                if (setQuestionMethod != null)
+                {
+                    setQuestionMethod.Invoke(answerUIComponent, new object[] { questionData });
+                    LogDebug("通过SetQuestionData方法传递题目数据");
+                    return;
                 }
 
-                optionButtons[i] = optionButton;
+                // 尝试调用Initialize方法（如果存在）
+                var initializeMethod = answerUIComponent.GetType().GetMethod("Initialize");
+                if (initializeMethod != null)
+                {
+                    initializeMethod.Invoke(answerUIComponent, new object[] { questionData });
+                    LogDebug("通过Initialize方法传递题目数据");
+                    return;
+                }
+            }
 
-                // 绑定点击事件
-                int index = i; // 避免闭包问题
-                optionButton.onClick.AddListener(() => OnOptionSelected(index));
+            // 方式2：通过事件传递数据（如果答题UI组件监听了特定事件）
+            LogDebug("使用默认方式传递题目数据");
+        }
+
+        /// <summary>
+        /// 绑定答题界面的提交事件
+        /// </summary>
+        private void BindAnswerUIEvents(GameObject answerUIInstance)
+        {
+            // 对于填空题，查找提交按钮并绑定事件
+            if (IsFillBlankType(currentQuestion.questionType))
+            {
+                Button submitButton = FindSubmitButton(answerUIInstance);
+                if (submitButton != null)
+                {
+                    submitButton.onClick.AddListener(() => OnAnswerUISubmitted(answerUIInstance));
+                    LogDebug($"绑定填空题提交按钮事件: {submitButton.name}");
+                }
+            }
+            // 对于选择题和判断题，可以直接点击选项提交，也可以保留提交按钮作为备选
+            else
+            {
+                Button submitButton = FindSubmitButton(answerUIInstance);
+                if (submitButton != null)
+                {
+                    submitButton.onClick.AddListener(() => OnAnswerUISubmitted(answerUIInstance));
+                    LogDebug($"绑定选择/判断题提交按钮事件: {submitButton.name}");
+                }
             }
         }
 
         /// <summary>
-        /// 选项被选择
+        /// 查找提交按钮
         /// </summary>
-        private void OnOptionSelected(int index)
+        private Button FindSubmitButton(GameObject answerUIInstance)
         {
-            if (currentState != AnswerUIState.Active || optionButtons == null)
-                return;
-
-            selectedOptionIndex = index;
-
-            // 更新选项按钮的视觉状态
-            for (int i = 0; i < optionButtons.Length; i++)
+            Button[] buttons = answerUIInstance.GetComponentsInChildren<Button>();
+            foreach (var btn in buttons)
             {
-                var colors = optionButtons[i].colors;
-                colors.normalColor = (i == index) ? Color.yellow : Color.white;
-                optionButtons[i].colors = colors;
+                if (btn.name.Contains("Submit") || btn.name.Contains("提交") || btn.name.Contains("确认"))
+                {
+                    return btn;
+                }
             }
-
-            // 设置选中的答案
-            if (currentQuestion != null && currentQuestion.options != null && index < currentQuestion.options.Length)
-            {
-                selectedAnswer = currentQuestion.options[index];
-            }
-
-            LogDebug($"选择了选项 {index}: {selectedAnswer}");
+            return null;
         }
 
         /// <summary>
-        /// 提交按钮点击
+        /// 判断是否是填空类题型
         /// </summary>
-        private void OnSubmitButtonClicked()
+        private bool IsFillBlankType(QuestionType questionType)
         {
-            if (currentState != AnswerUIState.Active)
-                return;
-
-            string answer = GetCurrentAnswer();
-
-            if (string.IsNullOrEmpty(answer))
-            {
-                LogDebug("答案为空，无法提交");
-                return;
-            }
-
-            LogDebug($"提交答案: {answer}");
-
-            // 触发答案提交事件
-            OnAnswerSubmitted?.Invoke(answer);
-
-            // 隐藏UI
-            HideAnswerUI();
+            return questionType == QuestionType.HardFill ||
+                   questionType == QuestionType.SoftFill ||
+                   questionType == QuestionType.IdiomChain ||
+                   questionType == QuestionType.TextPinyin;
         }
 
         /// <summary>
-        /// 获取当前答案
+        /// 答题界面提交事件处理
         /// </summary>
-        private string GetCurrentAnswer()
+        private void OnAnswerUISubmitted(GameObject answerUIInstance)
         {
-            if (IsInputType())
+            string answer = GetAnswerFromUI(answerUIInstance);
+
+            if (!string.IsNullOrEmpty(answer))
             {
-                return answerInputField?.text?.Trim() ?? "";
+                LogDebug($"收到答题界面提交的答案: {answer}");
+
+                // 触发答案提交事件
+                OnAnswerSubmitted?.Invoke(answer);
+
+                // 隐藏答题UI
+                HideAnswerUI();
             }
-            else if (IsOptionType())
+            else
             {
-                return selectedAnswer;
+                LogDebug("答题界面返回的答案为空");
+            }
+        }
+
+        /// <summary>
+        /// 从答题界面获取答案
+        /// </summary>
+        private string GetAnswerFromUI(GameObject answerUIInstance)
+        {
+            var answerUIComponent = answerUIInstance.GetComponent<MonoBehaviour>();
+            if (answerUIComponent != null)
+            {
+                // 尝试调用GetAnswer方法
+                var getAnswerMethod = answerUIComponent.GetType().GetMethod("GetAnswer");
+                if (getAnswerMethod != null)
+                {
+                    var result = getAnswerMethod.Invoke(answerUIComponent, null);
+                    return result?.ToString() ?? "";
+                }
+
+                // 尝试获取Answer属性
+                var answerProperty = answerUIComponent.GetType().GetProperty("Answer");
+                if (answerProperty != null)
+                {
+                    var result = answerProperty.GetValue(answerUIComponent);
+                    return result?.ToString() ?? "";
+                }
             }
 
+            LogDebug("无法从答题界面获取答案");
             return "";
         }
 
         /// <summary>
-        /// 设置面板可见性
+        /// 清理当前答题界面
         /// </summary>
-        private void SetPanelVisibility(bool showInput, bool showOptions)
+        private void ClearCurrentAnswerUI()
         {
-            if (inputUIPanel != null)
-                inputUIPanel.SetActive(showInput);
-
-            if (optionsUIPanel != null)
-                optionsUIPanel.SetActive(showOptions);
-        }
-
-        /// <summary>
-        /// 设置提示文本
-        /// </summary>
-        private void SetInstructionText()
-        {
-            if (instructionText != null)
+            if (currentAnswerUIInstance != null)
             {
-                string instruction = IsInputType() ?
-                    "请输入答案，然后点击提交" :
-                    "请选择答案，然后点击提交";
-                instruction += $"\n\n按 {answerTriggerKey} 键可取消答题";
-
-                instructionText.text = instruction;
+                Destroy(currentAnswerUIInstance);
+                currentAnswerUIInstance = null;
             }
-        }
-
-        /// <summary>
-        /// 重置答案状态
-        /// </summary>
-        private void ResetAnswerState()
-        {
-            selectedAnswer = "";
-            selectedOptionIndex = -1;
-        }
-
-        /// <summary>
-        /// 清理选项按钮
-        /// </summary>
-        private void ClearOptionButtons()
-        {
-            if (optionsContainer != null)
-            {
-                foreach (Transform child in optionsContainer)
-                {
-                    Destroy(child.gameObject);
-                }
-            }
-            optionButtons = null;
         }
 
         /// <summary>
@@ -488,13 +513,6 @@ namespace UI.Answer
             }
 
             currentState = AnswerUIState.Active;
-
-            // 自动聚焦到输入框
-            if (IsInputType() && answerInputField != null)
-            {
-                answerInputField.ActivateInputField();
-            }
-
             LogDebug("答题UI渐入完成");
         }
 
@@ -533,6 +551,9 @@ namespace UI.Answer
 
             answerPanel.gameObject.SetActive(false);
             currentState = AnswerUIState.Hidden;
+
+            // 清理当前答题界面
+            ClearCurrentAnswerUI();
 
             LogDebug("答题UI渐出完成");
         }
@@ -576,44 +597,6 @@ namespace UI.Answer
         }
 
         /// <summary>
-        /// 判断是否是输入类题型
-        /// </summary>
-        private bool IsInputType()
-        {
-            return currentQuestion != null && IsInputType(currentQuestion.questionType);
-        }
-
-        /// <summary>
-        /// 判断是否是选项类题型
-        /// </summary>
-        private bool IsOptionType()
-        {
-            return currentQuestion != null && IsOptionType(currentQuestion.questionType);
-        }
-
-        /// <summary>
-        /// 判断是否是输入类题型
-        /// </summary>
-        private static bool IsInputType(QuestionType type)
-        {
-            return type == QuestionType.HardFill ||
-                   type == QuestionType.SoftFill ||
-                   type == QuestionType.IdiomChain ||
-                   type == QuestionType.TextPinyin;
-        }
-
-        /// <summary>
-        /// 判断是否是选项类题型
-        /// </summary>
-        private static bool IsOptionType(QuestionType type)
-        {
-            return type == QuestionType.ExplanationChoice ||
-                   type == QuestionType.SimularWordChoice ||
-                   type == QuestionType.SentimentTorF ||
-                   type == QuestionType.UsageTorF;
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -629,12 +612,7 @@ namespace UI.Answer
         /// </summary>
         private void OnDestroy()
         {
-            ClearOptionButtons();
-
-            if (submitButton != null)
-            {
-                submitButton.onClick.RemoveAllListeners();
-            }
+            ClearCurrentAnswerUI();
         }
     }
 }
