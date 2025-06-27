@@ -369,8 +369,21 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayFillQuestion(NetworkQuestionData questionData)
         {
-            // 隐藏选项区域，填空题通过沉浸式答题界面输入
-            optionsArea.gameObject.SetActive(false);
+            // 保持选项区域激活但清空内容，维持布局结构
+            optionsArea.gameObject.SetActive(true);
+
+            // 清理现有选项但不禁用区域
+            if (optionTexts != null)
+            {
+                foreach (var optionText in optionTexts)
+                {
+                    if (optionText != null)
+                    {
+                        DestroyImmediate(optionText.gameObject);
+                    }
+                }
+                optionTexts = null;
+            }
         }
 
         /// <summary>
@@ -454,5 +467,151 @@ namespace UI.Blackboard
         /// 获取当前显示的题目
         /// </summary>
         public NetworkQuestionData CurrentQuestion => currentQuestion;
+
+        #region 测试方法
+
+        /// <summary>
+        /// 创建测试用的选择题数据
+        /// </summary>
+        private NetworkQuestionData CreateTestChoiceQuestion()
+        {
+            return new NetworkQuestionData
+            {
+                questionType = QuestionType.ExplanationChoice,
+                questionText = "下列哪个词语表示“非常高兴”的意思？",
+                options = new string[]
+                {
+                    "兴高采烈",
+                    "垂头丧气",
+                    "心平气和",
+                    "忐忑不安"
+                },
+                correctAnswer = "兴高采烈",
+                timeLimit = 30f
+            };
+        }
+
+        /// <summary>
+        /// 创建测试用的长选项选择题
+        /// </summary>
+        private NetworkQuestionData CreateTestLongChoiceQuestion()
+        {
+            return new NetworkQuestionData
+            {
+                questionType = QuestionType.ExplanationChoice,
+                questionText = "根据语境，下列哪个句子中成语的使用是正确的？",
+                options = new string[]
+                {
+                    "他虽然很有钱，但是为富不仁，经常帮助贫困的人",
+                    "面对这个困难的数学题，我们要迎难而上，绝不能退缩不前",
+                    "这件事情已经木已成舟，我们只能接受现实，重新制定计划",
+                    "他说话总是颠三倒四，逻辑清晰，让人很容易理解"
+                },
+                correctAnswer = "这件事情已经木已成舟，我们只能接受现实，重新制定计划",
+                timeLimit = 45f
+            };
+        }
+
+        /// <summary>
+        /// 创建测试用的判断题数据
+        /// </summary>
+        private NetworkQuestionData CreateTestTrueFalseQuestion()
+        {
+            return new NetworkQuestionData
+            {
+                questionType = QuestionType.SentimentTorF,
+                questionText = "“望梅止渴”这个成语是褒义词。",
+                correctAnswer = "A",
+                timeLimit = 20f
+            };
+        }
+
+        /// <summary>
+        /// 创建测试用的填空题数据
+        /// </summary>
+        private NetworkQuestionData CreateTestFillQuestion()
+        {
+            return new NetworkQuestionData
+            {
+                questionType = QuestionType.IdiomChain,
+                questionText = "请接龙成语：<color=yellow><b>望梅止____</b></color>\n\n(请输入一个字完成这个成语)",
+                correctAnswer = "渴",
+                timeLimit = 30f
+            };
+        }
+
+        [ContextMenu("测试 - 显示选择题")]
+        public void TestDisplayChoiceQuestion()
+        {
+            var testData = CreateTestChoiceQuestion();
+            DisplayQuestion(testData);
+        }
+
+        [ContextMenu("测试 - 显示长选项选择题")]
+        public void TestDisplayLongChoiceQuestion()
+        {
+            var testData = CreateTestLongChoiceQuestion();
+            DisplayQuestion(testData);
+        }
+
+        [ContextMenu("测试 - 显示判断题")]
+        public void TestDisplayTrueFalseQuestion()
+        {
+            var testData = CreateTestTrueFalseQuestion();
+            DisplayQuestion(testData);
+        }
+
+        [ContextMenu("测试 - 显示填空题")]
+        public void TestDisplayFillQuestion()
+        {
+            var testData = CreateTestFillQuestion();
+            DisplayQuestion(testData);
+        }
+
+        [ContextMenu("测试 - 更新状态")]
+        public void TestUpdateStatus()
+        {
+            UpdateDisplayStatus("已提交答案，等待结果...", Color.yellow);
+        }
+
+        [ContextMenu("测试 - 显示正确结果")]
+        public void TestShowCorrectResult()
+        {
+            UpdateDisplayStatus("回答正确！", Color.green);
+        }
+
+        [ContextMenu("测试 - 显示错误结果")]
+        public void TestShowWrongResult()
+        {
+            UpdateDisplayStatus("回答错误，正确答案是：兴高采烈", Color.red);
+        }
+
+        [ContextMenu("测试 - 清空显示")]
+        public void TestClearDisplay()
+        {
+            ClearDisplay();
+        }
+
+        [ContextMenu("测试 - 网格布局选择题")]
+        public void TestGridChoiceQuestion()
+        {
+            var testData = new NetworkQuestionData
+            {
+                questionType = QuestionType.ExplanationChoice,
+                questionText = "测试2x2网格布局显示效果",
+                options = new string[]
+                {
+                    "选项A",
+                    "选项B",
+                    "选项C",
+                    "选项D"
+                },
+                correctAnswer = "选项A",
+                timeLimit = 30f
+            };
+            DisplayQuestion(testData);
+        }
+
+        #endregion
     }
 }
