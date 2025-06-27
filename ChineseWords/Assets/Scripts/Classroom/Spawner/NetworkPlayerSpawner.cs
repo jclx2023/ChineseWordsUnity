@@ -550,7 +550,7 @@ namespace Classroom.Player
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[NetworkPlayerSpawner] {message}");
+                //Debug.Log($"[NetworkPlayerSpawner] {message}");
             }
         }
 

@@ -522,7 +522,6 @@ namespace UI.Blackboard
             {
                 questionText.text = questionData.questionText;
                 questionArea.gameObject.SetActive(true);
-                LogDebug($"设置题目文本: {questionData.questionText}");
             }
 
             // 根据题型显示内容
@@ -573,7 +572,6 @@ namespace UI.Blackboard
             for (int i = 0; i < optionTexts.Length; i++)
             {
                 optionTexts[i].text = $"{(char)('A' + i)}. {questionData.options[i]}";
-                LogDebug($"选项 {(char)('A' + i)}: {questionData.options[i]}");
             }
 
             optionsArea.gameObject.SetActive(true);

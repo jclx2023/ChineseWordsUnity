@@ -529,7 +529,7 @@ namespace Classroom.Scene
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[CircularSeatingSystem] {message}");
+                //Debug.Log($"[CircularSeatingSystem] {message}");
             }
         }
 

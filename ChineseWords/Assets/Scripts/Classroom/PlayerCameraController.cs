@@ -154,11 +154,6 @@ namespace Classroom.Player
             {
                 SetupInitialCameraTransform();
             }
-            else
-            {
-                Debug.LogError("[PlayerCameraController] 摄像机挂载点未找到，无法初始化");
-                return;
-            }
 
             // 锁定鼠标
             SetCursorLock(true);
@@ -176,20 +171,11 @@ namespace Classroom.Player
         {
             if (characterAnimator == null)
             {
-                Debug.LogError("[PlayerCameraController] 未找到Animator组件");
                 return;
             }
 
             // 查找头部骨骼
             headBone = FindBoneRecursive(characterAnimator.transform, headBoneName);
-
-            if (headBone == null)
-            {
-                Debug.LogError($"[PlayerCameraController] 未找到头部骨骼: {headBoneName}");
-                return;
-            }
-
-            LogDebug($"找到头部骨骼: {headBone.name}");
 
             // 在头部骨骼子级查找摄像机挂载点
             if (autoFindCameraMount)
@@ -200,10 +186,6 @@ namespace Classroom.Player
                 {
                     // 如果没有找到，创建一个
                     CreateCameraMount();
-                }
-                else
-                {
-                    LogDebug($"找到摄像机挂载点: {cameraMount.name}");
                 }
             }
         }
@@ -323,7 +305,6 @@ namespace Classroom.Player
                 Destroy(audioListener);
             }
 
-            LogDebug("已创建玩家摄像机");
         }
 
         /// <summary>
@@ -370,7 +351,6 @@ namespace Classroom.Player
             currentHorizontalAngle = 0f;
             currentVerticalAngle = 0f;
 
-            LogDebug($"摄像机初始变换设置完成: 位置 {initialCameraPosition}, 旋转 {initialCameraRotation.eulerAngles}");
         }
 
         #endregion
