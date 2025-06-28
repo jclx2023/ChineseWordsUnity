@@ -5,13 +5,15 @@ using TMPro;
 using Core.Network;
 using Photon.Pun;
 using Core;
+using System.Collections;
+using Classroom.Player;
 
 namespace UI.GameExit
 {
     /// <summary>
     /// 游戏退出管理器 - 简化版
     /// 处理NetworkGameScene中的退出功能
-    /// 功能：ESC键监听、退出确认、返回主界面
+    /// 功能：ESC键监听、退出确认、返回主界面、摄像机控制
     /// </summary>
     public class GameExitManager : MonoBehaviour
     {
@@ -40,11 +42,25 @@ namespace UI.GameExit
         private bool wasHost = false;
         private bool wasInGame = false;
 
+        // 摄像机控制 - 新增
+        private PlayerCameraController playerCameraController;
+        private bool cameraControllerReady = false;
+
         #region Unity生命周期
 
         private void Start()
         {
             InitializeExitManager();
+        }
+
+        private void OnEnable()
+        {
+            SubscribeToClassroomManagerEvents();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeFromClassroomManagerEvents();
         }
 
         private void Update()
@@ -55,6 +71,151 @@ namespace UI.GameExit
         private void OnDestroy()
         {
             CleanupExitManager();
+        }
+
+        #endregion
+
+        #region 事件订阅管理 - 新增
+
+        /// <summary>
+        /// 订阅ClassroomManager事件
+        /// </summary>
+        private void SubscribeToClassroomManagerEvents()
+        {
+            // 如果ClassroomManager存在，订阅其事件
+            if (FindObjectOfType<Classroom.ClassroomManager>() != null)
+            {
+                Classroom.ClassroomManager.OnCameraSetupCompleted += OnCameraSetupCompleted;
+                Classroom.ClassroomManager.OnClassroomInitialized += OnClassroomInitialized;
+            }
+        }
+
+        /// <summary>
+        /// 取消订阅ClassroomManager事件
+        /// </summary>
+        private void UnsubscribeFromClassroomManagerEvents()
+        {
+            // 如果ClassroomManager存在，取消订阅其事件
+            if (FindObjectOfType<Classroom.ClassroomManager>() != null)
+            {
+                Classroom.ClassroomManager.OnCameraSetupCompleted -= OnCameraSetupCompleted;
+                Classroom.ClassroomManager.OnClassroomInitialized -= OnClassroomInitialized;
+            }
+        }
+
+        /// <summary>
+        /// 响应摄像机设置完成事件
+        /// </summary>
+        private void OnCameraSetupCompleted()
+        {
+            LogDebug("收到摄像机设置完成事件，开始查找摄像机控制器");
+            StartCoroutine(FindPlayerCameraControllerCoroutine());
+        }
+
+        /// <summary>
+        /// 响应教室初始化完成事件（备用方案）
+        /// </summary>
+        private void OnClassroomInitialized()
+        {
+            if (!cameraControllerReady)
+            {
+                LogDebug("教室初始化完成，尝试查找摄像机控制器（备用方案）");
+                StartCoroutine(FindPlayerCameraControllerCoroutine());
+            }
+        }
+
+        #endregion
+
+        #region 摄像机控制器查找 - 新增
+
+        /// <summary>
+        /// 协程方式查找玩家摄像机控制器
+        /// </summary>
+        private IEnumerator FindPlayerCameraControllerCoroutine()
+        {
+            LogDebug("开始查找玩家摄像机控制器");
+
+            float timeout = 5f; // 5秒超时
+            float elapsed = 0f;
+
+            while (elapsed < timeout && playerCameraController == null)
+            {
+                playerCameraController = FindPlayerCameraController();
+
+                if (playerCameraController != null)
+                {
+                    cameraControllerReady = true;
+                    LogDebug($"成功找到摄像机控制器: {playerCameraController.name}");
+                    break;
+                }
+
+                elapsed += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            if (playerCameraController == null)
+            {
+                LogDebug("未能找到摄像机控制器，将使用备用方案");
+                // 可以添加备用查找逻辑或错误处理
+            }
+        }
+
+        /// <summary>
+        /// 查找玩家摄像机控制器
+        /// </summary>
+        private PlayerCameraController FindPlayerCameraController()
+        {
+            // 方式1: 通过ClassroomManager获取（推荐方式）
+            var classroomManager = FindObjectOfType<Classroom.ClassroomManager>();
+            if (classroomManager != null && classroomManager.IsInitialized)
+            {
+                var cameraController = classroomManager.GetLocalPlayerCameraController();
+                if (cameraController != null)
+                {
+                    LogDebug($"通过ClassroomManager找到摄像机控制器: {cameraController.name}");
+                    return cameraController;
+                }
+            }
+
+            // 方式2: 遍历所有PlayerCameraController找到本地玩家的
+            var controllers = FindObjectsOfType<PlayerCameraController>();
+            foreach (var controller in controllers)
+            {
+                if (controller.IsLocalPlayer)
+                {
+                    LogDebug($"通过遍历找到本地玩家摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            // 方式3: 查找包含"Local"、"Player"等关键词的摄像机控制器
+            foreach (var controller in controllers)
+            {
+                if (controller.gameObject.name.Contains("Local") ||
+                    controller.gameObject.name.Contains("Player"))
+                {
+                    LogDebug($"通过关键词找到摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 控制摄像机
+        /// </summary>
+        private void SetCameraControl(bool enabled)
+        {
+            if (playerCameraController != null)
+            {
+                playerCameraController.SetControlEnabled(enabled);
+                LogDebug($"摄像机控制: {(enabled ? "启用" : "禁用")}");
+            }
+            else
+            {
+                LogDebug("摄像机控制器不可用，无法控制摄像机");
+            }
         }
 
         #endregion
@@ -81,6 +242,12 @@ namespace UI.GameExit
 
             // 缓存初始状态
             CacheNetworkState();
+
+            // 尝试立即查找摄像机控制器（如果已经初始化）
+            if (!cameraControllerReady)
+            {
+                StartCoroutine(FindPlayerCameraControllerCoroutine());
+            }
 
             LogDebug("游戏退出管理器初始化完成");
         }
@@ -160,6 +327,9 @@ namespace UI.GameExit
             if (cancelExitButton != null)
                 cancelExitButton.onClick.RemoveAllListeners();
 
+            // 取消事件订阅
+            UnsubscribeFromClassroomManagerEvents();
+
             LogDebug("游戏退出管理器已清理");
         }
 
@@ -219,6 +389,9 @@ namespace UI.GameExit
                 LogDebug("当前状态不允许退出");
                 return;
             }
+
+            // 禁用摄像机控制 - 新增
+            SetCameraControl(false);
 
             // 显示对话框
             if (exitConfirmDialog != null)
@@ -308,6 +481,9 @@ namespace UI.GameExit
             }
 
             isExitDialogOpen = false;
+
+            // 启用摄像机控制 - 新增
+            SetCameraControl(true);
         }
 
         /// <summary>

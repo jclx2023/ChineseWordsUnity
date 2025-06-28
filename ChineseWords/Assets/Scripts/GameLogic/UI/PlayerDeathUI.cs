@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using Core.Network;
 using System.Collections;
+using Classroom.Player;
 
 namespace UI
 {
@@ -13,6 +14,7 @@ namespace UI
     /// 2. 显示死亡信息和自动观战提示
     /// 3. 提供"退出房间"选择
     /// 4. 观战模式：死亡玩家自动移出回合池，但继续接收游戏广播
+    /// 5. 摄像机控制：显示死亡UI时禁用摄像机控制，允许玩家点击UI
     /// </summary>
     public class PlayerDeathUI : MonoBehaviour
     {
@@ -50,6 +52,10 @@ namespace UI
         private Coroutine fadeCoroutine;
         private Coroutine autoMinimizeCoroutine;
 
+        // 摄像机控制 - 新增
+        private PlayerCameraController playerCameraController;
+        private bool cameraControllerReady = false;
+
         #region Unity生命周期
 
         private void Awake()
@@ -68,12 +74,29 @@ namespace UI
 
             // 验证组件配置
             ValidateComponents();
+
+            // 尝试立即查找摄像机控制器（如果已经初始化）
+            if (!cameraControllerReady)
+            {
+                StartCoroutine(FindPlayerCameraControllerCoroutine());
+            }
+        }
+
+        private void OnEnable()
+        {
+            SubscribeToClassroomManagerEvents();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeFromClassroomManagerEvents();
         }
 
         private void OnDestroy()
         {
             // 清理事件订阅
             UnregisterNetworkEvents();
+            UnsubscribeFromClassroomManagerEvents();
 
             // 停止协程
             if (fadeCoroutine != null)
@@ -83,6 +106,151 @@ namespace UI
             if (autoMinimizeCoroutine != null)
             {
                 StopCoroutine(autoMinimizeCoroutine);
+            }
+        }
+
+        #endregion
+
+        #region 事件订阅管理 - 新增
+
+        /// <summary>
+        /// 订阅ClassroomManager事件
+        /// </summary>
+        private void SubscribeToClassroomManagerEvents()
+        {
+            // 如果ClassroomManager存在，订阅其事件
+            if (FindObjectOfType<Classroom.ClassroomManager>() != null)
+            {
+                Classroom.ClassroomManager.OnCameraSetupCompleted += OnCameraSetupCompleted;
+                Classroom.ClassroomManager.OnClassroomInitialized += OnClassroomInitialized;
+            }
+        }
+
+        /// <summary>
+        /// 取消订阅ClassroomManager事件
+        /// </summary>
+        private void UnsubscribeFromClassroomManagerEvents()
+        {
+            // 如果ClassroomManager存在，取消订阅其事件
+            if (FindObjectOfType<Classroom.ClassroomManager>() != null)
+            {
+                Classroom.ClassroomManager.OnCameraSetupCompleted -= OnCameraSetupCompleted;
+                Classroom.ClassroomManager.OnClassroomInitialized -= OnClassroomInitialized;
+            }
+        }
+
+        /// <summary>
+        /// 响应摄像机设置完成事件
+        /// </summary>
+        private void OnCameraSetupCompleted()
+        {
+            LogDebug("收到摄像机设置完成事件，开始查找摄像机控制器");
+            StartCoroutine(FindPlayerCameraControllerCoroutine());
+        }
+
+        /// <summary>
+        /// 响应教室初始化完成事件（备用方案）
+        /// </summary>
+        private void OnClassroomInitialized()
+        {
+            if (!cameraControllerReady)
+            {
+                LogDebug("教室初始化完成，尝试查找摄像机控制器（备用方案）");
+                StartCoroutine(FindPlayerCameraControllerCoroutine());
+            }
+        }
+
+        #endregion
+
+        #region 摄像机控制器查找 - 新增
+
+        /// <summary>
+        /// 协程方式查找玩家摄像机控制器
+        /// </summary>
+        private IEnumerator FindPlayerCameraControllerCoroutine()
+        {
+            LogDebug("开始查找玩家摄像机控制器");
+
+            float timeout = 5f; // 5秒超时
+            float elapsed = 0f;
+
+            while (elapsed < timeout && playerCameraController == null)
+            {
+                playerCameraController = FindPlayerCameraController();
+
+                if (playerCameraController != null)
+                {
+                    cameraControllerReady = true;
+                    LogDebug($"成功找到摄像机控制器: {playerCameraController.name}");
+                    break;
+                }
+
+                elapsed += 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            if (playerCameraController == null)
+            {
+                LogDebug("未能找到摄像机控制器，将使用备用方案");
+                // 可以添加备用查找逻辑或错误处理
+            }
+        }
+
+        /// <summary>
+        /// 查找玩家摄像机控制器
+        /// </summary>
+        private PlayerCameraController FindPlayerCameraController()
+        {
+            // 方式1: 通过ClassroomManager获取（推荐方式）
+            var classroomManager = FindObjectOfType<Classroom.ClassroomManager>();
+            if (classroomManager != null && classroomManager.IsInitialized)
+            {
+                var cameraController = classroomManager.GetLocalPlayerCameraController();
+                if (cameraController != null)
+                {
+                    LogDebug($"通过ClassroomManager找到摄像机控制器: {cameraController.name}");
+                    return cameraController;
+                }
+            }
+
+            // 方式2: 遍历所有PlayerCameraController找到本地玩家的
+            var controllers = FindObjectsOfType<PlayerCameraController>();
+            foreach (var controller in controllers)
+            {
+                if (controller.IsLocalPlayer)
+                {
+                    LogDebug($"通过遍历找到本地玩家摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            // 方式3: 查找包含"Local"、"Player"等关键词的摄像机控制器
+            foreach (var controller in controllers)
+            {
+                if (controller.gameObject.name.Contains("Local") ||
+                    controller.gameObject.name.Contains("Player"))
+                {
+                    LogDebug($"通过关键词找到摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 控制摄像机
+        /// </summary>
+        private void SetCameraControl(bool enabled)
+        {
+            if (playerCameraController != null)
+            {
+                playerCameraController.SetControlEnabled(enabled);
+                LogDebug($"摄像机控制: {(enabled ? "启用" : "禁用")}");
+            }
+            else
+            {
+                LogDebug("摄像机控制器不可用，无法控制摄像机");
             }
         }
 
@@ -429,6 +597,9 @@ namespace UI
             // ✅ 确保PlayerDeathUI在合适的层级
             EnsureProperLayer();
 
+            // 禁用摄像机控制 - 新增
+            SetCameraControl(false);
+
             // 激活面板
             if (deathPanel != null)
             {
@@ -465,6 +636,9 @@ namespace UI
 
             isPanelVisible = false;
             isPanelMinimized = false;
+
+            // 启用摄像机控制 - 新增
+            SetCameraControl(true);
 
             // 停止自动最小化协程
             if (autoMinimizeCoroutine != null)
@@ -503,6 +677,9 @@ namespace UI
             LogDebug("最小化死亡面板");
             isPanelMinimized = true;
 
+            // 最小化时恢复摄像机控制 - 新增
+            SetCameraControl(true);
+
             // 淡出到半透明状态，但保持可见
             if (panelCanvasGroup != null)
             {
@@ -524,6 +701,9 @@ namespace UI
 
             LogDebug("恢复死亡面板");
             isPanelMinimized = false;
+
+            // 恢复面板时禁用摄像机控制 - 新增
+            SetCameraControl(false);
 
             // 恢复到完全可见状态
             if (panelCanvasGroup != null)
@@ -688,6 +868,7 @@ namespace UI
             panelCanvasGroup.alpha = targetAlpha;
             // 保持交互性，但降低可见度
         }
+
         private void EnablePanelInteraction()
         {
             if (panelCanvasGroup != null)
@@ -696,6 +877,7 @@ namespace UI
                 panelCanvasGroup.blocksRaycasts = true;
             }
         }
+
         private void DisablePanelInteraction()
         {
             if (panelCanvasGroup != null)
@@ -708,6 +890,7 @@ namespace UI
         #endregion
 
         #region 按钮事件处理
+
         private void OnExitToRoomButtonClicked()
         {
             LogDebug("退出房间按钮被点击");
@@ -739,6 +922,7 @@ namespace UI
         #endregion
 
         #region 游戏逻辑调用
+
         private void RequestReturnToRoom()
         {
             LogDebug($"请求返回房间 - 玩家ID: {localPlayerId}");
@@ -761,6 +945,7 @@ namespace UI
         #endregion
 
         #region 公共接口
+
         public bool IsLocalPlayerDead => isLocalPlayerDead;
         public bool IsPanelVisible => isPanelVisible;
         public bool IsPanelMinimized => isPanelMinimized;
@@ -768,6 +953,7 @@ namespace UI
         #endregion
 
         #region 调试方法
+
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -775,6 +961,7 @@ namespace UI
                 Debug.Log($"[PlayerDeathUI] {message}");
             }
         }
+
         #endregion
     }
 }

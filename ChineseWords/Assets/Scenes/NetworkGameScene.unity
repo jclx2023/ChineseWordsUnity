@@ -165,7 +165,7 @@ Light:
   serializedVersion: 10
   m_Type: 3
   m_Shape: 0
-  m_Color: {r: 1, g: 1, b: 0.8666667, a: 1}
+  m_Color: {r: 1, g: 1, b: 0.906, a: 1}
   m_Intensity: 0.5
   m_Range: 0.2
   m_SpotAngle: 30
@@ -438,8 +438,8 @@ Light:
   serializedVersion: 10
   m_Type: 0
   m_Shape: 0
-  m_Color: {r: 1, g: 0.9908805, b: 0.8627451, a: 1}
-  m_Intensity: 2
+  m_Color: {r: 1, g: 0.9950857, b: 0.914, a: 1}
+  m_Intensity: 1.5
   m_Range: 6.5
   m_SpotAngle: 140
   m_InnerSpotAngle: 1
@@ -618,7 +618,7 @@ Light:
   serializedVersion: 10
   m_Type: 3
   m_Shape: 0
-  m_Color: {r: 1, g: 1, b: 0.8784314, a: 1}
+  m_Color: {r: 1, g: 1, b: 0.915, a: 1}
   m_Intensity: 1
   m_Range: 4
   m_SpotAngle: 30
@@ -4102,6 +4102,10 @@ PrefabInstance:
     - target: {fileID: 4118733970373792430, guid: 9ba2d7a5cc8bc8048b7b9c9080a96e62, type: 3}
       propertyPath: m_Name
       value: ExitConfirmDialog
+      objectReference: {fileID: 0}
+    - target: {fileID: 4118733970373792430, guid: 9ba2d7a5cc8bc8048b7b9c9080a96e62, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5586586694000793192, guid: 9ba2d7a5cc8bc8048b7b9c9080a96e62, type: 3}
       propertyPath: m_AnchorMax.y

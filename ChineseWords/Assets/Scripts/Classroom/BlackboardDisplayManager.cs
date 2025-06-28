@@ -543,7 +543,7 @@ namespace UI.Blackboard
             }
 
             // 显示状态
-            UpdateDisplayStatus("请作答", statusColor);
+            UpdateDisplayStatus("请按下鼠标右键作答", statusColor);
 
             // 强制更新布局
             StartCoroutine(RefreshLayout());
