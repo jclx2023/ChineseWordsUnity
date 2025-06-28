@@ -1,5 +1,4 @@
-using UnityEngine;
-using TMPro;
+ï»¿using UnityEngine;
 using Core;
 using System;
 using System.Collections;
@@ -8,47 +7,55 @@ using Core.Network;
 namespace Managers
 {
     /// <summary>
-    /// µ¹¼ÆÊ±¹ÜÀíÆ÷
-    /// - ¹ÜÀí´ğÌâµ¹¼ÆÊ±Âß¼­£¬¿ÉÍ¨¹ıÍâ²¿ÅäÖÃÉèÖÃÊ±³¤
-    /// - Ö§³ÖÔİÍ£¡¢»Ö¸´¡¢ÖØÖÃµÈ¹¦ÄÜ
-    /// - Ìá¹©·á¸»µÄÊ±¼äÊÂ¼şÍ¨Öª
-    /// - Ö§³Ö¶àÖÖÏÔÊ¾¸ñÊ½ºÍÑùÊ½
+    /// TimerManager - çº¯æ—¶é’Ÿç‰ˆæœ¬
+    /// ç§»é™¤äº†æ–‡æœ¬æ˜¾ç¤ºåŠŸèƒ½ï¼Œåªä¿ç•™Spriteæ—¶é’Ÿ
+    /// ä¿æŒæ‰€æœ‰åŸæœ‰æ¥å£å’Œç½‘ç»œå…¼å®¹æ€§
     /// </summary>
     public class TimerManager : MonoBehaviour
     {
-        [Header("µ¹¼ÆÊ±ÅäÖÃ")]
+        [Header("å€’è®¡æ—¶é…ç½®")]
         [SerializeField] private float defaultTimeLimit = 20f;
         [SerializeField] private bool autoStartOnEnable = false;
         [SerializeField] private bool loopTimer = false;
 
-        [Header("UI×é¼ş")]
-        [SerializeField] private TMP_Text timerText;
-        [SerializeField] private string timerTextFormat = "µ¹¼ÆÊ±: {0}";
-        [SerializeField] private string timeUpText = "Ê±¼äµ½£¡";
+        [Header("Spriteæ—¶é’Ÿ")]
+        [SerializeField] private RectTransform clockFace;     // æ‹–æ‹½Face sprite
+        [SerializeField] private RectTransform clockPointer;  // æ‹–æ‹½Pointer sprite
+        [SerializeField] private bool enableClock = true;     // æ—¶é’Ÿæ€»å¼€å…³
 
-        [Header("ÑÕÉ«ÉèÖÃ")]
+        [Header("æ—¶é’ŸåŠ¨ç”»è®¾ç½®")]
+        [SerializeField] private PointerRotationMode rotationMode = PointerRotationMode.CounterClockwise;
+
+        [Header("æ—¶é’Ÿé¢œè‰²åé¦ˆï¼ˆå¯é€‰ï¼‰")]
+        [SerializeField] private bool enableColorFeedback = false;
         [SerializeField] private Color normalColor = Color.white;
         [SerializeField] private Color warningColor = Color.yellow;
         [SerializeField] private Color criticalColor = Color.red;
         [SerializeField] private float warningThreshold = 5f;
         [SerializeField] private float criticalThreshold = 3f;
 
-        [Header("µ÷ÊÔĞÅÏ¢")]
+        [Header("è°ƒè¯•ä¿¡æ¯")]
         [SerializeField] private bool enableDebugLog = true;
 
-        // µ±Ç°ÅäÖÃµÄÊ±¼äÏŞÖÆ
+        // è®¡æ—¶å™¨çŠ¶æ€
         private float timeLimit;
-
-        // µ±Ç°Ê£ÓàÊ±¼ä
         private float currentTime;
-
-        // µ¹¼ÆÊ±Ğ­³Ì
         private Coroutine countdownCoroutine;
         private bool isRunning = false;
         private bool isPaused = false;
 
+        // æ—¶é’Ÿç›¸å…³
+        private Vector3 initialPointerRotation;
+        private UnityEngine.UI.Image clockPointerImage;
+        private UnityEngine.UI.Image clockFaceImage;
 
-        #region ÊÂ¼ş¶¨Òå
+        public enum PointerRotationMode
+        {
+            Clockwise,        // é¡ºæ—¶é’ˆï¼ˆæ—¶é—´æµé€ï¼‰
+            CounterClockwise  // é€†æ—¶é’ˆï¼ˆå€’è®¡æ—¶ï¼‰
+        }
+
+        #region äº‹ä»¶å®šä¹‰ - ä¿æŒåŸæœ‰æ¥å£
 
         public event Action OnTimeUp;
         public event Action<float> OnTimeChanged;
@@ -61,7 +68,7 @@ namespace Managers
 
         #endregion
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
@@ -70,7 +77,6 @@ namespace Managers
 
         private void Start()
         {
-            // Èç¹ûÃ»ÓĞÍ¨¹ıÍâ²¿ÅäÖÃ£¬ÔòÊ¹ÓÃÄ¬ÈÏÅäÖÃ
             if (timeLimit == 0)
             {
                 ApplyConfig(defaultTimeLimit);
@@ -103,106 +109,138 @@ namespace Managers
 
         #endregion
 
-        #region ³õÊ¼»¯
+        #region åˆå§‹åŒ–
 
         /// <summary>
-        /// ³õÊ¼»¯×é¼ş
+        /// åˆå§‹åŒ–ç»„ä»¶
         /// </summary>
         private void InitializeComponent()
         {
-            // ÉèÖÃÄ¬ÈÏÊ±¼äÏŞÖÆ
             timeLimit = defaultTimeLimit;
             currentTime = timeLimit;
 
-            // ³õÊ¼»¯UI
-            UpdateTimerUI();
+            // åˆå§‹åŒ–æ—¶é’Ÿ
+            InitializeClock();
 
-            LogDebug("TimerManager ³õÊ¼»¯Íê³É");
+            // æ›´æ–°æ˜¾ç¤º
+            UpdateClock();
+
+            LogDebug("TimerManagerï¼ˆçº¯æ—¶é’Ÿç‰ˆï¼‰åˆå§‹åŒ–å®Œæˆ");
         }
 
         /// <summary>
-        /// Ó¦ÓÃÅäÖÃ
+        /// åˆå§‹åŒ–æ—¶é’Ÿ
         /// </summary>
-        /// <param name="newTimeLimit">ĞÂµÄÊ±¼äÏŞÖÆ</param>
+        private void InitializeClock()
+        {
+            if (!enableClock) return;
+
+            // è·å–Imageç»„ä»¶
+            if (clockPointer != null)
+            {
+                clockPointerImage = clockPointer.GetComponent<UnityEngine.UI.Image>();
+                initialPointerRotation = clockPointer.localEulerAngles;
+                LogDebug($"æ—¶é’ŸæŒ‡é’ˆåˆå§‹åŒ–å®Œæˆ: {clockPointer.name}");
+            }
+            else
+            {
+                Debug.LogWarning("[TimerManager] æœªè®¾ç½®æ—¶é’ŸæŒ‡é’ˆå¼•ç”¨");
+            }
+
+            if (clockFace != null)
+            {
+                clockFaceImage = clockFace.GetComponent<UnityEngine.UI.Image>();
+                LogDebug($"æ—¶é’Ÿè¡¨ç›˜åˆå§‹åŒ–å®Œæˆ: {clockFace.name}");
+            }
+            else
+            {
+                Debug.LogWarning("[TimerManager] æœªè®¾ç½®æ—¶é’Ÿè¡¨ç›˜å¼•ç”¨");
+            }
+
+            // è®¾ç½®åˆå§‹å¯è§æ€§
+            UpdateClockVisibility();
+        }
+
+        /// <summary>
+        /// åº”ç”¨é…ç½® - ä¿æŒåŸæœ‰æ¥å£
+        /// </summary>
         public void ApplyConfig(float newTimeLimit)
         {
             if (newTimeLimit <= 0)
             {
-                Debug.LogWarning($"[TimerManager] Ê±¼äÏŞÖÆ²»ÄÜĞ¡ÓÚµÈÓÚ0£¬Ê¹ÓÃÄ¬ÈÏÖµ{defaultTimeLimit}¡£´«ÈëÖµ: {newTimeLimit}");
+                Debug.LogWarning($"[TimerManager] æ—¶é—´é™åˆ¶æ— æ•ˆ: {newTimeLimit}ï¼Œä½¿ç”¨é»˜è®¤å€¼");
                 newTimeLimit = defaultTimeLimit;
             }
 
             timeLimit = newTimeLimit;
             currentTime = timeLimit;
 
-            LogDebug($"ÅäÖÃÓ¦ÓÃÍê³É - Ê±¼äÏŞÖÆ: {timeLimit}Ãë");
+            LogDebug($"é…ç½®åº”ç”¨å®Œæˆ - æ—¶é—´é™åˆ¶: {timeLimit}ç§’");
 
-            // ¸üĞÂUIÏÔÊ¾
-            UpdateTimerUI();
+            // é‡ç½®æ—¶é’Ÿ
+            ResetClock();
+
+            // æ›´æ–°æ˜¾ç¤º
+            UpdateClock();
         }
 
-
-        /// <summary>
-        /// È¡ÏûÊÂ¼ş¶©ÔÄ
-        /// </summary>
         private void UnsubscribeFromEvents()
         {
-            // Èç¹ûÓĞÓëÆäËû×é¼şµÄÊÂ¼ş¶©ÔÄ£¬ÔÚÕâÀïÈ¡Ïû
-            LogDebug("È¡ÏûÊÂ¼ş¶©ÔÄ");
+            LogDebug("å–æ¶ˆäº‹ä»¶è®¢é˜…");
         }
 
         #endregion
 
-        #region ¼ÆÊ±Æ÷¿ØÖÆ
+        #region è®¡æ—¶å™¨æ§åˆ¶ - ä¿æŒåŸæœ‰æ¥å£
 
         /// <summary>
-        /// ¿ªÊ¼»òÖØÖÃµ¹¼ÆÊ±
+        /// å¼€å§‹å€’è®¡æ—¶
         /// </summary>
         public void StartTimer()
         {
-            StopTimer(); // ÏÈÍ£Ö¹Ö®Ç°µÄ¼ÆÊ±Æ÷
+            StopTimer();
 
             currentTime = timeLimit;
             isRunning = true;
             isPaused = false;
 
+            // é‡ç½®æ—¶é’Ÿ
+            ResetClock();
+
             countdownCoroutine = StartCoroutine(Countdown());
 
-            LogDebug($"¿ªÊ¼µ¹¼ÆÊ± - Ê±³¤: {timeLimit}Ãë");
-
-            // ´¥·¢Æô¶¯ÊÂ¼ş
+            LogDebug($"å¼€å§‹å€’è®¡æ—¶ - æ—¶é•¿: {timeLimit}ç§’");
             OnTimerStarted?.Invoke();
         }
 
         /// <summary>
-        /// ¿ªÊ¼µ¹¼ÆÊ±£¨Ö¸¶¨Ê±¼ä£©
+        /// å¼€å§‹å€’è®¡æ—¶ï¼ˆæŒ‡å®šæ—¶é—´ï¼‰
         /// </summary>
         public void StartTimer(float customTime)
         {
             if (customTime <= 0)
             {
-                Debug.LogWarning($"[TimerManager] ×Ô¶¨ÒåÊ±¼äÎŞĞ§: {customTime}£¬Ê¹ÓÃµ±Ç°ÅäÖÃÊ±¼ä{timeLimit}");
+                Debug.LogWarning($"[TimerManager] è‡ªå®šä¹‰æ—¶é—´æ— æ•ˆ: {customTime}");
                 StartTimer();
                 return;
             }
 
-            StopTimer(); // ÏÈÍ£Ö¹Ö®Ç°µÄ¼ÆÊ±Æ÷
+            StopTimer();
 
             timeLimit = customTime;
             currentTime = customTime;
             isRunning = true;
             isPaused = false;
 
+            ResetClock();
             countdownCoroutine = StartCoroutine(Countdown());
 
-            LogDebug($"¿ªÊ¼×Ô¶¨Òåµ¹¼ÆÊ± - Ê±³¤: {customTime}Ãë");
-
-            // ´¥·¢Æô¶¯ÊÂ¼ş
+            LogDebug($"å¼€å§‹è‡ªå®šä¹‰å€’è®¡æ—¶ - æ—¶é•¿: {customTime}ç§’");
             OnTimerStarted?.Invoke();
         }
 
         /// <summary>
-        /// Í£Ö¹µ¹¼ÆÊ±
+        /// åœæ­¢å€’è®¡æ—¶
         /// </summary>
         public void StopTimer()
         {
@@ -218,97 +256,76 @@ namespace Managers
 
             if (wasRunning)
             {
-                LogDebug("µ¹¼ÆÊ±ÒÑÍ£Ö¹");
+                LogDebug("å€’è®¡æ—¶å·²åœæ­¢");
                 OnTimerStopped?.Invoke();
             }
         }
 
         /// <summary>
-        /// ÔİÍ£µ¹¼ÆÊ±
+        /// æš‚åœå€’è®¡æ—¶
         /// </summary>
         public void PauseTimer()
         {
-            if (!isRunning || isPaused)
-            {
-                LogDebug("¼ÆÊ±Æ÷Î´ÔËĞĞ»òÒÑÔİÍ££¬ÎŞ·¨ÔİÍ£");
-                return;
-            }
+            if (!isRunning || isPaused) return;
 
             isPaused = true;
-            LogDebug("µ¹¼ÆÊ±ÒÑÔİÍ£");
-
+            LogDebug("å€’è®¡æ—¶å·²æš‚åœ");
             OnTimerPaused?.Invoke();
         }
 
         /// <summary>
-        /// »Ö¸´µ¹¼ÆÊ±
+        /// æ¢å¤å€’è®¡æ—¶
         /// </summary>
         public void ResumeTimer()
         {
-            if (!isRunning || !isPaused)
-            {
-                LogDebug("¼ÆÊ±Æ÷Î´ÔËĞĞ»òÎ´ÔİÍ££¬ÎŞ·¨»Ö¸´");
-                return;
-            }
+            if (!isRunning || !isPaused) return;
 
             isPaused = false;
-            LogDebug("µ¹¼ÆÊ±ÒÑ»Ö¸´");
-
+            LogDebug("å€’è®¡æ—¶å·²æ¢å¤");
             OnTimerResumed?.Invoke();
         }
 
         /// <summary>
-        /// ÖØÖÃµ¹¼ÆÊ±£¨»Øµ½³õÊ¼Ê±¼äµ«²»¿ªÊ¼£©
+        /// é‡ç½®å€’è®¡æ—¶
         /// </summary>
         public void ResetTimer()
         {
             StopTimer();
             currentTime = timeLimit;
-            UpdateTimerUI();
-
-            LogDebug("µ¹¼ÆÊ±ÒÑÖØÖÃ");
+            ResetClock();
+            UpdateClock();
+            LogDebug("å€’è®¡æ—¶å·²é‡ç½®");
         }
 
         /// <summary>
-        /// Ìí¼ÓÊ±¼ä
+        /// æ·»åŠ æ—¶é—´
         /// </summary>
-        /// <param name="seconds">ÒªÌí¼ÓµÄÃëÊı</param>
         public void AddTime(float seconds)
         {
-            if (seconds <= 0)
-            {
-                Debug.LogWarning($"[TimerManager] Ìí¼ÓÊ±¼äÊıÖµÎŞĞ§: {seconds}");
-                return;
-            }
+            if (seconds <= 0) return;
 
             currentTime += seconds;
-            LogDebug($"Ìí¼ÓÊ±¼ä {seconds}Ãë£¬µ±Ç°Ê£ÓàÊ±¼ä: {currentTime}Ãë");
+            LogDebug($"æ·»åŠ æ—¶é—´ {seconds}ç§’ï¼Œå½“å‰å‰©ä½™: {currentTime}ç§’");
 
-            UpdateTimerUI();
+            UpdateClock();
             OnTimeChanged?.Invoke(currentTime);
         }
 
         /// <summary>
-        /// ¼õÉÙÊ±¼ä
+        /// å‡å°‘æ—¶é—´
         /// </summary>
         public void ReduceTime(float seconds)
         {
-            if (seconds <= 0)
-            {
-                Debug.LogWarning($"[TimerManager] ¼õÉÙÊ±¼äÊıÖµÎŞĞ§: {seconds}");
-                return;
-            }
+            if (seconds <= 0) return;
 
             currentTime -= seconds;
-            if (currentTime < 0)
-                currentTime = 0;
+            if (currentTime < 0) currentTime = 0;
 
-            LogDebug($"¼õÉÙÊ±¼ä {seconds}Ãë£¬µ±Ç°Ê£ÓàÊ±¼ä: {currentTime}Ãë");
+            LogDebug($"å‡å°‘æ—¶é—´ {seconds}ç§’ï¼Œå½“å‰å‰©ä½™: {currentTime}ç§’");
 
-            UpdateTimerUI();
+            UpdateClock();
             OnTimeChanged?.Invoke(currentTime);
 
-            // Èç¹ûÊ±¼äÓÃÍê£¬´¥·¢Ê±¼äµ½ÊÂ¼ş
             if (currentTime <= 0 && isRunning)
             {
                 HandleTimeUp();
@@ -317,10 +334,131 @@ namespace Managers
 
         #endregion
 
-        #region µ¹¼ÆÊ±Âß¼­
+        #region æ—¶é’Ÿæ§åˆ¶
 
         /// <summary>
-        /// µ¹¼ÆÊ±Ğ­³Ì
+        /// é‡ç½®æ—¶é’Ÿ
+        /// </summary>
+        private void ResetClock()
+        {
+            if (!enableClock || clockPointer == null) return;
+
+            clockPointer.localEulerAngles = initialPointerRotation;
+
+            // é‡ç½®é¢œè‰²
+            if (enableColorFeedback)
+            {
+                UpdateClockColor(false);
+            }
+
+            LogDebug("æ—¶é’Ÿå·²é‡ç½®");
+        }
+
+        /// <summary>
+        /// æ›´æ–°æ—¶é’Ÿæ˜¾ç¤º - å€’è®¡æ—¶ç‰ˆæœ¬
+        /// </summary>
+        private void UpdateClock()
+        {
+            if (!enableClock || clockPointer == null || timeLimit <= 0) return;
+
+            // è®¡ç®—å‰©ä½™æ—¶é—´å¯¹åº”çš„è§’åº¦ï¼šæ¯ç§’6åº¦ï¼ˆ360åº¦/60ç§’ï¼‰
+            float rotationAngle = currentTime * 6f;
+
+            // æ ¹æ®æ—‹è½¬æ¨¡å¼è°ƒæ•´æ–¹å‘
+            if (rotationMode == PointerRotationMode.CounterClockwise)
+            {
+                rotationAngle = -rotationAngle; // é€†æ—¶é’ˆï¼ˆå‰©ä½™æ—¶é—´è¶Šå°‘ï¼Œè§’åº¦è¶Šå°ï¼‰
+            }
+
+            // ç›´æ¥è®¾ç½®æ—‹è½¬
+            Vector3 rotation = initialPointerRotation;
+            rotation.z += rotationAngle;
+            clockPointer.localEulerAngles = rotation;
+
+            // æ›´æ–°é¢œè‰²åé¦ˆ
+            if (enableColorFeedback)
+            {
+                UpdateClockColor(false);
+            }
+
+            LogDebug($"æ—¶é’Ÿæ›´æ–°: å‰©ä½™æ—¶é—´{currentTime}ç§’, æ—‹è½¬è§’åº¦{rotationAngle}åº¦");
+        }
+
+        /// <summary>
+        /// è®¡ç®—æŒ‡é’ˆè§’åº¦ - å€’è®¡æ—¶ç‰ˆæœ¬
+        /// </summary>
+        private float CalculatePointerAngle(float remainingSeconds)
+        {
+            float angle = remainingSeconds * 6f; // æ¯ç§’6åº¦
+
+            switch (rotationMode)
+            {
+                case PointerRotationMode.CounterClockwise:
+                    return -angle; // é€†æ—¶é’ˆï¼ˆå‰©ä½™æ—¶é—´å¯¹åº”è´Ÿè§’åº¦ï¼‰
+                case PointerRotationMode.Clockwise:
+                    return angle;  // é¡ºæ—¶é’ˆ
+                default:
+                    return -angle;
+            }
+        }
+
+        /// <summary>
+        /// æ›´æ–°æ—¶é’Ÿé¢œè‰²åé¦ˆ
+        /// </summary>
+        private void UpdateClockColor(bool isTimeUp)
+        {
+            if (!enableColorFeedback) return;
+
+            Color targetColor = normalColor;
+
+            if (isTimeUp)
+            {
+                targetColor = criticalColor;
+            }
+            else if (currentTime <= criticalThreshold)
+            {
+                targetColor = criticalColor;
+            }
+            else if (currentTime <= warningThreshold)
+            {
+                targetColor = warningColor;
+            }
+
+            // åº”ç”¨é¢œè‰²åˆ°æŒ‡é’ˆ
+            if (clockPointerImage != null)
+            {
+                clockPointerImage.color = targetColor;
+            }
+
+            // å¯é€‰ï¼šä¹Ÿå¯ä»¥åº”ç”¨åˆ°è¡¨ç›˜
+            // if (clockFaceImage != null)
+            // {
+            //     clockFaceImage.color = Color.Lerp(Color.white, targetColor, 0.3f);
+            // }
+        }
+
+        /// <summary>
+        /// æ›´æ–°æ—¶é’Ÿå¯è§æ€§
+        /// </summary>
+        private void UpdateClockVisibility()
+        {
+            if (clockFace != null)
+            {
+                clockFace.gameObject.SetActive(enableClock);
+            }
+
+            if (clockPointer != null)
+            {
+                clockPointer.gameObject.SetActive(enableClock);
+            }
+        }
+
+        #endregion
+
+        #region å€’è®¡æ—¶é€»è¾‘
+
+        /// <summary>
+        /// å€’è®¡æ—¶åç¨‹
         /// </summary>
         private IEnumerator Countdown()
         {
@@ -329,41 +467,38 @@ namespace Managers
 
             while (currentTime > 0f && isRunning)
             {
-                // Èç¹ûÔİÍ££¬µÈ´ı»Ö¸´
+                // æš‚åœå¤„ç†
                 while (isPaused)
                 {
                     yield return null;
                 }
 
-                // ¸üĞÂUI
-                UpdateTimerUI();
+                // æ›´æ–°æ—¶é’Ÿæ˜¾ç¤º
+                UpdateClock();
 
-                // ¼ì²é¾¯¸æºÍÎ£ÏÕãĞÖµ
+                // æ£€æŸ¥è­¦å‘Šé˜ˆå€¼
                 if (!hasTriggeredWarning && currentTime <= warningThreshold && currentTime > criticalThreshold)
                 {
                     hasTriggeredWarning = true;
                     OnWarningTime?.Invoke();
-                    LogDebug("½øÈë¾¯¸æÊ±¼ä");
+                    LogDebug("è¿›å…¥è­¦å‘Šæ—¶é—´");
                 }
 
                 if (!hasTriggeredCritical && currentTime <= criticalThreshold)
                 {
                     hasTriggeredCritical = true;
                     OnCriticalTime?.Invoke();
-                    LogDebug("½øÈëÎ£ÏÕÊ±¼ä");
+                    LogDebug("è¿›å…¥å±é™©æ—¶é—´");
                 }
 
-                // ´¥·¢Ê±¼ä±ä»¯ÊÂ¼ş
+                // è§¦å‘æ—¶é—´å˜åŒ–äº‹ä»¶
                 OnTimeChanged?.Invoke(currentTime);
 
-                // µÈ´ı1Ãë
                 yield return new WaitForSeconds(1f);
-
-                // ¼õÉÙ1Ãë
                 currentTime -= 1f;
             }
 
-            // Ê±¼äÓÃÍê
+            // æ—¶é—´åˆ°
             if (isRunning)
             {
                 currentTime = 0f;
@@ -374,19 +509,27 @@ namespace Managers
         }
 
         /// <summary>
-        /// ´¦ÀíÊ±¼äµ½
+        /// å¤„ç†æ—¶é—´åˆ°
         /// </summary>
         private void HandleTimeUp()
         {
-            LogDebug("Ê±¼äµ½£¡");
-            UpdateTimerUI(true);
+            LogDebug("æ—¶é—´åˆ°ï¼");
+
+            // æ›´æ–°æ—¶é’Ÿæ˜¾ç¤ºï¼ˆæ—¶é—´åˆ°çŠ¶æ€ï¼‰
+            UpdateClock();
+
+            // æ›´æ–°é¢œè‰²ä¸ºå±é™©è‰²
+            if (enableColorFeedback)
+            {
+                UpdateClockColor(true);
+            }
 
             OnTimeUp?.Invoke();
         }
 
         private void HandleTimeoutAnswerSubmission()
         {
-            LogDebug("³¬Ê±×Ô¶¯Ìá½»´ğ°¸");
+            LogDebug("è¶…æ—¶è‡ªåŠ¨æäº¤ç­”æ¡ˆ");
             SubmitTimeoutAnswer();
         }
 
@@ -400,74 +543,71 @@ namespace Managers
 
         #endregion
 
-        #region UI¸üĞÂ
+        #region æ–°å¢åŠŸèƒ½æ¥å£
 
-        private void UpdateTimerUI(bool isTimeUp = false)
+        /// <summary>
+        /// å¯ç”¨/ç¦ç”¨æ—¶é’Ÿ
+        /// </summary>
+        public void SetClockEnabled(bool enabled)
         {
-            if (timerText == null)
-            {
-                Debug.LogWarning("[TimerManager] ¼ÆÊ±Æ÷ÎÄ±¾×é¼şÎ´ÉèÖÃ");
-                return;
-            }
-
-            if (isTimeUp)
-            {
-                timerText.text = timeUpText;
-                timerText.color = criticalColor;
-            }
-            else
-            {
-                // ¸ñÊ½»¯ÏÔÊ¾Ê±¼ä
-                string timeDisplay = FormatTime(currentTime);
-                timerText.text = string.Format(timerTextFormat, timeDisplay);
-
-                UpdateTimerColor();
-            }
+            enableClock = enabled;
+            UpdateClockVisibility();
+            LogDebug($"æ—¶é’Ÿ{(enabled ? "å·²å¯ç”¨" : "å·²ç¦ç”¨")}");
         }
 
         /// <summary>
-        /// ¸ñÊ½»¯Ê±¼äÏÔÊ¾
+        /// è®¾ç½®æ—¶é’Ÿç»„ä»¶å¼•ç”¨
         /// </summary>
-        private string FormatTime(float time)
+        public void SetClockSprites(RectTransform face, RectTransform pointer)
         {
-            int seconds = Mathf.CeilToInt(time);
+            clockFace = face;
+            clockPointer = pointer;
 
-            if (seconds >= 60)
+            if (Application.isPlaying)
             {
-                int minutes = seconds / 60;
-                int remainingSeconds = seconds % 60;
-                return $"{minutes:00}:{remainingSeconds:00}";
+                InitializeClock();
             }
-            else
-            {
-                return seconds.ToString();
-            }
+
+            LogDebug("æ—¶é’ŸSpriteå¼•ç”¨å·²è®¾ç½®");
         }
 
         /// <summary>
-        /// ¸ù¾İÊ£ÓàÊ±¼ä¸üĞÂÑÕÉ«
+        /// è®¾ç½®æŒ‡é’ˆæ—‹è½¬æ¨¡å¼
         /// </summary>
-        private void UpdateTimerColor()
+        public void SetRotationMode(PointerRotationMode mode)
         {
-            if (timerText == null) return;
+            rotationMode = mode;
+            LogDebug($"æŒ‡é’ˆæ—‹è½¬æ¨¡å¼è®¾ç½®ä¸º: {mode}");
+        }
 
-            if (currentTime <= criticalThreshold)
+        /// <summary>
+        /// æ‰‹åŠ¨è®¾ç½®æŒ‡é’ˆè§’åº¦ï¼ˆç”¨äºæµ‹è¯•ï¼‰
+        /// </summary>
+        public void SetPointerAngle(float remainingSeconds)
+        {
+            if (!enableClock || clockPointer == null) return;
+
+            float angle = CalculatePointerAngle(remainingSeconds);
+            Vector3 rotation = initialPointerRotation + new Vector3(0, 0, angle);
+            clockPointer.localEulerAngles = rotation;
+        }
+
+        /// <summary>
+        /// å¯ç”¨/ç¦ç”¨é¢œè‰²åé¦ˆ
+        /// </summary>
+        public void SetColorFeedbackEnabled(bool enabled)
+        {
+            enableColorFeedback = enabled;
+            if (!enabled && clockPointerImage != null)
             {
-                timerText.color = criticalColor;
+                clockPointerImage.color = Color.white; // é‡ç½®ä¸ºç™½è‰²
             }
-            else if (currentTime <= warningThreshold)
-            {
-                timerText.color = warningColor;
-            }
-            else
-            {
-                timerText.color = normalColor;
-            }
+            LogDebug($"é¢œè‰²åé¦ˆ{(enabled ? "å·²å¯ç”¨" : "å·²ç¦ç”¨")}");
         }
 
         #endregion
 
-        #region ¹«¹²½Ó¿Ú
+        #region å…¬å…±æ¥å£ - ä¿æŒåŸæœ‰æ¥å£
 
         public float CurrentTime => currentTime;
         public float RemainingTime => currentTime;
@@ -477,9 +617,14 @@ namespace Managers
         public float Progress => timeLimit > 0 ? (timeLimit - currentTime) / timeLimit : 0f;
         public float RemainingPercentage => timeLimit > 0 ? currentTime / timeLimit : 0f;
 
+        // æ–°å¢å±æ€§
+        public bool IsClockEnabled => enableClock;
+        public PointerRotationMode RotationMode => rotationMode;
+        public bool IsColorFeedbackEnabled => enableColorFeedback;
+
         #endregion
 
-        #region µ÷ÊÔ¹¤¾ß
+        #region è°ƒè¯•å·¥å…·
 
         private void LogDebug(string message)
         {
@@ -487,6 +632,52 @@ namespace Managers
             {
                 Debug.Log($"[TimerManager] {message}");
             }
+        }
+
+        [ContextMenu("ğŸ“Š æ˜¾ç¤ºçŠ¶æ€ä¿¡æ¯")]
+        public void ShowStatusInfo()
+        {
+            Debug.Log("=== TimerManagerï¼ˆçº¯æ—¶é’Ÿç‰ˆï¼‰çŠ¶æ€ä¿¡æ¯ ===");
+            Debug.Log($"æ—¶é—´é™åˆ¶: {timeLimit}ç§’");
+            Debug.Log($"å½“å‰æ—¶é—´: {currentTime}ç§’");
+            Debug.Log($"è¿è¡ŒçŠ¶æ€: {(isRunning ? "è¿è¡Œä¸­" : "å·²åœæ­¢")}");
+            Debug.Log($"æš‚åœçŠ¶æ€: {(isPaused ? "å·²æš‚åœ" : "æ­£å¸¸")}");
+            Debug.Log($"æ—¶é’Ÿå¯ç”¨: {enableClock}");
+            Debug.Log($"æ—‹è½¬æ¨¡å¼: {rotationMode}");
+            Debug.Log($"é¢œè‰²åé¦ˆ: {enableColorFeedback}");
+            Debug.Log($"æ—¶é’Ÿè¡¨ç›˜: {(clockFace != null ? clockFace.name : "æœªè®¾ç½®")}");
+            Debug.Log($"æ—¶é’ŸæŒ‡é’ˆ: {(clockPointer != null ? clockPointer.name : "æœªè®¾ç½®")}");
+        }
+
+        [ContextMenu("ğŸ§ª æµ‹è¯•æŒ‡é’ˆæ—‹è½¬")]
+        public void TestPointerRotation()
+        {
+            if (!enableClock) return;
+
+            StartCoroutine(TestRotationCoroutine());
+        }
+
+        private IEnumerator TestRotationCoroutine()
+        {
+            LogDebug("å¼€å§‹æµ‹è¯•æŒ‡é’ˆæ—‹è½¬...");
+
+            // æµ‹è¯•å€’è®¡æ—¶ï¼šä»60ç§’åˆ°0ç§’
+            for (float t = 60; t >= 0; t -= 3f)
+            {
+                SetPointerAngle(t);
+                yield return new WaitForSeconds(0.2f);
+            }
+
+            // é‡ç½®åˆ°åˆå§‹ä½ç½®
+            SetPointerAngle(0f);
+            LogDebug("æŒ‡é’ˆæ—‹è½¬æµ‹è¯•å®Œæˆ");
+        }
+
+        [ContextMenu("ğŸ”„ é‡ç½®æ—¶é’Ÿä½ç½®")]
+        public void ResetClockPosition()
+        {
+            ResetClock();
+            LogDebug("æ—¶é’Ÿä½ç½®å·²é‡ç½®");
         }
 
         #endregion
