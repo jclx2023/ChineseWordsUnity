@@ -16,7 +16,7 @@ MonoBehaviour:
   - cardId: 1
     cardName: "\u725B\u5976\u76D2"
     description: "\u4E3A\u81EA\u8EAB\u56DE\u590D1\u70B9\u751F\u547D\u503C"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 3cbd45c47870e2642952eb07db3aabd1, type: 3}
     cardType: 0
     effectType: 2
     targetType: 0
@@ -29,7 +29,7 @@ MonoBehaviour:
   - cardId: 2
     cardName: "\u8BF7\u5047\u6761"
     description: "\u4E0B\u6B21\u8F6E\u5230\u81EA\u5DF1\u7B54\u9898\u65F6\u8DF3\u8FC7\u8FD9\u6B21\u56DE\u5408"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 571a5f2b26ce5464d9b1c5cfffeb072a, type: 3}
     cardType: 0
     effectType: 6
     targetType: 0
@@ -42,7 +42,7 @@ MonoBehaviour:
   - cardId: 3
     cardName: "\u4E24\u6839\u7C89\u7B14"
     description: "\u4E0B\u6B21\u6709\u73A9\u5BB6\u7B54\u9519\u7684\u8BE5\u6B21\u4F24\u5BB3\u7FFB\u500D"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: d8fc317c7837a4340afd281e958a3f23, type: 3}
     cardType: 0
     effectType: 4
     targetType: 3
@@ -55,7 +55,7 @@ MonoBehaviour:
   - cardId: 4
     cardName: "\u518D\u60F3\u60F3"
     description: "\u4E0B\u6B21\u8F6E\u5230\u81EA\u5DF1\u7B54\u9898\u65F6\u589E\u52A05\u79D2\u7B54\u9898\u65F6\u95F4"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: a74abec42be3c0d42b8a25ac8eeee789, type: 3}
     cardType: 0
     effectType: 0
     targetType: 0
@@ -68,7 +68,7 @@ MonoBehaviour:
   - cardId: 5
     cardName: "\u6210\u8BED\u63A5\u9F99"
     description: "\u4E0B\u6B21\u8F6E\u5230\u81EA\u5DF1\u7B54\u9898\u65F6\u5FC5\u5B9A\u4E3A\u6210\u8BED\u63A5\u9F99\u9898\u76EE"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: ab0505e50f078b94ab5fdcb31852e04a, type: 3}
     cardType: 0
     effectType: 7
     targetType: 0
@@ -81,7 +81,7 @@ MonoBehaviour:
   - cardId: 6
     cardName: "\u5224\u65AD\u9898"
     description: "\u4E0B\u6B21\u8F6E\u5230\u81EA\u5DF1\u7B54\u9898\u65F6\u5FC5\u5B9A\u662F\u5224\u65AD\u9898"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: a32fca6a5459b5140bfbe0dfb43eb979, type: 3}
     cardType: 0
     effectType: 8
     targetType: 0
@@ -94,7 +94,7 @@ MonoBehaviour:
   - cardId: 7
     cardName: "\u6587\u827A\u6C47\u6F14"
     description: "\u6240\u6709\u73A9\u5BB6\u56DE\u590D1\u70B9\u751F\u547D\u503C"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 2574f705a9eb8e54db3e9634c7a860c8, type: 3}
     cardType: 0
     effectType: 3
     targetType: 2
@@ -107,7 +107,7 @@ MonoBehaviour:
   - cardId: 8
     cardName: "\u8BFE\u5916\u8865\u4E60"
     description: "\u968F\u673A\u83B7\u5F97\u4E24\u5F20\u5361\u724C"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: b99798c5868ecc24e8fca750b284a812, type: 3}
     cardType: 0
     effectType: 9
     targetType: 0
@@ -120,7 +120,7 @@ MonoBehaviour:
   - cardId: 9
     cardName: "\u4E22\u7EB8\u56E2"
     description: "50%\u51E0\u7387\u547D\u4E2D\uFF0C\u5BF9\u6307\u5B9A\u73A9\u5BB6\u9020\u62101\u70B9\u4F24\u5BB3"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 967c6c5428dede043b90b26d44fc1346, type: 3}
     cardType: 1
     effectType: 5
     targetType: 1
@@ -133,7 +133,7 @@ MonoBehaviour:
   - cardId: 10
     cardName: "\u51CF\u65F6\u5361"
     description: "\u4E0B\u6B21\u8F6E\u5230\u88AB\u6307\u5B9A\u7684\u73A9\u5BB6\u7B54\u9898\u65F6\u4F1A\u51CF\u5C113\u79D2\u7B54\u9898\u65F6\u95F4"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 23f513a109576b04294385dfedb3129a, type: 3}
     cardType: 1
     effectType: 1
     targetType: 1
@@ -146,7 +146,7 @@ MonoBehaviour:
   - cardId: 11
     cardName: "\u501F\u4E0B\u6A61\u76AE"
     description: "\u4ECE\u6307\u5B9A\u73A9\u5BB6\u5904\u5077\u53D6\u4E00\u5F20\u5361"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 605ff7d39ce39014e9ccbd1eb24cd706, type: 3}
     cardType: 1
     effectType: 9
     targetType: 1
@@ -159,7 +159,7 @@ MonoBehaviour:
   - cardId: 12
     cardName: "\u4E00\u76D2\u7C89\u7B14"
     description: "\u83B7\u5F97\u4E24\u5F20\u52A0\u500D\u5361"
-    cardIcon: {fileID: 0}
+    cardIcon: {fileID: 21300000, guid: 3cfa27d2f8b73ae4986baf5d94c2ab99, type: 3}
     cardType: 0
     effectType: 9
     targetType: 0

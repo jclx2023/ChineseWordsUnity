@@ -1,10 +1,9 @@
 fileFormatVersion: 2
-guid: 7e73fb6e94728fd489df65e62f4a879e
+guid: 82bbd64f9c5b7504c82503a8936eeb19
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences:
-  - cardUIPrefab: {fileID: 5110140411778243840, guid: 5fd78be7ff961c34e8ff98246fa35ed5, type: 3}
+  defaultReferences: []
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

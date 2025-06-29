@@ -18,7 +18,7 @@ namespace Cards.Core
     public class CardSystemManager : MonoBehaviour
     {
         [Header("系统配置")]
-        [SerializeField] private CardConfig cardConfig;
+        [SerializeField] public CardConfig cardConfig;
         [SerializeField] private bool autoInitializeOnStart = true;
         [SerializeField] private bool enableDebugLogs = true;
 
