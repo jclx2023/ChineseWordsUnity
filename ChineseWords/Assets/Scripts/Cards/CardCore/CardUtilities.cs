@@ -8,8 +8,9 @@ using Cards.Core;
 namespace Cards.Core
 {
     /// <summary>
-    /// 卡牌系统工具类（简化版）
+    /// 卡牌系统工具类（更新版）
     /// 包含通用工具方法、验证器和日志系统
+    /// 支持新的12张卡牌效果系统
     /// </summary>
     public static class CardUtilities
     {
@@ -120,6 +121,16 @@ namespace Cards.Core
             }
         }
 
+        /// <summary>
+        /// 概率计算工具
+        /// </summary>
+        /// <param name="chance">概率值 (0.0 - 1.0)</param>
+        /// <returns>是否命中</returns>
+        public static bool RollProbability(float chance)
+        {
+            return UnityEngine.Random.Range(0f, 1f) <= chance;
+        }
+
         #endregion
 
         #region 验证器
@@ -162,7 +173,7 @@ namespace Cards.Core
             }
 
             /// <summary>
-            /// 验证目标选择
+            /// 验证目标选择（更新版，支持新卡牌）
             /// </summary>
             public static bool ValidateTargetSelection(CardUseRequest request, CardData cardData, List<int> availablePlayers)
             {
@@ -186,11 +197,26 @@ namespace Cards.Core
                         return false;
                     }
 
-                    // 不能选择自己作为目标（除非卡牌明确允许）
-                    if (request.targetPlayerId == request.userId && cardData.targetType != TargetType.Self)
+                    // 指向型卡牌不能选择自己作为目标（除非特殊设计）
+                    if (request.targetPlayerId == request.userId)
                     {
-                        LogError("不能选择自己作为目标");
+                        LogError("指向型卡牌不能选择自己作为目标");
                         return false;
+                    }
+
+                    // 特殊验证：针对新卡牌的目标选择
+                    switch (cardData.cardId)
+                    {
+                        case 9: // 丢纸团：概率伤害
+                        case 10: // 减时卡
+                        case 11: // 借下橡皮
+                            // 这些卡牌需要选择其他活着的玩家
+                            if (request.targetPlayerId == request.userId)
+                            {
+                                LogError($"{cardData.cardName}不能对自己使用");
+                                return false;
+                            }
+                            break;
                     }
                 }
 
@@ -198,7 +224,7 @@ namespace Cards.Core
             }
 
             /// <summary>
-            /// 验证玩家是否可以使用该卡牌（简化版）
+            /// 验证玩家是否可以使用该卡牌（更新版）
             /// </summary>
             public static bool ValidatePlayerCanUseCard(int playerId, CardData cardData, PlayerCardState playerState, bool isMyTurn)
             {
@@ -222,10 +248,10 @@ namespace Cards.Core
                     return false;
                 }
 
-                // 检查是否在自己回合使用（根据卡牌设置）
-                if (isMyTurn && !cardData.canUseWhenNotMyTurn)
+                // 检查回合限制（大部分卡牌都允许在非自己回合使用）
+                if (!cardData.canUseWhenNotMyTurn && !isMyTurn)
                 {
-                    LogError("该卡牌不能在自己回合时使用");
+                    LogError("该卡牌只能在自己回合时使用");
                     return false;
                 }
 
@@ -233,7 +259,7 @@ namespace Cards.Core
             }
 
             /// <summary>
-            /// 验证游戏状态是否允许使用卡牌（简化版）
+            /// 验证游戏状态是否允许使用卡牌
             /// </summary>
             public static bool ValidateGameState(bool isGameActive)
             {
@@ -241,6 +267,52 @@ namespace Cards.Core
                 {
                     LogError("游戏未激活状态，无法使用卡牌");
                     return false;
+                }
+
+                return true;
+            }
+
+            /// <summary>
+            /// 验证卡牌效果是否可以执行（新增）
+            /// </summary>
+            public static bool ValidateCardEffect(CardData cardData, int userId, int targetPlayerId = -1)
+            {
+                if (cardData == null)
+                {
+                    LogError("卡牌数据为空，无法验证效果");
+                    return false;
+                }
+
+                // 根据效果类型进行特殊验证
+                switch (cardData.effectType)
+                {
+                    case EffectType.ProbabilityDamage: // 丢纸团
+                        if (targetPlayerId <= 0 || targetPlayerId == userId)
+                        {
+                            LogError("概率伤害卡需要选择有效的其他玩家作为目标");
+                            return false;
+                        }
+                        break;
+
+                    case EffectType.ReduceTime: // 减时卡
+                        if (targetPlayerId <= 0 || targetPlayerId == userId)
+                        {
+                            LogError("减时卡需要选择有效的其他玩家作为目标");
+                            return false;
+                        }
+                        break;
+
+                    case EffectType.GetCard:
+                        // 根据卡牌ID进行特殊处理
+                        if (cardData.cardId == 11) // 借下橡皮
+                        {
+                            if (targetPlayerId <= 0 || targetPlayerId == userId)
+                            {
+                                LogError("借下橡皮需要选择有效的其他玩家作为目标");
+                                return false;
+                            }
+                        }
+                        break;
                 }
 
                 return true;
@@ -327,10 +399,10 @@ namespace Cards.Core
 
         #endregion
 
-        #region 工具方法
+        #region 工具方法（更新版）
 
         /// <summary>
-        /// 根据效果类型获取默认效果描述
+        /// 根据效果类型获取默认效果描述（更新版，支持新效果）
         /// </summary>
         public static string GetEffectDescription(EffectType effectType, float effectValue)
         {
@@ -339,17 +411,57 @@ namespace Cards.Core
                 EffectType.AddTime => $"增加{effectValue}秒答题时间",
                 EffectType.ReduceTime => $"减少{effectValue}秒答题时间",
                 EffectType.Heal => $"回复{effectValue}点生命值",
+                EffectType.GroupHeal => $"所有玩家回复{effectValue}点生命值", // 新增
                 EffectType.Damage => effectValue > 1 ? $"造成{effectValue}倍伤害" : "造成伤害",
+                EffectType.ProbabilityDamage => $"{effectValue * 100}%概率造成1点伤害", // 新增
                 EffectType.SkipQuestion => "跳过下一题",
-                EffectType.SpecifyQuestion => "指定题目类型",
                 EffectType.ChengYuChain => "下一题为成语接龙",
                 EffectType.JudgeQuestion => "下一题为判断题",
-                EffectType.GetCard => effectValue > 0 ? $"获得{effectValue}张卡牌" : "移除一张卡牌",
-                EffectType.ExtraChance => "获得额外提示",
-                EffectType.RandomCard => "随机获得卡牌",
-                EffectType.DoubleTime => "双倍时间奖励",
+                EffectType.GetCard => effectValue > 0 ? $"获得{effectValue}张卡牌" : "偷取一张卡牌",
                 _ => "未知效果"
             };
+        }
+
+        /// <summary>
+        /// 获取卡牌效果的详细描述（带数值显示）
+        /// </summary>
+        public static string GetDetailedCardDescription(CardData cardData)
+        {
+            if (cardData == null) return "未知卡牌";
+
+            string baseDescription = cardData.description;
+
+            // 如果设置了显示效果值，则添加数值信息
+            if (cardData.showEffectValue && cardData.effectValue != 0)
+            {
+                switch (cardData.effectType)
+                {
+                    case EffectType.Heal:
+                    case EffectType.GroupHeal:
+                        baseDescription += $" [{cardData.effectValue}点生命值]";
+                        break;
+
+                    case EffectType.AddTime:
+                    case EffectType.ReduceTime:
+                        baseDescription += $" [{cardData.effectValue}秒]";
+                        break;
+
+                    case EffectType.Damage:
+                        baseDescription += $" [×{cardData.effectValue}]";
+                        break;
+
+                    case EffectType.ProbabilityDamage:
+                        baseDescription += $" [{cardData.effectValue * 100}%命中率]";
+                        break;
+
+                    case EffectType.GetCard:
+                        if (cardData.effectValue > 0)
+                            baseDescription += $" [{cardData.effectValue}张]";
+                        break;
+                }
+            }
+
+            return baseDescription;
         }
 
         /// <summary>
@@ -381,6 +493,41 @@ namespace Cards.Core
                 CardRarity.Epic => "史诗",
                 CardRarity.Legendary => "传说",
                 _ => "未知"
+            };
+        }
+
+        /// <summary>
+        /// 获取卡牌类型的中文名称
+        /// </summary>
+        public static string GetCardTypeName(CardType cardType)
+        {
+            return cardType switch
+            {
+                CardType.SelfTarget => "自发型",
+                CardType.PlayerTarget => "指向型",
+                CardType.Special => "特殊型",
+                _ => "未知"
+            };
+        }
+
+        /// <summary>
+        /// 获取效果类型的中文名称
+        /// </summary>
+        public static string GetEffectTypeName(EffectType effectType)
+        {
+            return effectType switch
+            {
+                EffectType.AddTime => "加时",
+                EffectType.ReduceTime => "减时",
+                EffectType.Heal => "回血",
+                EffectType.GroupHeal => "群体回血",
+                EffectType.Damage => "加倍伤害",
+                EffectType.ProbabilityDamage => "概率伤害",
+                EffectType.SkipQuestion => "跳过题目",
+                EffectType.ChengYuChain => "成语接龙",
+                EffectType.JudgeQuestion => "判断题",
+                EffectType.GetCard => "卡牌操作",
+                _ => "未知效果"
             };
         }
 
@@ -443,6 +590,14 @@ namespace Cards.Core
             }
         }
 
+        /// <summary>
+        /// 格式化概率显示
+        /// </summary>
+        public static string FormatProbability(float probability)
+        {
+            return $"{(probability * 100):F0}%";
+        }
+
         #endregion
 
         #region 集合操作工具
@@ -488,6 +643,122 @@ namespace Cards.Core
         {
             if (dict == null) return defaultValue;
             return dict.ContainsKey(key) ? dict[key] : defaultValue;
+        }
+
+        /// <summary>
+        /// 过滤指向型卡牌
+        /// </summary>
+        public static List<CardData> FilterPlayerTargetCards(List<CardData> cards)
+        {
+            return cards?.Where(card => card.cardType == CardType.PlayerTarget).ToList() ?? new List<CardData>();
+        }
+
+        /// <summary>
+        /// 过滤自发型卡牌
+        /// </summary>
+        public static List<CardData> FilterSelfTargetCards(List<CardData> cards)
+        {
+            return cards?.Where(card => card.cardType == CardType.SelfTarget).ToList() ?? new List<CardData>();
+        }
+
+        #endregion
+
+        #region 卡牌效果分析工具（新增）
+
+        /// <summary>
+        /// 分析卡牌是否会影响其他玩家
+        /// </summary>
+        public static bool WillAffectOtherPlayers(CardData cardData)
+        {
+            if (cardData == null) return false;
+
+            switch (cardData.effectType)
+            {
+                case EffectType.GroupHeal: // 文艺汇演：影响所有玩家
+                case EffectType.Damage: // 两根粉笔：影响下次答错的玩家
+                    return true;
+
+                case EffectType.ProbabilityDamage: // 丢纸团：直接攻击目标
+                case EffectType.ReduceTime: // 减时卡：影响目标玩家
+                    return true;
+
+                case EffectType.GetCard:
+                    return cardData.cardId == 11; // 借下橡皮：影响目标玩家
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// 获取卡牌的影响范围
+        /// </summary>
+        public static string GetCardImpactScope(CardData cardData)
+        {
+            if (cardData == null) return "无影响";
+
+            switch (cardData.targetType)
+            {
+                case TargetType.Self:
+                    return "自己";
+                case TargetType.SinglePlayer:
+                    return "单个目标";
+                case TargetType.AllPlayers:
+                    return "所有玩家";
+                case TargetType.AllOthers:
+                    return "其他玩家";
+                case TargetType.Random:
+                    return "随机玩家";
+                default:
+                    return "未知范围";
+            }
+        }
+
+        /// <summary>
+        /// 判断卡牌是否为攻击性卡牌
+        /// </summary>
+        public static bool IsAggressiveCard(CardData cardData)
+        {
+            if (cardData == null) return false;
+
+            switch (cardData.effectType)
+            {
+                case EffectType.ProbabilityDamage: // 丢纸团
+                case EffectType.ReduceTime: // 减时卡
+                case EffectType.Damage: // 两根粉笔
+                    return true;
+
+                case EffectType.GetCard:
+                    return cardData.cardId == 11; // 借下橡皮
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// 判断卡牌是否为防御性/辅助性卡牌
+        /// </summary>
+        public static bool IsSupportiveCard(CardData cardData)
+        {
+            if (cardData == null) return false;
+
+            switch (cardData.effectType)
+            {
+                case EffectType.Heal: // 牛奶盒
+                case EffectType.GroupHeal: // 文艺汇演
+                case EffectType.AddTime: // 再想想
+                case EffectType.SkipQuestion: // 请假条
+                case EffectType.ChengYuChain: // 成语接龙
+                case EffectType.JudgeQuestion: // 判断题
+                    return true;
+
+                case EffectType.GetCard:
+                    return cardData.cardId == 8 || cardData.cardId == 12; // 课外补习、一盒粉笔
+
+                default:
+                    return false;
+            }
         }
 
         #endregion
@@ -560,12 +831,13 @@ namespace Cards.Core
         }
 
         /// <summary>
-        /// 记录卡牌使用日志
+        /// 记录卡牌使用日志（增强版）
         /// </summary>
-        public static void LogCardUse(int playerId, int cardId, string cardName, string result)
+        public static void LogCardUse(int playerId, int cardId, string cardName, string result, int targetPlayerId = -1)
         {
+            string targetInfo = targetPlayerId > 0 ? $" -> 目标玩家{targetPlayerId}" : "";
             LogWithTag(CardConstants.LOG_TAG_EFFECT,
-                $"玩家{playerId}使用卡牌[{cardId}]{cardName} -> {result}");
+                $"玩家{playerId}使用卡牌[{cardId}]{cardName}{targetInfo} -> {result}");
         }
 
         /// <summary>

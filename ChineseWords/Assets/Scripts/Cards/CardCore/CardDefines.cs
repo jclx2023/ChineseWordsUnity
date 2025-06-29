@@ -26,26 +26,22 @@ namespace Cards.Core
     public enum EffectType
     {
         // 时间操作类
-        AddTime,        // 加时
-        ReduceTime,     // 减时
+        AddTime,        // 加时 - ID4: 再想想
+        ReduceTime,     // 减时 - ID10: 减时卡
 
         // 生命值操作类
-        Heal,           // 回血
-        Damage,         // 伤害/加倍伤害
+        Heal,           // 单体回血 - ID1: 牛奶盒
+        GroupHeal,      // 群体回血 - ID7: 文艺汇演 (新增)
+        Damage,         // 加倍伤害 - ID3: 两根粉笔
+        ProbabilityDamage, // 概率伤害 - ID9: 丢纸团 (新增)
 
         // 题目操作类
-        SkipQuestion,   // 跳过题目
-        SpecifyQuestion,// 指定题目类型
+        SkipQuestion,   // 跳过题目 - ID2: 请假条
+        ChengYuChain,   // 成语接龙 - ID5: 成语接龙
+        JudgeQuestion,  // 判断题 - ID6: 判断题
 
-        // 特殊机制类
-        ChengYuChain,   // 成语接龙
-        JudgeQuestion,  // 判断题
-        GetCard,        // 获得卡牌
-        ExtraChance,    // 额外机会
-
-        // 干扰类
-        RandomCard,     // 随机获得卡牌
-        DoubleTime      // 双倍时间
+        // 卡牌操作类
+        GetCard         // 卡牌操作 - ID8: 课外补习, ID11: 借下橡皮, ID12: 一盒粉笔
     }
 
     /// <summary>

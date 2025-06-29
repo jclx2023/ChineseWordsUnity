@@ -23,6 +23,9 @@ namespace Cards.Core
         [Header("游戏规则")]
         [SerializeField] private CardGameRules gameRules = new CardGameRules();
 
+        [Header("自动配置")]
+        [SerializeField] private bool autoConfigureCardsOnValidate = false;
+
         #region 属性访问器
 
         /// <summary>
@@ -47,6 +50,325 @@ namespace Cards.Core
 
         #endregion
 
+        #region 自动配置方法
+
+        /// <summary>
+        /// 自动配置12张卡牌数据
+        /// 在Inspector中点击右键菜单或通过代码调用
+        /// </summary>
+        [ContextMenu("自动配置12张卡牌")]
+        public void AutoConfigureCards()
+        {
+            Debug.Log("[CardConfig] 开始自动配置卡牌数据...");
+
+            allCards.Clear();
+
+            // ID1: 牛奶盒 - 自发型回血卡
+            allCards.Add(new CardData
+            {
+                cardId = 1,
+                cardName = "牛奶盒",
+                description = "为自身回复1点生命值",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.Heal,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Common,
+                drawWeight = 15f,
+                effectValue = 1f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.white,
+                showEffectValue = true
+            });
+
+            // ID2: 请假条 - 自发型跳过卡
+            allCards.Add(new CardData
+            {
+                cardId = 2,
+                cardName = "请假条",
+                description = "下次轮到自己答题时跳过这次回合",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.SkipQuestion,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Common,
+                drawWeight = 12f,
+                effectValue = 1f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.white,
+                showEffectValue = false
+            });
+
+            // ID3: 两根粉笔 - 自发型加倍伤害卡
+            allCards.Add(new CardData
+            {
+                cardId = 3,
+                cardName = "两根粉笔",
+                description = "下次有玩家答错的该次伤害翻倍",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.Damage,
+                targetType = TargetType.AllOthers,
+                rarity = CardRarity.Uncommon,
+                drawWeight = 8f,
+                effectValue = 2f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.yellow,
+                showEffectValue = true
+            });
+
+            // ID4: 再想想 - 自发型加时卡
+            allCards.Add(new CardData
+            {
+                cardId = 4,
+                cardName = "再想想",
+                description = "下次轮到自己答题时增加5秒答题时间",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.AddTime,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Common,
+                drawWeight = 10f,
+                effectValue = 5f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.white,
+                showEffectValue = true
+            });
+
+            // ID5: 成语接龙 - 自发型题目类型指定卡
+            allCards.Add(new CardData
+            {
+                cardId = 5,
+                cardName = "成语接龙",
+                description = "下次轮到自己答题时必定为成语接龙题目",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.ChengYuChain,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Rare,
+                drawWeight = 5f,
+                effectValue = 1f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.cyan,
+                showEffectValue = false
+            });
+
+            // ID6: 判断题 - 自发型题目类型指定卡
+            allCards.Add(new CardData
+            {
+                cardId = 6,
+                cardName = "判断题",
+                description = "下次轮到自己答题时必定是判断题",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.JudgeQuestion,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Common,
+                drawWeight = 12f,
+                effectValue = 1f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.white,
+                showEffectValue = false
+            });
+
+            // ID7: 文艺汇演 - 自发型群体回血卡
+            allCards.Add(new CardData
+            {
+                cardId = 7,
+                cardName = "文艺汇演",
+                description = "所有玩家回复1点生命值",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.GroupHeal,
+                targetType = TargetType.AllPlayers,
+                rarity = CardRarity.Uncommon,
+                drawWeight = 6f,
+                effectValue = 1f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.green,
+                showEffectValue = true
+            });
+
+            // ID8: 课外补习 - 自发型获得卡牌
+            allCards.Add(new CardData
+            {
+                cardId = 8,
+                cardName = "课外补习",
+                description = "随机获得两张卡牌",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.GetCard,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Rare,
+                drawWeight = 4f,
+                effectValue = 2f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.cyan,
+                showEffectValue = true
+            });
+
+            // ID9: 丢纸团 - 指向型概率伤害卡
+            allCards.Add(new CardData
+            {
+                cardId = 9,
+                cardName = "丢纸团",
+                description = "50%几率命中，对指定玩家造成1点伤害",
+                cardType = CardType.PlayerTarget,
+                effectType = EffectType.ProbabilityDamage,
+                targetType = TargetType.SinglePlayer,
+                rarity = CardRarity.Rare,
+                drawWeight = 3f,
+                effectValue = 0.5f, // 表示50%概率
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.red,
+                showEffectValue = false
+            });
+
+            // ID10: 减时卡 - 指向型减时卡
+            allCards.Add(new CardData
+            {
+                cardId = 10,
+                cardName = "减时卡",
+                description = "下次轮到被指定的玩家答题时会减少3秒答题时间",
+                cardType = CardType.PlayerTarget,
+                effectType = EffectType.ReduceTime,
+                targetType = TargetType.SinglePlayer,
+                rarity = CardRarity.Common,
+                drawWeight = 10f,
+                effectValue = 3f,
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.white,
+                showEffectValue = true
+            });
+
+            // ID11: 借下橡皮 - 指向型偷取卡牌
+            allCards.Add(new CardData
+            {
+                cardId = 11,
+                cardName = "借下橡皮",
+                description = "从指定玩家处偷取一张卡",
+                cardType = CardType.PlayerTarget,
+                effectType = EffectType.GetCard,
+                targetType = TargetType.SinglePlayer,
+                rarity = CardRarity.Uncommon,
+                drawWeight = 6f,
+                effectValue = -1f, // 负值表示偷取
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.yellow,
+                showEffectValue = false
+            });
+
+            // ID12: 一盒粉笔 - 自发型获得特定卡牌
+            allCards.Add(new CardData
+            {
+                cardId = 12,
+                cardName = "一盒粉笔",
+                description = "获得两张加倍卡",
+                cardType = CardType.SelfTarget,
+                effectType = EffectType.GetCard,
+                targetType = TargetType.Self,
+                rarity = CardRarity.Epic,
+                drawWeight = 2f,
+                effectValue = 3f, // 特殊值，表示获得加倍卡
+                canUseWhenNotMyTurn = true,
+                cardBackgroundColor = Color.magenta,
+                showEffectValue = false
+            });
+
+            Debug.Log($"[CardConfig] 自动配置完成！共配置了{allCards.Count}张卡牌");
+
+            // 标记为脏数据，确保保存
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+#endif
+        }
+
+        /// <summary>
+        /// 重置为默认系统设置
+        /// </summary>
+        [ContextMenu("重置系统设置")]
+        public void ResetSystemSettings()
+        {
+            systemSettings = new CardSystemSettings
+            {
+                maxHandSize = 5,
+                startingCardCount = 3,
+                cardsReceivedOnElimination = 2,
+                allowCardUseWhenNotMyTurn = true,
+                enableDebugLogs = true,
+                showEffectValues = true
+            };
+
+            drawSettings = new CardDrawSettings
+            {
+                allowDuplicates = true,
+                maxSameCardInHand = 3,
+                guaranteeRareInStarting = false,
+                bannedCardIds = new List<int>(),
+                forcedStartingCards = new List<int>()
+            };
+
+            gameRules = new CardGameRules
+            {
+                oneCardPerRound = true,
+                resetUsageAfterEachTurn = true,
+                enableCardStealing = true,
+                discardUsedCards = true
+            };
+
+            Debug.Log("[CardConfig] 系统设置已重置为默认值");
+
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+#endif
+        }
+
+        /// <summary>
+        /// 快速调整卡牌权重（用于平衡性调整）
+        /// </summary>
+        [ContextMenu("调整卡牌权重")]
+        public void AdjustCardWeights()
+        {
+            foreach (var card in allCards)
+            {
+                switch (card.rarity)
+                {
+                    case CardRarity.Common:
+                        card.drawWeight = Random.Range(10f, 15f);
+                        break;
+                    case CardRarity.Uncommon:
+                        card.drawWeight = Random.Range(6f, 8f);
+                        break;
+                    case CardRarity.Rare:
+                        card.drawWeight = Random.Range(3f, 5f);
+                        break;
+                    case CardRarity.Epic:
+                        card.drawWeight = Random.Range(1f, 2f);
+                        break;
+                    case CardRarity.Legendary:
+                        card.drawWeight = Random.Range(0.5f, 1f);
+                        break;
+                }
+            }
+
+            Debug.Log("[CardConfig] 卡牌权重已根据稀有度重新调整");
+
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+#endif
+        }
+
+        #endregion
+
+        #region Unity编辑器支持
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Inspector面板验证时自动配置（可选）
+        /// </summary>
+        private void OnValidate()
+        {
+            if (autoConfigureCardsOnValidate && (allCards == null || allCards.Count == 0))
+            {
+                AutoConfigureCards();
+            }
+        }
+#endif
+
+        #endregion
+
         #region 卡牌查询方法
 
         /// <summary>
@@ -66,7 +388,7 @@ namespace Cards.Core
         }
 
         /// <summary>
-        /// 根据稀有度获取卡牌列表（可选功能）
+        /// 根据稀有度获取卡牌列表
         /// </summary>
         public List<CardData> GetCardsByRarity(CardRarity rarity)
         {
@@ -79,6 +401,40 @@ namespace Cards.Core
         public List<CardData> GetCardsByType(CardType cardType)
         {
             return allCards.FindAll(card => card.cardType == cardType);
+        }
+
+        /// <summary>
+        /// 获取所有自发型卡牌
+        /// </summary>
+        public List<CardData> GetSelfTargetCards()
+        {
+            return GetCardsByType(CardType.SelfTarget);
+        }
+
+        /// <summary>
+        /// 获取所有指向型卡牌
+        /// </summary>
+        public List<CardData> GetPlayerTargetCards()
+        {
+            return GetCardsByType(CardType.PlayerTarget);
+        }
+
+        /// <summary>
+        /// 获取卡牌统计信息
+        /// </summary>
+        public string GetCardStatistics()
+        {
+            var stats = $"=== 卡牌统计 ===\n";
+            stats += $"总卡牌数: {allCards.Count}\n";
+            stats += $"自发型: {GetSelfTargetCards().Count}张\n";
+            stats += $"指向型: {GetPlayerTargetCards().Count}张\n";
+            stats += $"普通: {GetCardsByRarity(CardRarity.Common).Count}张\n";
+            stats += $"不常见: {GetCardsByRarity(CardRarity.Uncommon).Count}张\n";
+            stats += $"稀有: {GetCardsByRarity(CardRarity.Rare).Count}张\n";
+            stats += $"史诗: {GetCardsByRarity(CardRarity.Epic).Count}张\n";
+            stats += $"传说: {GetCardsByRarity(CardRarity.Legendary).Count}张\n";
+
+            return stats;
         }
 
         #endregion
@@ -130,108 +486,17 @@ namespace Cards.Core
             }
 
             Debug.Log($"{CardConstants.LOG_TAG} 卡牌配置验证成功，共{allCards.Count}张卡牌");
+            Debug.Log(GetCardStatistics());
             return true;
-        }
-
-        /// <summary>
-        /// 创建默认卡牌数据（基于你提供的卡牌效果表）
-        /// </summary>
-        [ContextMenu("创建默认卡牌数据")]
-        public void CreateDefaultCards()
-        {
-            allCards.Clear();
-
-            // 根据你的卡牌效果表创建卡牌
-            var defaultCards = new List<CardData>
-            {
-                // 自发型卡牌
-                new CardData
-                {
-                    cardId = 1, cardName = "回血卡", description = "为自身回复1点生命值",
-                    cardType = CardType.SelfTarget, effectType = EffectType.Heal, targetType = TargetType.Self,
-                    effectValue = 1f, rarity = CardRarity.Common, drawWeight = 15f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 2, cardName = "跳过卡", description = "下次轮到自己答题时跳过这次回合",
-                    cardType = CardType.SelfTarget, effectType = EffectType.SkipQuestion, targetType = TargetType.Self,
-                    effectValue = 1f, rarity = CardRarity.Common, drawWeight = 12f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 3, cardName = "加倍卡", description = "下次有玩家错误的该次伤害翻倍",
-                    cardType = CardType.SelfTarget, effectType = EffectType.Damage, targetType = TargetType.AllOthers,
-                    effectValue = 2f, rarity = CardRarity.Uncommon, drawWeight = 8f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 4, cardName = "加时卡", description = "下次轮到自己答题时增加5秒答题时间",
-                    cardType = CardType.SelfTarget, effectType = EffectType.AddTime, targetType = TargetType.Self,
-                    effectValue = 5f, rarity = CardRarity.Common, drawWeight = 10f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 5, cardName = "成语接龙", description = "下次轮到自己答题时必定为成语接龙题目",
-                    cardType = CardType.SelfTarget, effectType = EffectType.ChengYuChain, targetType = TargetType.Self,
-                    effectValue = 1f, rarity = CardRarity.Rare, drawWeight = 5f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 6, cardName = "判断题", description = "下次轮到自己答题时必定为判断题",
-                    cardType = CardType.SelfTarget, effectType = EffectType.JudgeQuestion, targetType = TargetType.Self,
-                    effectValue = 1f, rarity = CardRarity.Common, drawWeight = 12f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 7, cardName = "小抄", description = "下次轮到自己答题时获得更多提示文字",
-                    cardType = CardType.SelfTarget, effectType = EffectType.ExtraChance, targetType = TargetType.Self,
-                    effectValue = 1f, rarity = CardRarity.Uncommon, drawWeight = 8f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 8, cardName = "随机获得两张卡牌", description = "随机获得两张卡牌",
-                    cardType = CardType.SelfTarget, effectType = EffectType.GetCard, targetType = TargetType.Self,
-                    effectValue = 2f, rarity = CardRarity.Rare, drawWeight = 4f, canUseWhenNotMyTurn = true
-                },
-
-                // 指向型卡牌
-                new CardData
-                {
-                    cardId = 9, cardName = "指定回答卡", description = "下次轮到自己答题时会让指定的玩家回答且已不可回答",
-                    cardType = CardType.PlayerTarget, effectType = EffectType.SpecifyQuestion, targetType = TargetType.SinglePlayer,
-                    effectValue = 1f, rarity = CardRarity.Rare, drawWeight = 3f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 10, cardName = "减时卡", description = "下次轮到指定玩家答题时会减少3秒答题时间",
-                    cardType = CardType.PlayerTarget, effectType = EffectType.ReduceTime, targetType = TargetType.SinglePlayer,
-                    effectValue = 3f, rarity = CardRarity.Common, drawWeight = 10f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 11, cardName = "去除神秘", description = "从指定玩家手中移除一张卡牌",
-                    cardType = CardType.PlayerTarget, effectType = EffectType.GetCard, targetType = TargetType.SinglePlayer,
-                    effectValue = -1f, rarity = CardRarity.Uncommon, drawWeight = 6f, canUseWhenNotMyTurn = true
-                },
-                new CardData
-                {
-                    cardId = 12, cardName = "亲手卡手", description = "获得两张加倍卡",
-                    cardType = CardType.SelfTarget, effectType = EffectType.GetCard, targetType = TargetType.Self,
-                    effectValue = 2f, rarity = CardRarity.Epic, drawWeight = 2f, canUseWhenNotMyTurn = true
-                }
-            };
-
-            allCards.AddRange(defaultCards);
-            Debug.Log($"{CardConstants.LOG_TAG} 已创建{defaultCards.Count}张默认卡牌");
         }
 
         #endregion
     }
 
-    #region 配置数据结构
+    #region 配置数据结构（保持不变）
 
     /// <summary>
-    /// 卡牌系统设置（简化版）
+    /// 卡牌系统设置
     /// </summary>
     [System.Serializable]
     public class CardSystemSettings
@@ -242,7 +507,7 @@ namespace Cards.Core
         public int cardsReceivedOnElimination = 2;
 
         [Header("使用规则")]
-        public bool allowCardUseWhenNotMyTurn = true;  // 是否允许在非自己回合时使用卡牌
+        public bool allowCardUseWhenNotMyTurn = true;
 
         [Header("调试设置")]
         public bool enableDebugLogs = true;
@@ -294,22 +559,21 @@ namespace Cards.Core
     }
 
     /// <summary>
-    /// 卡牌游戏规则（简化版）
+    /// 卡牌游戏规则
     /// </summary>
     [System.Serializable]
     public class CardGameRules
     {
         [Header("基本规则")]
-        public bool oneCardPerRound = true;             // 每轮只能使用一张卡牌
-        public bool resetUsageAfterEachTurn = true;     // 每次答题后重置使用机会
+        public bool oneCardPerRound = true;
+        public bool resetUsageAfterEachTurn = true;
 
         [Header("特殊规则")]
-        public bool enableCardStealing = true;          // 启用卡牌偷取（去除神秘卡）
-        public bool discardUsedCards = true;            // 使用后的卡牌丢弃
+        public bool enableCardStealing = true;
+        public bool discardUsedCards = true;
 
         public bool Validate()
         {
-            // 简化后基本不会有验证失败的情况
             return true;
         }
     }

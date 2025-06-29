@@ -4,13 +4,15 @@ using System.Linq;
 using Core;
 using Core.Network;
 using Cards.Core;
+using Cards.Effects;
 
 namespace Cards.Player
 {
     /// <summary>
-    /// 玩家卡牌管理器
+    /// 玩家卡牌管理器（更新版）
     /// 负责管理每个玩家的卡牌状态、使用权限、手牌操作等
     /// 与现有游戏系统集成，实现个人回合制的卡牌机制
+    /// 支持新的12张卡牌系统
     /// </summary>
     public class PlayerCardManager : MonoBehaviour
     {
@@ -28,7 +30,7 @@ namespace Cards.Player
         // 单例实例
         public static PlayerCardManager Instance { get; private set; }
 
-        // 玩家卡牌状态管理（简化：只使用一个Dictionary）
+        // 玩家卡牌状态管理
         private Dictionary<int, EnhancedPlayerCardState> playerCardStates;
 
         // 当前回合信息
@@ -137,6 +139,7 @@ namespace Cards.Player
 
                 isInitialized = true;
                 LogDebug("PlayerCardManager初始化完成");
+                LogDebug($"配置: 最大手牌数={maxHandSize}, 初始卡牌数={initialCardCount}");
             }
             catch (System.Exception e)
             {
@@ -252,12 +255,8 @@ namespace Cards.Player
         #region 卡牌使用
 
         /// <summary>
-        /// 使用卡牌
+        /// 使用卡牌（更新版 - 完整的效果执行流程）
         /// </summary>
-        /// <param name="playerId">使用者ID</param>
-        /// <param name="cardId">卡牌ID</param>
-        /// <param name="targetPlayerId">目标玩家ID（可选）</param>
-        /// <returns>是否成功使用</returns>
         public bool UseCard(int playerId, int cardId, int targetPlayerId = -1)
         {
             if (!ValidateCardUsage(playerId, cardId))
@@ -275,12 +274,15 @@ namespace Cards.Player
                     return false;
                 }
 
-                // 从玩家手牌中移除并标记已使用
-                var cardState = playerCardStates[playerId];
-                cardState.RemoveCard(cardId);
-                cardState.MarkCardUsedThisRound();
+                // 额外验证：使用CardUtilities进行完整验证
+                var playerState = GetPlayerState(playerId);
+                bool isMyTurn = (currentTurnPlayerId == playerId);
 
-                LogDebug($"玩家 {playerId} 使用卡牌: {cardData.cardName}");
+                if (!CardUtilities.Validator.ValidatePlayerCanUseCard(playerId, cardData, playerState, isMyTurn))
+                {
+                    LogDebug($"CardUtilities验证失败: 玩家{playerId}无法使用卡牌{cardData.cardName}");
+                    return false;
+                }
 
                 // 创建使用请求
                 var useRequest = new CardUseRequest
@@ -291,14 +293,39 @@ namespace Cards.Player
                     timestamp = Time.time
                 };
 
+                // 额外的目标验证（针对指向型卡牌）
+                if (cardData.cardType == CardType.PlayerTarget)
+                {
+                    var alivePlayers = GetAllAlivePlayerIds();
+                    if (!CardUtilities.Validator.ValidateTargetSelection(useRequest, cardData, alivePlayers))
+                    {
+                        LogDebug($"目标选择验证失败: 卡牌{cardData.cardName}");
+                        return false;
+                    }
+                }
+
+                // 从玩家手牌中移除并标记已使用
+                var cardState = playerCardStates[playerId];
+                cardState.RemoveCard(cardId);
+                cardState.MarkCardUsedThisRound();
+
+                LogDebug($"玩家 {playerId} 使用卡牌: {cardData.cardName} -> 目标: {targetPlayerId}");
+
                 // 触发卡牌使用事件
                 CardEvents.OnCardUseRequested?.Invoke(useRequest, cardData);
                 OnCardUsed?.Invoke(playerId, cardId, targetPlayerId);
 
-                // TODO: 执行卡牌效果（等CardEffectSystem实现后）
-                // 这里应该调用CardEffectSystem来执行实际效果
+                // 通过CardEffectSystem执行卡牌效果
+                if (CardEffectSystem.Instance != null)
+                {
+                    CardEffectSystem.Instance.UseCard(useRequest, cardData);
+                }
+                else
+                {
+                    Debug.LogWarning("[PlayerCardManager] CardEffectSystem实例不存在，无法执行卡牌效果");
+                }
 
-                LogDebug($"卡牌 {cardData.cardName} 使用成功");
+                LogDebug($"卡牌 {cardData.cardName} 使用流程完成");
 
                 // 触发移除事件
                 CardEvents.OnCardRemovedFromHand?.Invoke(playerId, cardId);
@@ -313,7 +340,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// 验证卡牌使用是否有效
+        /// 验证卡牌使用是否有效（更新版）
         /// </summary>
         private bool ValidateCardUsage(int playerId, int cardId)
         {
@@ -337,6 +364,13 @@ namespace Cards.Player
                 return false;
             }
 
+            // 检查玩家是否存活
+            if (!IsPlayerAlive(playerId))
+            {
+                LogDebug($"玩家 {playerId} 已死亡，无法使用卡牌");
+                return false;
+            }
+
             // 检查卡牌是否允许在非自己回合使用
             var cardData = cardConfig.GetCardById(cardId);
             if (cardData != null && !cardData.canUseWhenNotMyTurn && currentTurnPlayerId != playerId)
@@ -353,12 +387,13 @@ namespace Cards.Player
         #region 卡牌获得
 
         /// <summary>
-        /// 给玩家添加卡牌
+        /// 给玩家添加卡牌（更新版 - 支持多张卡牌）
         /// </summary>
         /// <param name="playerId">玩家ID</param>
         /// <param name="cardId">卡牌ID（0表示随机获得）</param>
+        /// <param name="count">获得数量（默认1张）</param>
         /// <returns>是否成功添加</returns>
-        public bool GiveCardToPlayer(int playerId, int cardId = 0)
+        public bool GiveCardToPlayer(int playerId, int cardId = 0, int count = 1)
         {
             if (!playerCardStates.ContainsKey(playerId))
             {
@@ -367,50 +402,56 @@ namespace Cards.Player
             }
 
             var cardState = playerCardStates[playerId];
+            int successCount = 0;
 
-            CardData cardData;
-            if (cardId == 0)
+            for (int i = 0; i < count; i++)
             {
-                // 随机获得卡牌
-                cardData = DrawRandomCard();
-                if (cardData == null)
+                CardData cardData;
+                if (cardId == 0)
                 {
-                    LogDebug("随机抽取卡牌失败");
-                    return false;
+                    // 随机获得卡牌
+                    cardData = DrawRandomCard();
+                    if (cardData == null)
+                    {
+                        LogDebug("随机抽取卡牌失败");
+                        break;
+                    }
                 }
-            }
-            else
-            {
-                // 获得指定卡牌
-                cardData = cardConfig.GetCardById(cardId);
-                if (cardData == null)
+                else
                 {
-                    LogDebug($"未找到指定卡牌: {cardId}");
-                    return false;
+                    // 获得指定卡牌
+                    cardData = cardConfig.GetCardById(cardId);
+                    if (cardData == null)
+                    {
+                        LogDebug($"未找到指定卡牌: {cardId}");
+                        break;
+                    }
                 }
+
+                // 检查是否可以添加
+                if (!cardState.CanAddSpecificCard(cardData.cardId))
+                {
+                    LogDebug($"玩家 {playerId} 无法添加第{i + 1}张卡牌 {cardData.cardName}（手牌已满或违反规则）");
+                    break;
+                }
+
+                // 添加到玩家手牌
+                cardState.AddCard(cardData.cardId);
+                successCount++;
+
+                LogDebug($"玩家 {playerId} 获得卡牌: {cardData.cardName} ({successCount}/{count})");
+
+                // 触发卡牌获得事件
+                OnCardAcquired?.Invoke(playerId, cardData.cardId, cardData.cardName);
+                CardEvents.OnCardAddedToHand?.Invoke(playerId, cardData.cardId);
             }
 
-            // 检查是否可以添加（包含容量和规则检查）
-            if (!cardState.CanAddSpecificCard(cardData.cardId))
-            {
-                LogDebug($"玩家 {playerId} 无法添加卡牌 {cardData.cardName}（手牌已满或违反规则）");
-                return false;
-            }
-
-            // 添加到玩家手牌
-            cardState.AddCard(cardData.cardId);
-
-            LogDebug($"玩家 {playerId} 获得卡牌: {cardData.cardName}");
-
-            // 触发卡牌获得事件
-            OnCardAcquired?.Invoke(playerId, cardData.cardId, cardData.cardName);
-            CardEvents.OnCardAddedToHand?.Invoke(playerId, cardData.cardId);
-
-            return true;
+            LogDebug($"玩家 {playerId} 成功获得 {successCount}/{count} 张卡牌");
+            return successCount > 0;
         }
 
         /// <summary>
-        /// 随机抽取卡牌
+        /// 随机抽取卡牌（更新版 - 使用CardUtilities）
         /// </summary>
         private CardData DrawRandomCard()
         {
@@ -419,27 +460,8 @@ namespace Cards.Player
                 return null;
             }
 
-            // 基于权重的随机抽取
-            float totalWeight = 0f;
-            foreach (var card in cardConfig.AllCards)
-            {
-                totalWeight += card.drawWeight;
-            }
-
-            float randomValue = Random.Range(0f, totalWeight);
-            float currentWeight = 0f;
-
-            foreach (var card in cardConfig.AllCards)
-            {
-                currentWeight += card.drawWeight;
-                if (randomValue <= currentWeight)
-                {
-                    return card;
-                }
-            }
-
-            // 如果没有选中，返回第一张卡牌
-            return cardConfig.AllCards[0];
+            // 使用CardUtilities的抽卡工具
+            return CardUtilities.DrawRandomCard(cardConfig.AllCards);
         }
 
         /// <summary>
@@ -467,6 +489,13 @@ namespace Cards.Player
             if (!toState.CanAddSpecificCard(cardId))
             {
                 LogDebug($"玩家 {toPlayerId} 无法接收卡牌: {cardId}");
+                return false;
+            }
+
+            // 验证玩家存活状态
+            if (!IsPlayerAlive(fromPlayerId) || !IsPlayerAlive(toPlayerId))
+            {
+                LogDebug("源玩家或目标玩家已死亡，无法转移卡牌");
                 return false;
             }
 
@@ -536,7 +565,7 @@ namespace Cards.Player
 
         #endregion
 
-        #region 查询方法
+        #region 查询方法（更新版 - 集成CardGameBridge）
 
         /// <summary>
         /// 获取玩家手牌ID列表
@@ -579,7 +608,7 @@ namespace Cards.Player
                 return false;
 
             var cardState = playerCardStates[playerId];
-            return cardState.canUseCardThisRound;
+            return cardState.canUseCardThisRound && IsPlayerAlive(playerId);
         }
 
         /// <summary>
@@ -603,8 +632,10 @@ namespace Cards.Player
                 return "玩家状态不存在";
 
             var cardState = playerCardStates[playerId];
+            bool isAlive = IsPlayerAlive(playerId);
             return $"玩家 {cardState.playerName}: 手牌数 {cardState.HandCount}/{maxHandSize}, " +
-                   $"可使用: {(cardState.canUseCardThisRound ? "是" : "否")}";
+                   $"可使用: {(cardState.canUseCardThisRound && isAlive ? "是" : "否")}, " +
+                   $"存活: {(isAlive ? "是" : "否")}";
         }
 
         /// <summary>
@@ -613,6 +644,36 @@ namespace Cards.Player
         public EnhancedPlayerCardState GetPlayerState(int playerId)
         {
             return playerCardStates.ContainsKey(playerId) ? playerCardStates[playerId] : null;
+        }
+
+        /// <summary>
+        /// 检查玩家是否存活（集成CardGameBridge）
+        /// </summary>
+        private bool IsPlayerAlive(int playerId)
+        {
+            // 优先使用CardGameBridge查询
+            if (Cards.Integration.CardGameBridge.Instance != null)
+            {
+                return Cards.Integration.CardGameBridge.IsPlayerAlive(playerId);
+            }
+
+            // 兜底：假设玩家存活（在没有CardGameBridge的情况下）
+            return true;
+        }
+
+        /// <summary>
+        /// 获取所有存活玩家ID列表（集成CardGameBridge）
+        /// </summary>
+        private List<int> GetAllAlivePlayerIds()
+        {
+            // 优先使用CardGameBridge查询
+            if (Cards.Integration.CardGameBridge.Instance != null)
+            {
+                return Cards.Integration.CardGameBridge.GetAllAlivePlayerIds();
+            }
+
+            // 兜底：返回所有已注册的玩家ID
+            return playerCardStates.Keys.ToList();
         }
 
         #endregion
@@ -658,6 +719,36 @@ namespace Cards.Player
         }
 
         /// <summary>
+        /// 获取系统状态信息（调试用）
+        /// </summary>
+        public string GetSystemStatus()
+        {
+            var status = "=== PlayerCardManager状态 ===\n";
+            status += $"初始化状态: {isInitialized}\n";
+            status += $"玩家数量: {playerCardStates.Count}\n";
+            status += $"当前回合玩家: {currentTurnPlayerId}\n";
+            status += $"最大手牌数: {maxHandSize}\n";
+            status += $"初始卡牌数: {initialCardCount}\n";
+            status += $"网络同步: {enableNetworkSync}\n";
+
+            if (cardConfig != null)
+            {
+                status += $"卡牌配置: {cardConfig.AllCards.Count}张卡牌\n";
+            }
+
+            if (Cards.Integration.CardGameBridge.Instance != null)
+            {
+                status += "CardGameBridge: 已连接\n";
+            }
+            else
+            {
+                status += "CardGameBridge: 未连接\n";
+            }
+
+            return status;
+        }
+
+        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -680,7 +771,7 @@ namespace Cards.Player
         #endregion
     }
 
-    #region 增强的PlayerCardState
+    #region 增强的PlayerCardState（保持不变）
 
     /// <summary>
     /// 增强的玩家卡牌状态

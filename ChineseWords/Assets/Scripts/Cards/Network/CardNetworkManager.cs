@@ -41,16 +41,14 @@ namespace Cards.Network
 
         private void Awake()
         {
-            // 单例模式 - 场景特定
-            if (Instance != null && Instance != this)
+            if (Instance == null)
             {
-                LogDebug("发现重复的CardNetworkManager实例，销毁当前实例");
-                Destroy(gameObject);
-                return;
+                Instance = this;
             }
-
-            Instance = this;
-            LogDebug("CardNetworkManager实例已创建");
+            else
+            {
+                Destroy(gameObject);
+            }
         }
 
         private void Start()
