@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
@@ -9,70 +9,80 @@ using Core.Network;
 namespace Cards.UI
 {
     /// <summary>
-    /// ¿¨ÅÆUI¹ÜÀíÆ÷ - µ÷¶ÈÖĞĞÄ
-    /// ¸ºÔğÍ³Ò»¹ÜÀí¿¨ÅÆUIÏµÍ³£¬Ğ­µ÷¸÷Ä£¿éĞĞÎª£¬´¦ÀíÊäÈëºÍ×´Ì¬¹ÜÀí
+    /// å¡ç‰ŒUIç®¡ç†å™¨ - è°ƒåº¦ä¸­å¿ƒ
+    /// è´Ÿè´£ç»Ÿä¸€ç®¡ç†å¡ç‰ŒUIç³»ç»Ÿï¼Œåè°ƒå„æ¨¡å—è¡Œä¸ºï¼Œå¤„ç†è¾“å…¥å’ŒçŠ¶æ€ç®¡ç†
+    /// æ”¯æŒäº‹ä»¶é©±åŠ¨çš„åˆå§‹åŒ–å’Œæ•°æ®åŒæ­¥
     /// </summary>
     public class CardUIManager : MonoBehaviour
     {
-        [Header("CanvasÉèÖÃ")]
-        [SerializeField] private Canvas cardUICanvas; // ¶ÀÁ¢µÄ¿¨ÅÆUI Canvas
-        [SerializeField] private int canvasSortingOrder = 105; // Canvas²ã¼¶
+        [Header("Canvasè®¾ç½®")]
+        [SerializeField] private Canvas cardUICanvas; // ç‹¬ç«‹çš„å¡ç‰ŒUI Canvas
+        [SerializeField] private int canvasSortingOrder = 105; // Canvaså±‚çº§
 
-        [Header("×é¼şÒıÓÃ£¨¿ÉÑ¡£¬Áô¿ÕÔò×Ô¶¯²éÕÒ/´´½¨£©")]
-        [SerializeField] private CardUIComponents cardUIComponents; // ×é¼ş¹¤³§£¨¿ÉÑ¡£©
-        [SerializeField] private CardDisplayUI cardDisplayUI; // Õ¹Ê¾¿ØÖÆÆ÷£¨¿ÉÑ¡£©
+        [Header("ç»„ä»¶å¼•ç”¨ï¼ˆå¯é€‰ï¼Œç•™ç©ºåˆ™è‡ªåŠ¨æŸ¥æ‰¾/åˆ›å»ºï¼‰")]
+        [SerializeField] private CardUIComponents cardUIComponents; // ç»„ä»¶å·¥å‚ï¼ˆå¯é€‰ï¼‰
+        [SerializeField] private CardDisplayUI cardDisplayUI; // å±•ç¤ºæ§åˆ¶å™¨ï¼ˆå¯é€‰ï¼‰
 
-        [Header("ÊäÈëÉèÖÃ")]
-        [SerializeField] private KeyCode cardDisplayTriggerKey = KeyCode.E; // ¿¨ÅÆÕ¹Ê¾´¥·¢¼ü
+        [Header("è¾“å…¥è®¾ç½®")]
+        [SerializeField] private KeyCode cardDisplayTriggerKey = KeyCode.E; // å¡ç‰Œå±•ç¤ºè§¦å‘é”®
 
-        [Header("ÍÏ×§ÉèÖÃ - ÊÍ·ÅÇøÓò£¨ÆÁÄ»°Ù·Ö±È£©")]
+        [Header("æ‹–æ‹½è®¾ç½® - é‡Šæ”¾åŒºåŸŸï¼ˆå±å¹•ç™¾åˆ†æ¯”ï¼‰")]
         [SerializeField] private float releaseAreaCenterX = 0.5f; // 50%
         [SerializeField] private float releaseAreaCenterY = 0.5f; // 50%
         [SerializeField] private float releaseAreaWidth = 0.3f; // 30%
         [SerializeField] private float releaseAreaHeight = 0.3f; // 30%
 
-        [Header("µ÷ÊÔÉèÖÃ")]
-        [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private bool showReleaseArea = false; // ÏÔÊ¾ÊÍ·ÅÇøÓò
+        [Header("ç›®æ ‡é€‰æ‹©è®¾ç½®")]
+        [SerializeField] private KeyCode targetSelfKey = KeyCode.Alpha1;      // ç›®æ ‡è‡ªå·±
+        [SerializeField] private KeyCode targetPlayer2Key = KeyCode.Alpha2;   // ç›®æ ‡ç©å®¶2
+        [SerializeField] private KeyCode targetPlayer3Key = KeyCode.Alpha3;   // ç›®æ ‡ç©å®¶3
+        [SerializeField] private KeyCode targetPlayer4Key = KeyCode.Alpha4;   // ç›®æ ‡ç©å®¶4
+        [SerializeField] private KeyCode targetAllKey = KeyCode.Alpha0;       // ç›®æ ‡æ‰€æœ‰ç©å®¶
 
-        // µ¥ÀıÊµÀı
+        [Header("è°ƒè¯•è®¾ç½®")]
+        [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool showReleaseArea = false; // æ˜¾ç¤ºé‡Šæ”¾åŒºåŸŸ
+
+        // å•ä¾‹å®ä¾‹
         public static CardUIManager Instance { get; private set; }
 
-        // UI×´Ì¬
+        // UIçŠ¶æ€
         public enum UIState
         {
-            Hidden,           // Òş²Ø×´Ì¬
-            Thumbnail,        // ËõÂÔÍ¼×´Ì¬
-            FanDisplay,       // ÉÈĞÎÕ¹Ê¾×´Ì¬
-            Dragging,         // ÍÏ×§×´Ì¬
-            Disabled          // ½ûÓÃ×´Ì¬£¨´ğÌâÆÚ¼ä£©
+            Thumbnail,        // ç¼©ç•¥å›¾çŠ¶æ€ï¼ˆé»˜è®¤çŠ¶æ€ï¼‰
+            FanDisplay,       // æ‰‡å½¢å±•ç¤ºçŠ¶æ€
+            Dragging,         // æ‹–æ‹½çŠ¶æ€
+            TargetSelection,  // ç›®æ ‡é€‰æ‹©çŠ¶æ€
+            Disabled          // ç¦ç”¨çŠ¶æ€ï¼ˆç­”é¢˜æœŸé—´ï¼‰
         }
 
-        private UIState currentUIState = UIState.Hidden;
+        private UIState currentUIState = UIState.Thumbnail;
         private bool isInitialized = false;
+        private bool isWaitingForSystemReady = true;
         private bool isMyTurn = false;
         private bool canUseCards = true;
 
-        // ¿¨ÅÆÊı¾İ
+        // å¡ç‰Œæ•°æ®
         private List<CardDisplayData> currentHandCards = new List<CardDisplayData>();
         private GameObject draggedCard = null;
-        private Vector3 dragOffset = Vector3.zero;
+        private CardData pendingCardData = null; // ç­‰å¾…ç›®æ ‡é€‰æ‹©çš„å¡ç‰Œ
+        private int myPlayerId = -1;
 
-        // ÍÏ×§Ïà¹Ø£¨TODO: ¼ıÍ·»æÖÆ£©
+        // æ‹–æ‹½ç›¸å…³ï¼ˆTODO: ç®­å¤´ç»˜åˆ¶ï¼‰
         private bool isDragging = false;
         private Vector3 dragStartPosition;
 
-        // ÊÂ¼ş
+        // äº‹ä»¶
         public System.Action<int, int> OnCardUseRequested; // cardId, targetPlayerId
         public System.Action OnCardUIOpened;
         public System.Action OnCardUIClosed;
 
-        // ÊôĞÔ
+        // å±æ€§
         public UIState CurrentState => currentUIState;
-        public bool IsCardUIVisible => currentUIState != UIState.Hidden && currentUIState != UIState.Disabled;
-        public bool CanOpenCardUI => currentUIState == UIState.Hidden && !isMyTurn && canUseCards;
+        public bool IsCardUIVisible => currentUIState != UIState.Disabled;
+        public bool CanOpenCardUI => currentUIState == UIState.Thumbnail && !isMyTurn && canUseCards && isInitialized;
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
@@ -83,14 +93,15 @@ namespace Cards.UI
             }
             else
             {
-                LogDebug("·¢ÏÖÖØ¸´µÄCardUIManagerÊµÀı£¬Ïú»Ùµ±Ç°ÊµÀı");
+                LogDebug("å‘ç°é‡å¤çš„CardUIManagerå®ä¾‹ï¼Œé”€æ¯å½“å‰å®ä¾‹");
                 Destroy(gameObject);
             }
         }
 
         private void Start()
         {
-            StartCoroutine(DelayedInitialization());
+            // è®¢é˜…ç³»ç»Ÿäº‹ä»¶å¹¶ç­‰å¾…åˆå§‹åŒ–
+            SubscribeToSystemEvents();
         }
 
         private void OnEnable()
@@ -105,59 +116,150 @@ namespace Cards.UI
 
         private void Update()
         {
+            if (!isInitialized) return;
+
             HandleInput();
             HandleDragging();
         }
 
         #endregion
 
-        #region ³õÊ¼»¯
+        #region äº‹ä»¶é©±åŠ¨åˆå§‹åŒ–
 
         /// <summary>
-        /// ³õÊ¼»¯¹ÜÀíÆ÷
+        /// è®¢é˜…ç³»ç»Ÿäº‹ä»¶
+        /// </summary>
+        private void SubscribeToSystemEvents()
+        {
+            LogDebug("è®¢é˜…CardSystemManageräº‹ä»¶");
+
+            // è®¢é˜…UIç³»ç»Ÿå°±ç»ªäº‹ä»¶
+            CardSystemManager.OnUISystemReady += OnUISystemReady;
+
+            // è®¢é˜…ç³»ç»Ÿåˆå§‹åŒ–å®Œæˆäº‹ä»¶
+            CardSystemManager.OnSystemInitialized += OnSystemInitialized;
+
+            // è®¢é˜…ç©å®¶æ•°æ®å°±ç»ªäº‹ä»¶
+            CardSystemManager.OnPlayerDataReady += OnPlayerDataReady;
+        }
+
+        /// <summary>
+        /// UIç³»ç»Ÿå°±ç»ªäº‹ä»¶å¤„ç†
+        /// </summary>
+        private void OnUISystemReady()
+        {
+            LogDebug("æ”¶åˆ°UIç³»ç»Ÿå°±ç»ªäº‹ä»¶ï¼Œå¼€å§‹åˆå§‹åŒ–UIç®¡ç†å™¨");
+            isWaitingForSystemReady = false;
+
+            StartCoroutine(DelayedInitialization());
+        }
+
+        /// <summary>
+        /// ç³»ç»Ÿåˆå§‹åŒ–å®Œæˆäº‹ä»¶å¤„ç†
+        /// </summary>
+        private void OnSystemInitialized(bool success)
+        {
+            if (success)
+            {
+                LogDebug("CardSystemManageråˆå§‹åŒ–æˆåŠŸ");
+
+                // å¦‚æœè¿˜åœ¨ç­‰å¾…ç³»ç»Ÿå°±ç»ªï¼Œå°è¯•åˆå§‹åŒ–
+                if (isWaitingForSystemReady)
+                {
+                    LogDebug("å°è¯•ç«‹å³åˆå§‹åŒ–ï¼ˆå¯èƒ½é”™è¿‡äº†UIå°±ç»ªäº‹ä»¶ï¼‰");
+                    isWaitingForSystemReady = false;
+                    StartCoroutine(DelayedInitialization());
+                }
+            }
+            else
+            {
+                LogError("CardSystemManageråˆå§‹åŒ–å¤±è´¥ï¼ŒUIç®¡ç†å™¨æ— æ³•æ­£å¸¸å·¥ä½œ");
+            }
+        }
+
+        /// <summary>
+        /// ç©å®¶æ•°æ®å°±ç»ªäº‹ä»¶å¤„ç†
+        /// </summary>
+        private void OnPlayerDataReady(int playerId)
+        {
+            LogDebug($"ç©å®¶{playerId}æ•°æ®å°±ç»ªï¼Œåˆ·æ–°æ‰‹ç‰Œæ˜¾ç¤º");
+
+            // ç¡®å®šæˆ‘çš„ç©å®¶ID
+            if (myPlayerId == -1 && NetworkManager.Instance != null)
+            {
+                myPlayerId = NetworkManager.Instance.ClientId;
+            }
+
+            // å¦‚æœæ˜¯æˆ‘çš„æ•°æ®ï¼Œåˆ·æ–°æ˜¾ç¤º
+            if (playerId == myPlayerId)
+            {
+                RefreshPlayerCardDisplay(playerId);
+            }
+        }
+
+        #endregion
+
+        #region åˆå§‹åŒ–
+
+        /// <summary>
+        /// åˆå§‹åŒ–ç®¡ç†å™¨
         /// </summary>
         private void InitializeManager()
         {
-            // ÉèÖÃCanvas
+            // è®¾ç½®Canvas
             SetupCanvas();
 
-            // ²éÕÒ»ò´´½¨×é¼ş
-            FindOrCreateComponents();
-
-            LogDebug("CardUIManager³õÊ¼»¯¿ªÊ¼");
+            LogDebug("CardUIManageråŸºç¡€åˆå§‹åŒ–å®Œæˆï¼Œç­‰å¾…ç³»ç»Ÿå°±ç»ª");
         }
 
         /// <summary>
-        /// ÑÓ³Ù³õÊ¼»¯
+        /// å»¶è¿Ÿåˆå§‹åŒ–
         /// </summary>
         private IEnumerator DelayedInitialization()
         {
-            // µÈ´ıÆäËûÏµÍ³³õÊ¼»¯Íê³É
-            yield return new WaitForSeconds(0.5f);
+            // ç­‰å¾…ä¸€å¸§ç¡®ä¿æ‰€æœ‰ç³»ç»Ÿå®Œå…¨å°±ç»ª
+            yield return null;
 
-            // ÑéÖ¤ÏµÍ³ÒÀÀµ
+            // æŸ¥æ‰¾æˆ–åˆ›å»ºç»„ä»¶
+            FindOrCreateComponents();
+
+            // éªŒè¯ç³»ç»Ÿä¾èµ–
             if (!ValidateSystemDependencies())
             {
-                LogError("ÏµÍ³ÒÀÀµÑéÖ¤Ê§°Ü£¬CardUIManagerÎŞ·¨Õı³£¹¤×÷");
-                yield break;
+                LogError("ç³»ç»Ÿä¾èµ–éªŒè¯å¤±è´¥ï¼Œå°†åœ¨3ç§’åé‡è¯•");
+                yield return new WaitForSeconds(3f);
+
+                // é‡è¯•éªŒè¯
+                if (!ValidateSystemDependencies())
+                {
+                    LogError("ç³»ç»Ÿä¾èµ–éªŒè¯ä»ç„¶å¤±è´¥ï¼ŒCardUIManageræ— æ³•æ­£å¸¸å·¥ä½œ");
+                    yield break;
+                }
             }
 
-            // ³õÊ¼»¯Íê³É
-            isInitialized = true;
-            LogDebug("CardUIManager³õÊ¼»¯Íê³É");
+            // è·å–æˆ‘çš„ç©å®¶ID
+            if (NetworkManager.Instance != null)
+            {
+                myPlayerId = NetworkManager.Instance.ClientId;
+                LogDebug($"ç¡®å®šæˆ‘çš„ç©å®¶ID: {myPlayerId}");
+            }
 
-            // ÏÔÊ¾ËõÂÔÍ¼
-            ShowThumbnail();
+            // åˆå§‹åŒ–å®Œæˆ
+            isInitialized = true;
+            LogDebug("CardUIManagerå®Œå…¨åˆå§‹åŒ–å®Œæˆ");
+
+            // ç›´æ¥æ˜¾ç¤ºç¼©ç•¥å›¾ï¼ˆä¸å†éœ€è¦æŒ‰Eé”®ï¼‰
+            RefreshAndShowThumbnail();
         }
 
         /// <summary>
-        /// ÉèÖÃCanvas
+        /// è®¾ç½®Canvas
         /// </summary>
         private void SetupCanvas()
         {
             if (cardUICanvas == null)
             {
-                // ´´½¨¶ÀÁ¢Canvas
+                // åˆ›å»ºç‹¬ç«‹Canvas
                 GameObject canvasObject = new GameObject("CardUICanvas");
                 canvasObject.transform.SetParent(transform, false);
 
@@ -165,57 +267,64 @@ namespace Cards.UI
                 cardUICanvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 cardUICanvas.sortingOrder = canvasSortingOrder;
 
-                // Ìí¼ÓCanvasScalerÓÃÓÚÊÊÅä
+                // æ·»åŠ CanvasScalerç”¨äºé€‚é…
                 CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
                 scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
                 scaler.referenceResolution = new Vector2(1920, 1080);
                 scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
                 scaler.matchWidthOrHeight = 0.5f;
 
-                // Ìí¼ÓGraphicRaycasterÓÃÓÚUI½»»¥
+                // æ·»åŠ GraphicRaycasterç”¨äºUIäº¤äº’
                 canvasObject.AddComponent<GraphicRaycaster>();
 
-                LogDebug("´´½¨ÁË¶ÀÁ¢µÄCardUICanvas");
+                LogDebug("åˆ›å»ºäº†ç‹¬ç«‹çš„CardUICanvas");
             }
             else
             {
-                // ÉèÖÃÏÖÓĞCanvas
+                // è®¾ç½®ç°æœ‰Canvas
                 cardUICanvas.sortingOrder = canvasSortingOrder;
             }
         }
 
         /// <summary>
-        /// ²éÕÒ»ò´´½¨×é¼ş
+        /// æŸ¥æ‰¾æˆ–åˆ›å»ºç»„ä»¶
         /// </summary>
         private void FindOrCreateComponents()
         {
-            // ²éÕÒCardUIComponents£¨ÓÅÏÈÊ¹ÓÃÈ«¾Öµ¥Àı£©
+            // ä¼˜å…ˆä»CardSystemManagerè·å–ç»„ä»¶
+            var cardSystemManager = CardSystemManager.Instance;
+            if (cardSystemManager != null)
+            {
+                cardUIComponents = cardSystemManager.GetCardUIComponents();
+                LogDebug("ä»CardSystemManagerè·å–CardUIComponents");
+            }
+
+            // å¦‚æœæ²¡æœ‰è·å–åˆ°ï¼ŒæŸ¥æ‰¾æˆ–åˆ›å»º
             if (cardUIComponents == null)
             {
                 cardUIComponents = CardUIComponents.Instance;
                 if (cardUIComponents == null)
                 {
-                    // Èç¹ûÃ»ÓĞÈ«¾ÖÊµÀı£¬²éÕÒ»ò´´½¨±¾µØÊµÀı
                     cardUIComponents = FindObjectOfType<CardUIComponents>();
                     if (cardUIComponents == null)
                     {
                         GameObject componentsObject = new GameObject("CardUIComponents");
                         componentsObject.transform.SetParent(transform, false);
                         cardUIComponents = componentsObject.AddComponent<CardUIComponents>();
-                        LogDebug("´´½¨ÁËĞÂµÄCardUIComponentsÊµÀı");
+                        LogDebug("åˆ›å»ºäº†æ–°çš„CardUIComponentså®ä¾‹");
                     }
                     else
                     {
-                        LogDebug("ÕÒµ½ÁË³¡¾°ÖĞµÄCardUIComponentsÊµÀı");
+                        LogDebug("æ‰¾åˆ°äº†åœºæ™¯ä¸­çš„CardUIComponentså®ä¾‹");
                     }
                 }
                 else
                 {
-                    LogDebug("Ê¹ÓÃÈ«¾ÖCardUIComponentsµ¥Àı");
+                    LogDebug("ä½¿ç”¨å…¨å±€CardUIComponentså•ä¾‹");
                 }
             }
 
-            // ²éÕÒ»ò´´½¨CardDisplayUI
+            // æŸ¥æ‰¾æˆ–åˆ›å»ºCardDisplayUI
             if (cardDisplayUI == null)
             {
                 cardDisplayUI = GetComponentInChildren<CardDisplayUI>();
@@ -224,17 +333,17 @@ namespace Cards.UI
                     GameObject displayObject = new GameObject("CardDisplayUI");
                     displayObject.transform.SetParent(cardUICanvas.transform, false);
                     cardDisplayUI = displayObject.AddComponent<CardDisplayUI>();
-                    LogDebug("´´½¨ÁËĞÂµÄCardDisplayUIÊµÀı");
+                    LogDebug("åˆ›å»ºäº†æ–°çš„CardDisplayUIå®ä¾‹");
                 }
                 else
                 {
-                    LogDebug("ÕÒµ½ÁË×Ó¶ÔÏóÖĞµÄCardDisplayUIÊµÀı");
+                    LogDebug("æ‰¾åˆ°äº†å­å¯¹è±¡ä¸­çš„CardDisplayUIå®ä¾‹");
                 }
             }
         }
 
         /// <summary>
-        /// ÑéÖ¤ÏµÍ³ÒÀÀµ
+        /// éªŒè¯ç³»ç»Ÿä¾èµ–
         /// </summary>
         private bool ValidateSystemDependencies()
         {
@@ -242,19 +351,24 @@ namespace Cards.UI
 
             if (cardUIComponents == null)
             {
-                LogError("CardUIComponentsÎ´ÕÒµ½");
+                LogError("CardUIComponentsæœªæ‰¾åˆ°");
                 isValid = false;
             }
 
             if (cardDisplayUI == null)
             {
-                LogError("CardDisplayUIÎ´ÕÒµ½");
+                LogError("CardDisplayUIæœªæ‰¾åˆ°");
                 isValid = false;
             }
 
             if (CardSystemManager.Instance == null)
             {
-                LogError("CardSystemManagerÎ´ÕÒµ½");
+                LogError("CardSystemManageræœªæ‰¾åˆ°");
+                isValid = false;
+            }
+            else if (!CardSystemManager.Instance.IsSystemReady())
+            {
+                LogError("CardSystemManageræœªå°±ç»ª");
                 isValid = false;
             }
 
@@ -263,17 +377,17 @@ namespace Cards.UI
 
         #endregion
 
-        #region ÊÂ¼ş¶©ÔÄ
+        #region äº‹ä»¶è®¢é˜…
 
         /// <summary>
-        /// ¶©ÔÄÊÂ¼ş
+        /// è®¢é˜…äº‹ä»¶
         /// </summary>
         private void SubscribeToEvents()
         {
-            // ¶©ÔÄ»ØºÏ±ä»¯ÊÂ¼ş
+            // è®¢é˜…å›åˆå˜åŒ–äº‹ä»¶
             NetworkManager.OnPlayerTurnChanged += OnPlayerTurnChanged;
 
-            // ¶©ÔÄ¿¨ÅÆÏÔÊ¾UIÊÂ¼ş
+            // è®¢é˜…å¡ç‰Œæ˜¾ç¤ºUIäº‹ä»¶
             if (cardDisplayUI != null)
             {
                 cardDisplayUI.OnCardSelected += OnCardSelected;
@@ -281,21 +395,35 @@ namespace Cards.UI
                 cardDisplayUI.OnCardHoverExit += OnCardHoverExit;
             }
 
-            LogDebug("ÊÂ¼ş¶©ÔÄÍê³É");
+            // è®¢é˜…å¡ç‰Œç³»ç»Ÿäº‹ä»¶
+            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
+            if (playerCardManager != null)
+            {
+                playerCardManager.OnHandSizeChanged += OnHandSizeChanged;
+                playerCardManager.OnCardAcquired += OnCardAcquired;
+                playerCardManager.OnCardUsed += OnCardUsed;
+            }
+
+            LogDebug("äº‹ä»¶è®¢é˜…å®Œæˆ");
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…äº‹ä»¶
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            // È¡Ïû¶©ÔÄ»ØºÏ±ä»¯ÊÂ¼ş
+            // å–æ¶ˆç³»ç»Ÿäº‹ä»¶è®¢é˜…
+            CardSystemManager.OnUISystemReady -= OnUISystemReady;
+            CardSystemManager.OnSystemInitialized -= OnSystemInitialized;
+            CardSystemManager.OnPlayerDataReady -= OnPlayerDataReady;
+
+            // å–æ¶ˆè®¢é˜…å›åˆå˜åŒ–äº‹ä»¶
             if (NetworkManager.Instance != null)
             {
                 NetworkManager.OnPlayerTurnChanged -= OnPlayerTurnChanged;
             }
 
-            // È¡Ïû¶©ÔÄ¿¨ÅÆÏÔÊ¾UIÊÂ¼ş
+            // å–æ¶ˆè®¢é˜…å¡ç‰Œæ˜¾ç¤ºUIäº‹ä»¶
             if (cardDisplayUI != null)
             {
                 cardDisplayUI.OnCardSelected -= OnCardSelected;
@@ -303,125 +431,387 @@ namespace Cards.UI
                 cardDisplayUI.OnCardHoverExit -= OnCardHoverExit;
             }
 
-            LogDebug("È¡ÏûÊÂ¼ş¶©ÔÄ");
+            // å–æ¶ˆè®¢é˜…å¡ç‰Œç³»ç»Ÿäº‹ä»¶
+            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
+            if (playerCardManager != null)
+            {
+                playerCardManager.OnHandSizeChanged -= OnHandSizeChanged;
+                playerCardManager.OnCardAcquired -= OnCardAcquired;
+                playerCardManager.OnCardUsed -= OnCardUsed;
+            }
+
+            LogDebug("å–æ¶ˆäº‹ä»¶è®¢é˜…");
         }
 
         #endregion
 
-        #region ÊÂ¼ş´¦Àí
+        #region äº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// ´¦Àí»ØºÏ±ä»¯ÊÂ¼ş
+        /// å¤„ç†å›åˆå˜åŒ–äº‹ä»¶
         /// </summary>
         private void OnPlayerTurnChanged(ushort newTurnPlayerId)
         {
-            // ¼ì²éÊÇ·ñÊÇÎÒµÄ»ØºÏ
+            // æ£€æŸ¥æ˜¯å¦æ˜¯æˆ‘çš„å›åˆ
             bool wasMyTurn = isMyTurn;
-            isMyTurn = (NetworkManager.Instance != null && NetworkManager.Instance.ClientId == newTurnPlayerId);
+            isMyTurn = (myPlayerId == newTurnPlayerId);
 
-            LogDebug($"»ØºÏ±ä»¯ - µ±Ç°Íæ¼Ò: {newTurnPlayerId}, ÊÇÎÒµÄ»ØºÏ: {isMyTurn}");
+            LogDebug($"å›åˆå˜åŒ– - å½“å‰ç©å®¶: {newTurnPlayerId}, æ˜¯æˆ‘çš„å›åˆ: {isMyTurn}");
 
-            // Èç¹ûÂÖµ½ÎÒµÄ»ØºÏ£¬×Ô¶¯¹Ø±Õ¿¨ÅÆUI
-            if (isMyTurn && IsCardUIVisible)
+            // å¦‚æœè½®åˆ°æˆ‘çš„å›åˆï¼Œå…³é—­åˆ°ç¼©ç•¥å›¾çŠ¶æ€
+            if (isMyTurn && currentUIState == UIState.FanDisplay)
             {
-                LogDebug("ÂÖµ½ÎÒµÄ»ØºÏ£¬×Ô¶¯¹Ø±Õ¿¨ÅÆUI");
-                HideCardUI();
+                LogDebug("è½®åˆ°æˆ‘çš„å›åˆï¼Œåˆ‡æ¢åˆ°ç¼©ç•¥å›¾çŠ¶æ€");
+                SetUIState(UIState.Thumbnail);
+                if (cardDisplayUI != null)
+                {
+                    cardDisplayUI.HideCardDisplay();
+                    RefreshAndShowThumbnail();
+                }
             }
 
-            // ¸üĞÂUI×´Ì¬
+            // æ›´æ–°UIçŠ¶æ€
             UpdateUIAvailability();
         }
 
         /// <summary>
-        /// ´¦Àí¿¨ÅÆÑ¡ÔñÊÂ¼ş
+        /// å¤„ç†æ‰‹ç‰Œæ•°é‡å˜åŒ–
+        /// </summary>
+        private void OnHandSizeChanged(int playerId, int newHandSize)
+        {
+            if (playerId == myPlayerId)
+            {
+                LogDebug($"æˆ‘çš„æ‰‹ç‰Œæ•°é‡å˜åŒ–: {newHandSize}");
+                RefreshPlayerCardDisplay(playerId);
+            }
+        }
+
+        /// <summary>
+        /// å¤„ç†å¡ç‰Œè·å¾—äº‹ä»¶
+        /// </summary>
+        private void OnCardAcquired(int playerId, int cardId, string cardName)
+        {
+            if (playerId == myPlayerId)
+            {
+                LogDebug($"æˆ‘è·å¾—äº†å¡ç‰Œ: {cardName}");
+                RefreshPlayerCardDisplay(playerId);
+            }
+        }
+
+        /// <summary>
+        /// å¤„ç†å¡ç‰Œä½¿ç”¨äº‹ä»¶
+        /// </summary>
+        private void OnCardUsed(int playerId, int cardId, int targetPlayerId)
+        {
+            if (playerId == myPlayerId)
+            {
+                LogDebug($"æˆ‘ä½¿ç”¨äº†å¡ç‰Œ: {cardId}");
+                RefreshPlayerCardDisplay(playerId);
+            }
+        }
+
+        /// <summary>
+        /// å¤„ç†å¡ç‰Œé€‰æ‹©äº‹ä»¶
         /// </summary>
         private void OnCardSelected(GameObject cardUI)
         {
             if (currentUIState != UIState.FanDisplay) return;
 
-            // ¿ªÊ¼ÍÏ×§
-            StartDragging(cardUI);
+            // è·å–å¡ç‰Œæ•°æ®
+            CardUIIdentifier identifier = cardUI.GetComponent<CardUIIdentifier>();
+            if (identifier == null)
+            {
+                LogError("å¡ç‰ŒUIç¼ºå°‘æ ‡è¯†ç»„ä»¶");
+                return;
+            }
+
+            // è·å–å¡ç‰Œé…ç½®
+            var cardData = GetCardDataById(identifier.cardId);
+            if (cardData == null)
+            {
+                LogError($"æœªæ‰¾åˆ°å¡ç‰Œæ•°æ®: {identifier.cardId}");
+                return;
+            }
+
+            // æ£€æŸ¥æ˜¯å¦éœ€è¦ç›®æ ‡é€‰æ‹©
+            if (NeedsTargetSelection(cardData))
+            {
+                StartTargetSelection(cardUI, cardData);
+            }
+            else
+            {
+                // å¼€å§‹æ‹–æ‹½
+                StartDragging(cardUI);
+            }
         }
 
         /// <summary>
-        /// ´¦Àí¿¨ÅÆĞüÍ£½øÈë
+        /// å¤„ç†å¡ç‰Œæ‚¬åœè¿›å…¥
         /// </summary>
         private void OnCardHoverEnter(GameObject cardUI)
         {
-            // TODO: ¿ÉÒÔÌí¼ÓĞüÍ£ÌáÊ¾ĞÅÏ¢
-            LogDebug($"¿¨ÅÆĞüÍ£½øÈë: {cardUI.name}");
+            // å®ç°æ‚¬åœæç¤º
+            ShowCardTooltip(cardUI);
         }
 
         /// <summary>
-        /// ´¦Àí¿¨ÅÆĞüÍ£Àë¿ª
+        /// å¤„ç†å¡ç‰Œæ‚¬åœç¦»å¼€
         /// </summary>
         private void OnCardHoverExit(GameObject cardUI)
         {
-            LogDebug($"¿¨ÅÆĞüÍ£Àë¿ª: {cardUI.name}");
+            // éšè—æ‚¬åœæç¤º
+            HideCardTooltip();
         }
 
         #endregion
 
-        #region ÊäÈë´¦Àí
+        #region è¾“å…¥å¤„ç†
 
         /// <summary>
-        /// ´¦ÀíÊäÈë
+        /// å¤„ç†è¾“å…¥
         /// </summary>
         private void HandleInput()
         {
-            if (!isInitialized) return;
-
-            // E¼üÇĞ»»¿¨ÅÆUI
+            // Eé”®åˆ‡æ¢å¡ç‰ŒUI
             if (Input.GetKeyDown(cardDisplayTriggerKey))
             {
                 HandleCardDisplayToggle();
             }
 
-            // ESC¼ü¹Ø±Õ¿¨ÅÆUI
+            // ESCé”®å…³é—­å¡ç‰ŒUI
             if (Input.GetKeyDown(KeyCode.Escape) && IsCardUIVisible)
             {
                 HideCardUI();
             }
+
+            // ç›®æ ‡é€‰æ‹©è¾“å…¥å¤„ç†
+            if (currentUIState == UIState.TargetSelection)
+            {
+                HandleTargetSelectionInput();
+            }
         }
 
         /// <summary>
-        /// ´¦Àí¿¨ÅÆÕ¹Ê¾ÇĞ»»
+        /// å¤„ç†å¡ç‰Œå±•ç¤ºåˆ‡æ¢
         /// </summary>
         private void HandleCardDisplayToggle()
         {
             switch (currentUIState)
             {
-                case UIState.Hidden:
-                    if (CanOpenCardUI)
+                case UIState.Thumbnail:
+                    if (!isMyTurn && canUseCards && isInitialized)
                     {
-                        ShowCardUI();
+                        ShowFanDisplay();
                     }
                     else
                     {
-                        LogDebug($"ÎŞ·¨´ò¿ª¿¨ÅÆUI - ÎÒµÄ»ØºÏ: {isMyTurn}, ¿ÉÓÃ×´Ì¬: {canUseCards}");
+                        LogDebug($"æ— æ³•æ‰“å¼€æ‰‡å½¢å±•ç¤º - æˆ‘çš„å›åˆ: {isMyTurn}, å¯ç”¨çŠ¶æ€: {canUseCards}, å·²åˆå§‹åŒ–: {isInitialized}");
                     }
                     break;
 
-                case UIState.Thumbnail:
-                    ShowFanDisplay();
+                case UIState.FanDisplay:
+                    // åˆ‡æ¢å›ç¼©ç•¥å›¾çŠ¶æ€
+                    SetUIState(UIState.Thumbnail);
+                    if (cardDisplayUI != null)
+                    {
+                        cardDisplayUI.HideCardDisplay();
+                        RefreshAndShowThumbnail();
+                    }
                     break;
 
-                case UIState.FanDisplay:
-                    HideCardUI();
+                case UIState.TargetSelection:
+                    CancelTargetSelection();
                     break;
 
                 case UIState.Disabled:
-                    LogDebug("¿¨ÅÆUIµ±Ç°±»½ûÓÃ");
+                    LogDebug("å¡ç‰ŒUIå½“å‰è¢«ç¦ç”¨");
                     break;
+            }
+        }
+
+        /// <summary>
+        /// å¤„ç†ç›®æ ‡é€‰æ‹©è¾“å…¥
+        /// </summary>
+        private void HandleTargetSelectionInput()
+        {
+            int targetPlayerId = -1;
+
+            if (Input.GetKeyDown(targetSelfKey))
+            {
+                targetPlayerId = myPlayerId;
+            }
+            else if (Input.GetKeyDown(targetPlayer2Key))
+            {
+                targetPlayerId = 2;
+            }
+            else if (Input.GetKeyDown(targetPlayer3Key))
+            {
+                targetPlayerId = 3;
+            }
+            else if (Input.GetKeyDown(targetPlayer4Key))
+            {
+                targetPlayerId = 4;
+            }
+            else if (Input.GetKeyDown(targetAllKey))
+            {
+                targetPlayerId = 0; // ç‰¹æ®Šå€¼è¡¨ç¤ºæ‰€æœ‰ç©å®¶
+            }
+
+            if (targetPlayerId != -1)
+            {
+                CompleteTargetSelection(targetPlayerId);
             }
         }
 
         #endregion
 
-        #region ÍÏ×§´¦Àí
+        #region ç›®æ ‡é€‰æ‹©ç³»ç»Ÿ
 
         /// <summary>
-        /// ¿ªÊ¼ÍÏ×§
+        /// æ£€æŸ¥æ˜¯å¦éœ€è¦ç›®æ ‡é€‰æ‹©
+        /// </summary>
+        private bool NeedsTargetSelection(CardData cardData)
+        {
+            // æ ¹æ®å¡ç‰Œçš„ç›®æ ‡ç±»å‹åˆ¤æ–­
+            return cardData.targetType == TargetType.SinglePlayer ||
+                   cardData.targetType == TargetType.AllPlayers;
+        }
+
+        /// <summary>
+        /// å¼€å§‹ç›®æ ‡é€‰æ‹©
+        /// </summary>
+        private void StartTargetSelection(GameObject cardUI, CardData cardData)
+        {
+            pendingCardData = cardData;
+            draggedCard = cardUI;
+
+            SetUIState(UIState.TargetSelection);
+
+            LogDebug($"å¼€å§‹ç›®æ ‡é€‰æ‹© - å¡ç‰Œ: {cardData.cardName}");
+
+            // æ˜¾ç¤ºç›®æ ‡é€‰æ‹©æç¤º
+            ShowTargetSelectionUI(cardData);
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºç›®æ ‡é€‰æ‹©UI
+        /// </summary>
+        private void ShowTargetSelectionUI(CardData cardData)
+        {
+            string message = $"è¯·é€‰æ‹© {cardData.cardName} çš„ç›®æ ‡ï¼š\n";
+
+            if (cardData.targetType == TargetType.SinglePlayer)
+            {
+                message += "1-è‡ªå·±  2-ç©å®¶2  3-ç©å®¶3  4-ç©å®¶4";
+            }
+            else if (cardData.targetType == TargetType.AllPlayers)
+            {
+                message += "0-æ‰€æœ‰ç©å®¶";
+            }
+
+            message += "\nESC-å–æ¶ˆ";
+
+            // TODO: æ˜¾ç¤ºå®é™…çš„UIé¢æ¿ï¼Œè¿™é‡Œå…ˆç”¨Debug
+            LogDebug(message);
+        }
+
+        /// <summary>
+        /// å®Œæˆç›®æ ‡é€‰æ‹©
+        /// </summary>
+        private void CompleteTargetSelection(int targetPlayerId)
+        {
+            if (pendingCardData == null)
+            {
+                LogError("æ²¡æœ‰å¾…å¤„ç†çš„å¡ç‰Œæ•°æ®");
+                return;
+            }
+
+            // éªŒè¯ç›®æ ‡æ˜¯å¦æœ‰æ•ˆ
+            if (!ValidateTarget(pendingCardData, targetPlayerId))
+            {
+                LogWarning($"æ— æ•ˆçš„ç›®æ ‡: {targetPlayerId}");
+                return;
+            }
+
+            LogDebug($"ç›®æ ‡é€‰æ‹©å®Œæˆ - å¡ç‰Œ: {pendingCardData.cardName}, ç›®æ ‡: {targetPlayerId}");
+
+            // ä½¿ç”¨å¡ç‰Œ
+            ExecuteCardUsage(pendingCardData.cardId, targetPlayerId);
+
+            // æ¸…ç†ç›®æ ‡é€‰æ‹©çŠ¶æ€
+            ClearTargetSelection();
+        }
+
+        /// <summary>
+        /// å–æ¶ˆç›®æ ‡é€‰æ‹©
+        /// </summary>
+        private void CancelTargetSelection()
+        {
+            LogDebug("å–æ¶ˆç›®æ ‡é€‰æ‹©");
+            ClearTargetSelection();
+            SetUIState(UIState.FanDisplay);
+        }
+
+        /// <summary>
+        /// æ¸…ç†ç›®æ ‡é€‰æ‹©çŠ¶æ€
+        /// </summary>
+        private void ClearTargetSelection()
+        {
+            pendingCardData = null;
+            draggedCard = null;
+
+            // éšè—ç›®æ ‡é€‰æ‹©UI
+            HideTargetSelectionUI();
+        }
+
+        /// <summary>
+        /// éšè—ç›®æ ‡é€‰æ‹©UI
+        /// </summary>
+        private void HideTargetSelectionUI()
+        {
+            // TODO: éšè—å®é™…çš„UIé¢æ¿
+        }
+
+        /// <summary>
+        /// éªŒè¯ç›®æ ‡
+        /// </summary>
+        private bool ValidateTarget(CardData cardData, int targetPlayerId)
+        {
+            // åŸºç¡€éªŒè¯
+            if (cardData.targetType == TargetType.Self && targetPlayerId != myPlayerId)
+            {
+                return false;
+            }
+
+            if (cardData.targetType == TargetType.SinglePlayer)
+            {
+                // éªŒè¯ç›®æ ‡ç©å®¶æ˜¯å¦å­˜åœ¨ä¸”å­˜æ´»
+                return IsValidPlayerTarget(targetPlayerId);
+            }
+
+            if (cardData.targetType == TargetType.AllPlayers && targetPlayerId != 0)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// æ£€æŸ¥æ˜¯å¦ä¸ºæœ‰æ•ˆçš„ç©å®¶ç›®æ ‡
+        /// </summary>
+        private bool IsValidPlayerTarget(int playerId)
+        {
+            // ç®€åŒ–å®ç°ï¼Œå®é™…åº”è¯¥æ£€æŸ¥ç©å®¶æ˜¯å¦å­˜åœ¨ä¸”å­˜æ´»
+            return playerId >= 1 && playerId <= 4;
+        }
+
+        #endregion
+
+        #region æ‹–æ‹½å¤„ç†
+
+        /// <summary>
+        /// å¼€å§‹æ‹–æ‹½
         /// </summary>
         private void StartDragging(GameObject cardUI)
         {
@@ -431,253 +821,304 @@ namespace Cards.UI
             isDragging = true;
             dragStartPosition = cardUI.transform.position;
 
-            // ¼ÆËãÊó±êÆ«ÒÆ
-            Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-            dragOffset = cardUI.transform.position - mouseWorldPos;
-
-            // ÇĞ»»µ½ÍÏ×§×´Ì¬
+            // åˆ‡æ¢åˆ°æ‹–æ‹½çŠ¶æ€
             SetUIState(UIState.Dragging);
 
-            // TODO: ´´½¨ÍÏ×§¼ıÍ·
+            // TODO: åˆ›å»ºæ‹–æ‹½ç®­å¤´
 
-            LogDebug($"¿ªÊ¼ÍÏ×§¿¨ÅÆ: {cardUI.name}");
+            LogDebug($"å¼€å§‹æ‹–æ‹½å¡ç‰Œ: {cardUI.name}");
         }
 
         /// <summary>
-        /// ´¦ÀíÍÏ×§
+        /// å¤„ç†æ‹–æ‹½
         /// </summary>
         private void HandleDragging()
         {
             if (!isDragging || draggedCard == null) return;
 
-            // Êó±êÌ§ÆğÊ±½áÊøÍÏ×§
+            // é¼ æ ‡æŠ¬èµ·æ—¶ç»“æŸæ‹–æ‹½
             if (Input.GetMouseButtonUp(0))
             {
                 EndDragging();
                 return;
             }
 
-            // TODO: ¸üĞÂÍÏ×§¼ıÍ·Î»ÖÃ
-            // ÕâÀïÔİÊ±²»ÒÆ¶¯¿¨ÅÆ±¾Éí£¬Ö»»æÖÆ¼ıÍ·
+            // TODO: æ›´æ–°æ‹–æ‹½ç®­å¤´ä½ç½®
             UpdateDragArrow();
         }
 
         /// <summary>
-        /// ¸üĞÂÍÏ×§¼ıÍ· (TODO)
+        /// æ›´æ–°æ‹–æ‹½ç®­å¤´ (TODO)
         /// </summary>
         private void UpdateDragArrow()
         {
-            // TODO: ÊµÏÖ¼ıÍ·»æÖÆÂß¼­
-            // ¼ıÍ·´Ó¿¨ÅÆÎ»ÖÃÒÔÇúÏßĞÎÊ½Ö¸ÏòÊó±êÎ»ÖÃ
+            // TODO: å®ç°ç®­å¤´ç»˜åˆ¶é€»è¾‘
+            // ç®­å¤´ä»å¡ç‰Œä½ç½®ä»¥æ›²çº¿å½¢å¼æŒ‡å‘é¼ æ ‡ä½ç½®
         }
 
         /// <summary>
-        /// ½áÊøÍÏ×§
+        /// ç»“æŸæ‹–æ‹½
         /// </summary>
         private void EndDragging()
         {
             if (!isDragging || draggedCard == null) return;
 
-            // ¼ì²éÊÍ·ÅÎ»ÖÃ
+            // æ£€æŸ¥é‡Šæ”¾ä½ç½®
             bool isInReleaseArea = IsMouseInReleaseArea();
 
             if (isInReleaseArea)
             {
-                // ÔÚÊÍ·ÅÇøÓòÄÚ£¬³¢ÊÔÊ¹ÓÃ¿¨ÅÆ
-                TryUseCard(draggedCard);
+                // è·å–å¡ç‰Œæ•°æ®
+                CardUIIdentifier identifier = draggedCard.GetComponent<CardUIIdentifier>();
+                if (identifier != null)
+                {
+                    // åœ¨é‡Šæ”¾åŒºåŸŸå†…ï¼Œä½¿ç”¨å¡ç‰Œï¼ˆæ— ç›®æ ‡æˆ–è‡ªç›®æ ‡ï¼‰
+                    ExecuteCardUsage(identifier.cardId, myPlayerId);
+                }
             }
             else
             {
-                LogDebug("ÍÏ×§ÊÍ·ÅÎ»ÖÃÎŞĞ§£¬È¡ÏûÊ¹ÓÃ¿¨ÅÆ");
+                LogDebug("æ‹–æ‹½é‡Šæ”¾ä½ç½®æ— æ•ˆï¼Œå–æ¶ˆä½¿ç”¨å¡ç‰Œ");
             }
 
-            // ÇåÀíÍÏ×§×´Ì¬
+            // æ¸…ç†æ‹–æ‹½çŠ¶æ€
             CleanupDragging();
         }
 
         /// <summary>
-        /// ÇåÀíÍÏ×§×´Ì¬
+        /// æ¸…ç†æ‹–æ‹½çŠ¶æ€
         /// </summary>
         private void CleanupDragging()
         {
             isDragging = false;
             draggedCard = null;
-            dragOffset = Vector3.zero;
 
-            // TODO: Ïú»ÙÍÏ×§¼ıÍ·
+            // TODO: é”€æ¯æ‹–æ‹½ç®­å¤´
 
-            // ·µ»Øµ½ÉÈĞÎÕ¹Ê¾×´Ì¬
+            // è¿”å›åˆ°æ‰‡å½¢å±•ç¤ºçŠ¶æ€
             SetUIState(UIState.FanDisplay);
 
-            LogDebug("ÍÏ×§×´Ì¬ÒÑÇåÀí");
+            LogDebug("æ‹–æ‹½çŠ¶æ€å·²æ¸…ç†");
         }
 
         /// <summary>
-        /// ¼ì²éÊó±êÊÇ·ñÔÚÊÍ·ÅÇøÓòÄÚ
+        /// æ£€æŸ¥é¼ æ ‡æ˜¯å¦åœ¨é‡Šæ”¾åŒºåŸŸå†…
         /// </summary>
         private bool IsMouseInReleaseArea()
         {
             Vector2 mouseScreenPos = Input.mousePosition;
             Vector2 screenSize = new Vector2(Screen.width, Screen.height);
 
-            // ×ª»»ÎªÆÁÄ»°Ù·Ö±È
+            // è½¬æ¢ä¸ºå±å¹•ç™¾åˆ†æ¯”
             Vector2 mousePercent = new Vector2(mouseScreenPos.x / screenSize.x, mouseScreenPos.y / screenSize.y);
 
-            // ¼ÆËãÊÍ·ÅÇøÓò±ß½ç
+            // è®¡ç®—é‡Šæ”¾åŒºåŸŸè¾¹ç•Œ
             float leftBound = releaseAreaCenterX - releaseAreaWidth / 2f;
             float rightBound = releaseAreaCenterX + releaseAreaWidth / 2f;
             float bottomBound = releaseAreaCenterY - releaseAreaHeight / 2f;
             float topBound = releaseAreaCenterY + releaseAreaHeight / 2f;
 
-            // ¼ì²éÊÇ·ñÔÚÇøÓòÄÚ
+            // æ£€æŸ¥æ˜¯å¦åœ¨åŒºåŸŸå†…
             bool inArea = mousePercent.x >= leftBound && mousePercent.x <= rightBound &&
                          mousePercent.y >= bottomBound && mousePercent.y <= topBound;
 
-            LogDebug($"Êó±êÎ»ÖÃ¼ì²é - °Ù·Ö±È: {mousePercent}, ÔÚÊÍ·ÅÇøÓòÄÚ: {inArea}");
             return inArea;
         }
 
         #endregion
 
-        #region ¿¨ÅÆÊ¹ÓÃ
+        #region å¡ç‰Œä½¿ç”¨
 
         /// <summary>
-        /// ³¢ÊÔÊ¹ÓÃ¿¨ÅÆ
+        /// æ‰§è¡Œå¡ç‰Œä½¿ç”¨
         /// </summary>
-        private void TryUseCard(GameObject cardUI)
+        private void ExecuteCardUsage(int cardId, int targetPlayerId)
         {
-            if (cardUI == null) return;
+            LogDebug($"æ‰§è¡Œå¡ç‰Œä½¿ç”¨: å¡ç‰ŒID {cardId}, ç›®æ ‡ {targetPlayerId}");
 
-            // »ñÈ¡¿¨ÅÆID
-            CardUIIdentifier identifier = cardUI.GetComponent<CardUIIdentifier>();
-            if (identifier == null)
-            {
-                LogError("¿¨ÅÆUIÈ±ÉÙ±êÊ¶×é¼ş£¬ÎŞ·¨Ê¹ÓÃ");
-                return;
-            }
-
-            int cardId = identifier.cardId;
-            LogDebug($"³¢ÊÔÊ¹ÓÃ¿¨ÅÆ: {identifier.cardName} (ID: {cardId})");
-
-            // ÑéÖ¤¿¨ÅÆÊ¹ÓÃÌõ¼ş
+            // éªŒè¯å¡ç‰Œä½¿ç”¨æ¡ä»¶
             if (!ValidateCardUsage(cardId))
             {
-                LogWarning($"¿¨ÅÆ {identifier.cardName} Ê¹ÓÃÌõ¼ş²»Âú×ã");
+                var cardData = GetCardDataById(cardId);
+                LogWarning($"å¡ç‰Œ {cardData?.cardName ?? cardId.ToString()} ä½¿ç”¨æ¡ä»¶ä¸æ»¡è¶³");
                 return;
             }
 
-            // TODO: Èç¹ûÊÇÖ¸ÏòĞÍ¿¨ÅÆ£¬ĞèÒªÑ¡ÔñÄ¿±ê
-            // Ä¿Ç°Ä¬ÈÏÊ¹ÓÃ -1 ×÷ÎªÄ¿±ê£¨×Ô·¢ĞÍ¿¨ÅÆ»òÎŞÄ¿±ê£©
-            int targetPlayerId = -1;
+            // é€šè¿‡PlayerCardManagerä½¿ç”¨å¡ç‰Œ
+            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
+            if (playerCardManager != null)
+            {
+                bool success = playerCardManager.UseCard(myPlayerId, cardId, targetPlayerId);
+                if (success)
+                {
+                    LogDebug($"å¡ç‰Œä½¿ç”¨æˆåŠŸ: {cardId}");
 
-            // ´¥·¢¿¨ÅÆÊ¹ÓÃÇëÇó
-            OnCardUseRequested?.Invoke(cardId, targetPlayerId);
+                    // è§¦å‘ä½¿ç”¨è¯·æ±‚äº‹ä»¶ï¼ˆä¾›å…¶ä»–ç³»ç»Ÿç›‘å¬ï¼‰
+                    OnCardUseRequested?.Invoke(cardId, targetPlayerId);
 
-            LogDebug($"¿¨ÅÆÊ¹ÓÃÇëÇóÒÑ·¢ËÍ: {identifier.cardName}");
-
-            // ¹Ø±Õ¿¨ÅÆUI
-            HideCardUI();
+                    // å…³é—­å¡ç‰ŒUI
+                    HideCardUI();
+                }
+                else
+                {
+                    LogError($"å¡ç‰Œä½¿ç”¨å¤±è´¥: {cardId}");
+                }
+            }
+            else
+            {
+                LogError("PlayerCardManagerä¸å¯ç”¨ï¼Œæ— æ³•ä½¿ç”¨å¡ç‰Œ");
+            }
         }
 
         /// <summary>
-        /// ÑéÖ¤¿¨ÅÆÊ¹ÓÃÌõ¼ş
+        /// éªŒè¯å¡ç‰Œä½¿ç”¨æ¡ä»¶
         /// </summary>
         private bool ValidateCardUsage(int cardId)
         {
-            // Ê¹ÓÃCardUtilitiesÖĞµÄÑéÖ¤Âß¼­
-            if (CardSystemManager.Instance?.cardConfig == null)
+            // ä½¿ç”¨CardSystemManagerçš„éªŒè¯é€»è¾‘
+            var cardSystemManager = CardSystemManager.Instance;
+            if (cardSystemManager?.GetCardConfig() == null)
             {
-                LogError("CardSystemManager»òÅäÖÃ²»¿ÉÓÃ");
+                LogError("CardSystemManageræˆ–é…ç½®ä¸å¯ç”¨");
                 return false;
             }
 
-            // ²éÕÒ¿¨ÅÆÊı¾İ
-            var cardData = CardSystemManager.Instance.cardConfig.AllCards.Find(c => c.cardId == cardId);
+            // æŸ¥æ‰¾å¡ç‰Œæ•°æ®
+            var cardData = GetCardDataById(cardId);
             if (cardData == null)
             {
-                LogError($"Î´ÕÒµ½¿¨ÅÆÊı¾İ: {cardId}");
+                LogError($"æœªæ‰¾åˆ°å¡ç‰Œæ•°æ®: {cardId}");
                 return false;
             }
 
-            // »ñÈ¡Íæ¼Ò×´Ì¬£¨ÕâÀï¼ò»¯´¦Àí£¬Êµ¼ÊÓ¦¸Ã´ÓPlayerCardManager»ñÈ¡£©
-            // TODO: ¼¯³ÉÕæÊµµÄÍæ¼Ò×´Ì¬ÑéÖ¤
-            bool isMyTurnForValidation = false; // ·Ç»ØºÏÊ±Ê¹ÓÃ¿¨ÅÆ
+            // æ£€æŸ¥æ¸¸æˆçŠ¶æ€
+            if (!Cards.Core.CardUtilities.Validator.ValidateGameState(true))
+            {
+                LogDebug("æ¸¸æˆçŠ¶æ€éªŒè¯å¤±è´¥");
+                return false;
+            }
 
-            // Ê¹ÓÃCardUtilitiesÑéÖ¤
-            return Cards.Core.CardUtilities.Validator.ValidateGameState(true) &&
-                   !isMyTurnForValidation; // ¼ò»¯µÄ»ØºÏÑéÖ¤
+            // æ£€æŸ¥å›åˆçŠ¶æ€
+            if (isMyTurn)
+            {
+                LogDebug("æˆ‘çš„å›åˆæ—¶æ— æ³•ä½¿ç”¨å¡ç‰Œ");
+                return false;
+            }
+
+            // æ£€æŸ¥ç©å®¶æ‰‹ç‰Œä¸­æ˜¯å¦æœ‰è¿™å¼ å¡
+            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
+            if (playerCardManager != null)
+            {
+                var playerHand = playerCardManager.GetPlayerHand(myPlayerId);
+                if (!playerHand.Contains(cardId))
+                {
+                    LogDebug($"ç©å®¶æ‰‹ç‰Œä¸­æ²¡æœ‰å¡ç‰Œ: {cardId}");
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         #endregion
 
-        #region ¹«¹²½Ó¿Ú
+        #region æç¤ºç³»ç»Ÿ
 
         /// <summary>
-        /// ÏÔÊ¾¿¨ÅÆUI£¨´ÓÍâ²¿µ÷ÓÃ£©
+        /// æ˜¾ç¤ºå¡ç‰Œæç¤º
+        /// </summary>
+        private void ShowCardTooltip(GameObject cardUI)
+        {
+            CardUIIdentifier identifier = cardUI.GetComponent<CardUIIdentifier>();
+            if (identifier == null) return;
+
+            var cardData = GetCardDataById(identifier.cardId);
+            if (cardData == null) return;
+
+            string tooltip = $"{cardData.cardName}\n{cardData.description}";
+
+            // TODO: æ˜¾ç¤ºå®é™…çš„æç¤ºUIï¼Œè¿™é‡Œå…ˆç”¨Debug
+            LogDebug($"å¡ç‰Œæç¤º: {tooltip}");
+        }
+
+        /// <summary>
+        /// éšè—å¡ç‰Œæç¤º
+        /// </summary>
+        private void HideCardTooltip()
+        {
+            // TODO: éšè—å®é™…çš„æç¤ºUI
+        }
+
+        #endregion
+
+        #region å…¬å…±æ¥å£
+
+        /// <summary>
+        /// æ˜¾ç¤ºå¡ç‰ŒUIï¼ˆä»å¤–éƒ¨è°ƒç”¨ï¼‰
         /// </summary>
         public void ShowCardUI()
         {
-            if (!CanOpenCardUI)
-            {
-                LogWarning("µ±Ç°ÎŞ·¨´ò¿ª¿¨ÅÆUI");
-                return;
-            }
+            LogDebug("æ˜¾ç¤ºå¡ç‰ŒUI");
 
-            LogDebug("ÏÔÊ¾¿¨ÅÆUI");
-
-            // Ë¢ĞÂÊÖÅÆÊı¾İ
+            // åˆ·æ–°æ‰‹ç‰Œæ•°æ®
             RefreshHandCards();
 
-            // ÏÔÊ¾ËõÂÔÍ¼£¨´«ÈëÊÖÅÆÊı¾İ£©
+            // æ˜¾ç¤ºç¼©ç•¥å›¾
             ShowThumbnail();
 
-            // ´¥·¢ÊÂ¼ş
+            // è§¦å‘äº‹ä»¶
             OnCardUIOpened?.Invoke();
         }
 
         /// <summary>
-        /// Òş²Ø¿¨ÅÆUI
+        /// éšè—å¡ç‰ŒUI
         /// </summary>
         public void HideCardUI()
         {
-            LogDebug("Òş²Ø¿¨ÅÆUI");
+            LogDebug("éšè—å¡ç‰ŒUI");
 
-            // ÇåÀíÍÏ×§×´Ì¬
+            // æ¸…ç†å„ç§çŠ¶æ€
             if (isDragging)
             {
                 CleanupDragging();
             }
 
-            // Òş²ØÕ¹Ê¾UI
+            if (currentUIState == UIState.TargetSelection)
+            {
+                ClearTargetSelection();
+            }
+
+            // éšè—å±•ç¤ºUI
             if (cardDisplayUI != null)
             {
                 cardDisplayUI.HideCardDisplay();
             }
 
-            // ÉèÖÃ×´Ì¬
-            SetUIState(UIState.Hidden);
+            // è®¾ç½®å›ç¼©ç•¥å›¾çŠ¶æ€è€Œä¸æ˜¯Hidden
+            SetUIState(UIState.Thumbnail);
+            RefreshAndShowThumbnail();
 
-            // ´¥·¢ÊÂ¼ş
+            // è§¦å‘äº‹ä»¶
             OnCardUIClosed?.Invoke();
         }
 
         /// <summary>
-        /// ÏÔÊ¾ÉÈĞÎÕ¹Ê¾
+        /// æ˜¾ç¤ºæ‰‡å½¢å±•ç¤º
         /// </summary>
         public void ShowFanDisplay()
         {
             if (currentUIState != UIState.Thumbnail)
             {
-                LogWarning("µ±Ç°×´Ì¬²»ÊÇThumbnail£¬ÎŞ·¨ÏÔÊ¾ÉÈĞÎÕ¹Ê¾");
+                LogWarning("å½“å‰çŠ¶æ€ä¸æ˜¯Thumbnailï¼Œæ— æ³•æ˜¾ç¤ºæ‰‡å½¢å±•ç¤º");
                 return;
             }
 
-            LogDebug("ÏÔÊ¾ÉÈĞÎÕ¹Ê¾");
+            LogDebug("æ˜¾ç¤ºæ‰‡å½¢å±•ç¤º");
 
-            // Ë¢ĞÂÊÖÅÆÊı¾İ
+            // åˆ·æ–°æ‰‹ç‰Œæ•°æ®
             RefreshHandCards();
 
-            // ÏÔÊ¾ÉÈĞÎÕ¹Ê¾
+            // æ˜¾ç¤ºæ‰‡å½¢å±•ç¤º
             if (cardDisplayUI != null && cardDisplayUI.ShowFanDisplayWithCards(currentHandCards))
             {
                 SetUIState(UIState.FanDisplay);
@@ -685,67 +1126,168 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// Ç¿ÖÆ½ûÓÃ¿¨ÅÆUI£¨´ğÌâÆÚ¼äµ÷ÓÃ£©
+        /// åˆ·æ–°ç©å®¶å¡ç‰Œæ˜¾ç¤ºï¼ˆä¾›CardSystemManagerè°ƒç”¨ï¼‰
+        /// </summary>
+        public void RefreshPlayerCardDisplay(int playerId)
+        {
+            if (playerId != myPlayerId) return;
+
+            LogDebug($"åˆ·æ–°ç©å®¶{playerId}çš„å¡ç‰Œæ˜¾ç¤º");
+
+            // åªæœ‰åœ¨æ˜¾ç¤ºçŠ¶æ€æ—¶æ‰åˆ·æ–°
+            if (IsCardUIVisible)
+            {
+                RefreshHandCards();
+
+                // æ ¹æ®å½“å‰çŠ¶æ€åˆ·æ–°å¯¹åº”çš„æ˜¾ç¤º
+                switch (currentUIState)
+                {
+                    case UIState.Thumbnail:
+                        ShowThumbnail();
+                        break;
+                    case UIState.FanDisplay:
+                        if (cardDisplayUI != null)
+                        {
+                            cardDisplayUI.ShowFanDisplayWithCards(currentHandCards);
+                        }
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// æ¸…ç†ç©å®¶æ˜¾ç¤ºï¼ˆä¾›CardSystemManagerè°ƒç”¨ï¼‰
+        /// </summary>
+        public void ClearPlayerDisplay(int playerId)
+        {
+            if (playerId == myPlayerId)
+            {
+                LogDebug($"æ¸…ç†ç©å®¶{playerId}çš„æ˜¾ç¤º");
+                HideCardUI();
+                currentHandCards.Clear();
+            }
+        }
+
+        /// <summary>
+        /// æ¸…ç†æ‰€æœ‰æ˜¾ç¤ºï¼ˆä¾›CardSystemManagerè°ƒç”¨ï¼‰
+        /// </summary>
+        public void ClearAllDisplays()
+        {
+            LogDebug("æ¸…ç†æ‰€æœ‰æ˜¾ç¤º");
+            HideCardUI();
+            currentHandCards.Clear();
+        }
+
+        /// <summary>
+        /// å¼ºåˆ¶ç¦ç”¨å¡ç‰ŒUIï¼ˆç­”é¢˜æœŸé—´è°ƒç”¨ï¼‰
         /// </summary>
         public void DisableCardUI()
         {
-            LogDebug("Ç¿ÖÆ½ûÓÃ¿¨ÅÆUI");
+            LogDebug("å¼ºåˆ¶ç¦ç”¨å¡ç‰ŒUI");
 
-            // Èç¹ûµ±Ç°ÓĞÏÔÊ¾£¬ÏÈÒş²Ø
-            if (IsCardUIVisible)
+            // å¦‚æœå½“å‰æœ‰å±•ç¤ºï¼Œå…ˆéšè—
+            if (currentUIState == UIState.FanDisplay)
             {
-                HideCardUI();
+                if (cardDisplayUI != null)
+                {
+                    cardDisplayUI.HideCardDisplay();
+                }
             }
 
             SetUIState(UIState.Disabled);
         }
 
         /// <summary>
-        /// ÆôÓÃ¿¨ÅÆUI
+        /// å¯ç”¨å¡ç‰ŒUI
         /// </summary>
         public void EnableCardUI()
         {
-            LogDebug("ÆôÓÃ¿¨ÅÆUI");
+            LogDebug("å¯ç”¨å¡ç‰ŒUI");
 
             if (currentUIState == UIState.Disabled)
             {
-                SetUIState(UIState.Hidden);
+                SetUIState(UIState.Thumbnail);
+                RefreshAndShowThumbnail();
                 UpdateUIAvailability();
             }
         }
 
         #endregion
 
-        #region Êı¾İ¹ÜÀí
+        #region æ•°æ®ç®¡ç†
 
         /// <summary>
-        /// Ë¢ĞÂÊÖÅÆÊı¾İ
+        /// åˆ·æ–°æ‰‹ç‰Œæ•°æ®
         /// </summary>
         private void RefreshHandCards()
         {
             currentHandCards.Clear();
 
-            // TODO: ´ÓPlayerCardManager»ñÈ¡ÕæÊµµÄÊÖÅÆÊı¾İ
-            // ÕâÀïÏÈÊ¹ÓÃÄ£ÄâÊı¾İ
-            if (CardSystemManager.Instance?.cardConfig != null)
+            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
+            if (playerCardManager != null && myPlayerId != -1)
             {
-                // Ä£Äâ»ñÈ¡Ç°5ÕÅ¿¨ÅÆ×÷ÎªÊÖÅÆ£¨Êµ¼ÊÇé¿öÏÂÓ¦¸Ã´ÓÍæ¼ÒÊÖÅÆ»ñÈ¡£©
-                var allCards = CardSystemManager.Instance.cardConfig.AllCards;
-                for (int i = 0; i < Mathf.Min(5, allCards.Count); i++)
+                try
                 {
-                    currentHandCards.Add(new CardDisplayData(allCards[i]));
+                    // è·å–çœŸå®çš„æ‰‹ç‰Œæ•°æ®
+                    var playerHand = playerCardManager.GetPlayerHand(myPlayerId);
+                    var cardConfig = CardSystemManager.GetCardConfigStatic();
+
+                    if (cardConfig != null)
+                    {
+                        foreach (int cardId in playerHand)
+                        {
+                            var cardData = cardConfig.GetCardById(cardId);
+                            if (cardData != null)
+                            {
+                                currentHandCards.Add(new CardDisplayData(cardData));
+                            }
+                        }
+                    }
+
+                    LogDebug($"åˆ·æ–°æ‰‹ç‰Œæ•°æ®å®Œæˆï¼Œå½“å‰æ‰‹ç‰Œæ•°é‡: {currentHandCards.Count}");
+                }
+                catch (System.Exception e)
+                {
+                    LogError($"åˆ·æ–°æ‰‹ç‰Œæ•°æ®å¤±è´¥: {e.Message}");
+
+                    // å¦‚æœç©å®¶çŠ¶æ€ä¸å­˜åœ¨ï¼Œå°è¯•åˆ›å»º
+                    if (e.Message.Contains("çŠ¶æ€ä¸å­˜åœ¨"))
+                    {
+                        LogDebug("å°è¯•åˆå§‹åŒ–ç©å®¶çŠ¶æ€");
+                        playerCardManager.InitializePlayer(myPlayerId, $"Player{myPlayerId}");
+                    }
                 }
             }
+            else
+            {
+                LogWarning($"æ— æ³•åˆ·æ–°æ‰‹ç‰Œ - PlayerCardManager: {playerCardManager != null}, MyPlayerId: {myPlayerId}");
+            }
+        }
 
-            LogDebug($"Ë¢ĞÂÊÖÅÆÊı¾İÍê³É£¬µ±Ç°ÊÖÅÆÊıÁ¿: {currentHandCards.Count}");
+        /// <summary>
+        /// åˆ·æ–°å¹¶æ˜¾ç¤ºç¼©ç•¥å›¾
+        /// </summary>
+        private void RefreshAndShowThumbnail()
+        {
+            RefreshHandCards();
+            ShowThumbnail();
+        }
+
+        /// <summary>
+        /// æ ¹æ®IDè·å–å¡ç‰Œæ•°æ®
+        /// </summary>
+        private CardData GetCardDataById(int cardId)
+        {
+            var cardConfig = CardSystemManager.GetCardConfigStatic();
+            return cardConfig?.GetCardById(cardId);
         }
 
         #endregion
 
-        #region ×´Ì¬¹ÜÀí
+        #region çŠ¶æ€ç®¡ç†
 
         /// <summary>
-        /// ÉèÖÃUI×´Ì¬
+        /// è®¾ç½®UIçŠ¶æ€
         /// </summary>
         private void SetUIState(UIState newState)
         {
@@ -754,11 +1296,11 @@ namespace Cards.UI
             UIState oldState = currentUIState;
             currentUIState = newState;
 
-            LogDebug($"UI×´Ì¬ÇĞ»»: {oldState} -> {newState}");
+            LogDebug($"UIçŠ¶æ€åˆ‡æ¢: {oldState} -> {newState}");
         }
 
         /// <summary>
-        /// ÏÔÊ¾ËõÂÔÍ¼
+        /// æ˜¾ç¤ºç¼©ç•¥å›¾
         /// </summary>
         private void ShowThumbnail()
         {
@@ -769,41 +1311,24 @@ namespace Cards.UI
             }
             else
             {
-                LogWarning("ÎŞ·¨ÏÔÊ¾ËõÂÔÍ¼£ºcardDisplayUIÎª¿Õ»òÊÖÅÆÊı¾İÎª¿Õ");
+                LogWarning($"æ— æ³•æ˜¾ç¤ºç¼©ç•¥å›¾ - cardDisplayUI: {cardDisplayUI != null}, æ‰‹ç‰Œæ•°é‡: {currentHandCards.Count}");
             }
         }
 
         /// <summary>
-        /// ¸üĞÂUI¿ÉÓÃĞÔ
+        /// æ›´æ–°UIå¯ç”¨æ€§
         /// </summary>
         private void UpdateUIAvailability()
         {
-            canUseCards = !isMyTurn; // ·Ç»ØºÏÊ±¿ÉÒÔÊ¹ÓÃ¿¨ÅÆ
+            canUseCards = !isMyTurn && isInitialized; // éå›åˆæ—¶ä¸”å·²åˆå§‹åŒ–æ‰å¯ä»¥ä½¿ç”¨å¡ç‰Œ
 
-            LogDebug($"UI¿ÉÓÃĞÔ¸üĞÂ - ÎÒµÄ»ØºÏ: {isMyTurn}, ¿ÉÓÃ¿¨ÅÆ: {canUseCards}");
+            LogDebug($"UIå¯ç”¨æ€§æ›´æ–° - æˆ‘çš„å›åˆ: {isMyTurn}, å¯ç”¨å¡ç‰Œ: {canUseCards}, å·²åˆå§‹åŒ–: {isInitialized}");
         }
 
         #endregion
 
-        #region µ÷ÊÔ¹¤¾ß
+        #region è°ƒè¯•å·¥å…·
 
-        /// <summary>
-        /// »ñÈ¡ÏµÍ³×´Ì¬ĞÅÏ¢
-        /// </summary>
-        public string GetSystemStatus()
-        {
-            return $"CardUIManager×´Ì¬:\n" +
-                   $"- ³õÊ¼»¯: {isInitialized}\n" +
-                   $"- UI×´Ì¬: {currentUIState}\n" +
-                   $"- ÎÒµÄ»ØºÏ: {isMyTurn}\n" +
-                   $"- ¿ÉÓÃ¿¨ÅÆ: {canUseCards}\n" +
-                   $"- ÊÖÅÆÊıÁ¿: {currentHandCards.Count}\n" +
-                   $"- ÍÏ×§ÖĞ: {isDragging}";
-        }
-
-        /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -812,9 +1337,6 @@ namespace Cards.UI
             }
         }
 
-        /// <summary>
-        /// ¾¯¸æÈÕÖ¾
-        /// </summary>
         private void LogWarning(string message)
         {
             if (enableDebugLogs)
@@ -823,9 +1345,6 @@ namespace Cards.UI
             }
         }
 
-        /// <summary>
-        /// ´íÎóÈÕÖ¾
-        /// </summary>
         private void LogError(string message)
         {
             Debug.LogError($"[CardUIManager] {message}");
@@ -833,57 +1352,31 @@ namespace Cards.UI
 
         #endregion
 
-        #region Unity±à¼­Æ÷µ÷ÊÔ
-
-#if UNITY_EDITOR
-        private void OnDrawGizmosSelected()
-        {
-            if (!showReleaseArea) return;
-
-            // »æÖÆÊÍ·ÅÇøÓò
-            Vector2 screenSize = new Vector2(Screen.width, Screen.height);
-            if (screenSize.x > 0 && screenSize.y > 0)
-            {
-                Vector2 areaSize = new Vector2(
-                    screenSize.x * releaseAreaWidth,
-                    screenSize.y * releaseAreaHeight
-                );
-
-                Vector2 areaCenter = new Vector2(
-                    screenSize.x * releaseAreaCenterX,
-                    screenSize.y * releaseAreaCenterY
-                );
-
-                Gizmos.color = new Color(1f, 0f, 0f, 0.3f);
-
-                // ×ª»»ÆÁÄ»×ø±êµ½ÊÀ½ç×ø±ê
-                if (Camera.main != null)
-                {
-                    Vector3 worldCenter = Camera.main.ScreenToWorldPoint(new Vector3(areaCenter.x, areaCenter.y, 10f));
-                    Vector3 worldSize = new Vector3(areaSize.x / 100f, areaSize.y / 100f, 1f);
-
-                    Gizmos.DrawCube(worldCenter, worldSize);
-                }
-            }
-        }
-#endif
-
-        #endregion
-
-        #region ÇåÀí×ÊÔ´
+        #region æ¸…ç†èµ„æº
 
         private void OnDestroy()
         {
-            // È¡ÏûÊÂ¼ş¶©ÔÄ
+            // å–æ¶ˆäº‹ä»¶è®¢é˜…
             UnsubscribeFromEvents();
 
-            // ÇåÀíÍÏ×§×´Ì¬
+            // æ¸…ç†å„ç§çŠ¶æ€
             if (isDragging)
             {
                 CleanupDragging();
             }
 
-            LogDebug("CardUIManagerÒÑÏú»Ù£¬×ÊÔ´ÒÑÇåÀí");
+            if (currentUIState == UIState.TargetSelection)
+            {
+                ClearTargetSelection();
+            }
+
+            // æ¸…ç†å®ä¾‹å¼•ç”¨
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
+            LogDebug("CardUIManagerå·²é”€æ¯ï¼Œèµ„æºå·²æ¸…ç†");
         }
 
         #endregion

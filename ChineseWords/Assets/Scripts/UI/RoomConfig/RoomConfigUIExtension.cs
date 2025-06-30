@@ -68,7 +68,7 @@ namespace UI.RoomConfig
                 LogDebug($"权重配置已设置");
             }
 
-            // 设置Timer配置 - 关键修复：多步骤验证
+            // 设置Timer配置
             if (defaultTimerConfig != null)
             {
                 LogDebug($"开始设置Timer配置: {defaultTimerConfig.ConfigName} (ID: {defaultTimerConfig.GetInstanceID()})");
@@ -92,12 +92,6 @@ namespace UI.RoomConfig
                 if (!referenceMatch)
                 {
                     Debug.LogError("[RoomConfigUIExtension] Timer配置引用不一致，这会导致实时更新失败！");
-
-                    // 调试信息：显示详细状态
-                    LogDebug($"详细调试信息:");
-                    LogDebug($"  defaultTimerConfig: {defaultTimerConfig} (ID: {defaultTimerConfig.GetInstanceID()})");
-                    LogDebug($"  managerConfig: {managerConfig} (ID: {managerConfig?.GetInstanceID()})");
-                    LogDebug($"  TimerConfigManager.IsConfigured(): {TimerConfigManager.IsConfigured()}");
 
                     // 尝试再次强制设置
                     LogDebug("尝试第二次强制设置...");
@@ -660,76 +654,6 @@ namespace UI.RoomConfig
             }
         }
 
-        /// <summary>
-        /// 手动设置Timer配置面板引用
-        /// </summary>
-        public void SetTimerConfigPanel(TimerConfigPanel panel)
-        {
-            if (timerConfigPanel != null)
-            {
-                timerConfigPanel.OnConfigChanged -= OnTimerConfigChanged;
-            }
-
-            timerConfigPanel = panel;
-
-            if (timerConfigPanel != null)
-            {
-                SetupTimerPanelEvents();
-                LogDebug("手动设置Timer配置面板成功");
-            }
-        }
-
-        /// <summary>
-        /// 手动设置HP配置面板引用
-        /// </summary>
-        public void SetHPConfigPanel(HPConfigPanel panel)
-        {
-            if (hpConfigPanel != null)
-            {
-                hpConfigPanel.OnConfigChanged -= OnHPConfigChanged;
-            }
-
-            hpConfigPanel = panel;
-
-            if (hpConfigPanel != null)
-            {
-                SetupHPPanelEvents();
-                LogDebug("手动设置HP配置面板成功");
-            }
-        }
-
-        /// <summary>
-        /// 强制更新按钮状态
-        /// </summary>
-        public void ForceUpdateButtonStates()
-        {
-            UpdateButtonStates();
-        }
-
-        /// <summary>
-        /// 获取配置摘要
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            string weightSummary = QuestionWeightManager.Config?.GetConfigSummary() ?? "未配置";
-            string timerSummary = TimerConfigManager.Config?.GetConfigSummary() ?? "未配置";
-            string hpSummary = HPConfigManager.Config?.GetConfigSummary() ?? "未配置";
-            return $"权重: {weightSummary}, Timer: {timerSummary}, HP: {hpSummary}";
-        }
-
-        /// <summary>
-        /// 手动触发配置变更事件
-        /// </summary>
-        public void TriggerConfigChanged(bool isWeight = true, bool isTimer = true, bool isHP = true)
-        {
-            if (isWeight)
-                OnWeightConfigChanged();
-            if (isTimer)
-                OnTimerConfigChanged();
-            if (isHP)
-                OnHPConfigChanged();
-        }
-
         #endregion
 
         #region 生命周期管理
@@ -775,81 +699,5 @@ namespace UI.RoomConfig
                 Debug.Log($"[RoomConfigUIExtension] {message}");
             }
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示Extension状态")]
-        private void EditorShowExtensionStatus()
-        {
-            string status = "=== RoomConfigUIExtension状态 ===\n";
-            status += $"权重配置面板: {(questionWeightPanel != null ? "✓" : "✗")}\n";
-            status += $"Timer配置面板: {(timerConfigPanel != null ? "✓" : "✗")}\n";
-            status += $"HP配置面板: {(hpConfigPanel != null ? "✓" : "✗")}\n";
-            status += $"Apply按钮: {(applyButton != null ? "✓" : "✗")}\n";
-            status += $"Reset按钮: {(resetButton != null ? "✓" : "✗")}\n";
-            status += $"Close按钮: {(closeButton != null ? "✓" : "✗")}\n";
-            status += $"权重未保存变更: {(hasUnsavedWeightChanges ? "是" : "否")}\n";
-            status += $"Timer未保存变更: {(hasUnsavedTimerChanges ? "是" : "否")}\n";
-            status += $"HP未保存变更: {(hasUnsavedHPChanges ? "是" : "否")}\n";
-            status += $"总体有变更: {(HasUnsavedChanges ? "是" : "否")}\n";
-            status += $"配置摘要: {GetConfigSummary()}\n";
-
-            LogDebug(status);
-        }
-
-        [ContextMenu("验证Timer配置引用")]
-        private void EditorValidateTimerConfigReference()
-        {
-            if (Application.isPlaying)
-            {
-                var defaultConfig = defaultTimerConfig;
-                var managerConfig = TimerConfigManager.Config;
-
-                Debug.Log($"默认配置ID: {defaultConfig?.GetInstanceID()}");
-                Debug.Log($"管理器配置ID: {managerConfig?.GetInstanceID()}");
-                Debug.Log($"引用一致性: {(defaultConfig == managerConfig ? "✓ 一致" : "✗ 不一致")}");
-
-                if (timerConfigPanel != null)
-                {
-                    // 通过反射获取面板配置
-                    var currentConfigField = typeof(TimerConfigPanel).GetField("currentConfig",
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                    if (currentConfigField != null)
-                    {
-                        var panelConfig = currentConfigField.GetValue(hpConfigPanel) as HPConfig;
-                        Debug.Log($"HP面板配置ID: {panelConfig?.GetInstanceID()}");
-                        Debug.Log($"HP面板与管理器一致: {(panelConfig == managerConfig ? "✓ 一致" : "✗ 不一致")}");
-                    }
-                }
-            }
-        }
-
-        [ContextMenu("测试Apply按钮")]
-        private void EditorTestApplyButton()
-        {
-            if (Application.isPlaying)
-            {
-                OnApplyClicked();
-            }
-        }
-
-        [ContextMenu("测试Reset按钮")]
-        private void EditorTestResetButton()
-        {
-            if (Application.isPlaying)
-            {
-                OnResetClicked();
-            }
-        }
-
-        [ContextMenu("测试Close按钮")]
-        private void EditorTestCloseButton()
-        {
-            if (Application.isPlaying)
-            {
-                OnCloseClicked();
-            }
-        }
-#endif
     }
 }

@@ -59,6 +59,11 @@ namespace Cards.Player
         /// </summary>
         public System.Action<int, int, int> OnCardTransferred;
 
+        /// <summary>
+        /// 手牌数量变化事件 - playerId, newHandSize
+        /// </summary>
+        public System.Action<int, int> OnHandSizeChanged;
+
         #endregion
 
         #region Unity生命周期
@@ -171,6 +176,16 @@ namespace Cards.Player
             OnCardAcquired = null;
             OnUsageOpportunityReset = null;
             OnCardTransferred = null;
+            OnHandSizeChanged = null;
+
+            // 清理所有玩家状态中的事件订阅
+            foreach (var cardState in playerCardStates.Values)
+            {
+                if (cardState is EnhancedPlayerCardState enhancedState)
+                {
+                    enhancedState.OnHandSizeChanged = null;
+                }
+            }
 
             LogDebug("已取消所有事件订阅");
         }
@@ -182,8 +197,6 @@ namespace Cards.Player
         /// <summary>
         /// 初始化玩家卡牌状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="playerName">玩家名称</param>
         public void InitializePlayer(int playerId, string playerName = "")
         {
             if (!isInitialized)
@@ -204,6 +217,12 @@ namespace Cards.Player
                 playerId = playerId,
                 playerName = string.IsNullOrEmpty(playerName) ? $"Player{playerId}" : playerName,
                 canUseCardThisRound = true
+            };
+
+            // 建立手牌变化事件连接
+            cardState.OnHandSizeChanged += (pId, newSize) => {
+                LogDebug($"玩家 {pId} 手牌数量变化: {newSize}");
+                OnHandSizeChanged?.Invoke(pId, newSize);
             };
 
             // 给玩家初始卡牌
@@ -771,7 +790,7 @@ namespace Cards.Player
         #endregion
     }
 
-    #region 增强的PlayerCardState（保持不变）
+    #region 增强的PlayerCardState
 
     /// <summary>
     /// 增强的玩家卡牌状态
@@ -782,6 +801,9 @@ namespace Cards.Player
     {
         private int maxHandSize;
         private CardDrawSettings drawSettings;
+
+        // 添加事件委托用于通知手牌变化
+        public System.Action<int, int> OnHandSizeChanged;
 
         public EnhancedPlayerCardState(int maxSize, CardDrawSettings settings)
         {
@@ -844,7 +866,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// 添加卡牌
+        /// 添加卡牌（带手牌变化通知）
         /// </summary>
         public bool AddCard(int cardId)
         {
@@ -853,16 +875,35 @@ namespace Cards.Player
                 return false;
             }
 
+            int oldHandSize = handCards.Count;
             handCards.Add(cardId);
+            int newHandSize = handCards.Count;
+
+            // 触发手牌数量变化事件
+            if (newHandSize != oldHandSize)
+            {
+                OnHandSizeChanged?.Invoke(playerId, newHandSize);
+            }
+
             return true;
         }
 
         /// <summary>
-        /// 移除卡牌
+        /// 移除卡牌（带手牌变化通知）
         /// </summary>
         public bool RemoveCard(int cardId)
         {
-            return handCards.Remove(cardId);
+            int oldHandSize = handCards.Count;
+            bool removed = handCards.Remove(cardId);
+            int newHandSize = handCards.Count;
+
+            // 触发手牌数量变化事件
+            if (removed && newHandSize != oldHandSize)
+            {
+                OnHandSizeChanged?.Invoke(playerId, newHandSize);
+            }
+
+            return removed;
         }
 
         /// <summary>

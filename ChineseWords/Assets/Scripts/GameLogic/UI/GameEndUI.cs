@@ -939,7 +939,7 @@ namespace UI
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[GameEndUI] {message}");
+                //Debug.Log($"[GameEndUI] {message}");
             }
         }
 

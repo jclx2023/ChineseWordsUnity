@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using Core;
@@ -11,19 +11,24 @@ using Managers;
 namespace Cards.Integration
 {
     /// <summary>
-    /// ¿¨ÅÆÓÎÏ·ÇÅ½ÓÆ÷
-    /// ¸ºÔğÁ¬½Ó¿¨ÅÆÏµÍ³ÓëÏÖÓĞÓÎÏ·ÏµÍ³£¬ÊµÏÖ¿¨ÅÆĞ§¹ûµÄ¾ßÌåÖ´ĞĞ
-    /// ²»¸ºÔğĞ§¹û×¢²á£¬Ö»Ìá¹©Ğ§¹ûÖ´ĞĞµÄ¾ßÌåÊµÏÖ
+    /// å¡ç‰Œæ¸¸æˆæ¡¥æ¥å™¨
+    /// è´Ÿè´£è¿æ¥å¡ç‰Œç³»ç»Ÿä¸ç°æœ‰æ¸¸æˆç³»ç»Ÿï¼Œå®ç°å¡ç‰Œæ•ˆæœçš„å…·ä½“æ‰§è¡Œ
+    /// ä¸è´Ÿè´£æ•ˆæœæ³¨å†Œï¼Œåªæä¾›æ•ˆæœæ‰§è¡Œçš„å…·ä½“å®ç°
+    /// ä½¿ç”¨äº‹ä»¶é©±åŠ¨çš„åˆå§‹åŒ–æ–¹å¼
     /// </summary>
     public class CardGameBridge : MonoBehaviour
     {
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // µ¥ÀıÊµÀı
+        // å•ä¾‹å®ä¾‹
         public static CardGameBridge Instance { get; private set; }
 
-        #region ÏµÍ³ÒıÓÃ
+        // åˆå§‹åŒ–çŠ¶æ€
+        private bool isInitialized = false;
+        private bool isWaitingForCoreSystem = true;
+
+        #region ç³»ç»Ÿå¼•ç”¨
 
         private PlayerHPManager hpManager;
         private TimerManager timerManager;
@@ -35,31 +40,31 @@ namespace Cards.Integration
 
         #endregion
 
-        #region Ğ§¹û×´Ì¬»º´æ
+        #region æ•ˆæœçŠ¶æ€ç¼“å­˜
 
-        // ³ÖĞøĞÔĞ§¹û×´Ì¬
-        private Dictionary<int, float> playerTimeBonuses;      // Íæ¼ÒID -> Ê±¼ä¼Ó³É
-        private Dictionary<int, float> playerTimePenalties;    // Íæ¼ÒID -> Ê±¼ä¼õ³É
-        private Dictionary<int, bool> playerSkipFlags;         // Íæ¼ÒID -> Ìø¹ı±ê¼Ç
-        private Dictionary<int, string> playerQuestionTypes;   // Íæ¼ÒID -> Ö¸¶¨ÌâÄ¿ÀàĞÍ
-        private Dictionary<int, int> playerAnswerDelegates;    // Íæ¼ÒID -> ´úÌæ´ğÌâÕßID
-        private Dictionary<int, bool> playerExtraHints;        // Íæ¼ÒID -> ¶îÍâÌáÊ¾±ê¼Ç
-        private float globalDamageMultiplier = 1.0f;           // È«¾ÖÉËº¦±¶Êı
+        // æŒç»­æ€§æ•ˆæœçŠ¶æ€
+        private Dictionary<int, float> playerTimeBonuses;      // ç©å®¶ID -> æ—¶é—´åŠ æˆ
+        private Dictionary<int, float> playerTimePenalties;    // ç©å®¶ID -> æ—¶é—´å‡æˆ
+        private Dictionary<int, bool> playerSkipFlags;         // ç©å®¶ID -> è·³è¿‡æ ‡è®°
+        private Dictionary<int, string> playerQuestionTypes;   // ç©å®¶ID -> æŒ‡å®šé¢˜ç›®ç±»å‹
+        private Dictionary<int, int> playerAnswerDelegates;    // ç©å®¶ID -> ä»£æ›¿ç­”é¢˜è€…ID
+        private Dictionary<int, bool> playerExtraHints;        // ç©å®¶ID -> é¢å¤–æç¤ºæ ‡è®°
+        private float globalDamageMultiplier = 1.0f;           // å…¨å±€ä¼¤å®³å€æ•°
 
         #endregion
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
-            // µ¥ÀıÄ£Ê½
+            // å•ä¾‹æ¨¡å¼
             if (Instance == null)
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
 
                 InitializeStateCaches();
-                LogDebug("CardGameBridgeÊµÀıÒÑ´´½¨");
+                LogDebug("CardGameBridgeå®ä¾‹å·²åˆ›å»º");
             }
             else
             {
@@ -69,25 +74,78 @@ namespace Cards.Integration
 
         private void Start()
         {
-            // ÑÓ³Ù³õÊ¼»¯£¬µÈ´ıCardSystemManagerÍê³ÉÏµÍ³³õÊ¼»¯
-            Invoke(nameof(DelayedInitialize), 1.0f);
+            // è®¢é˜…CardSystemManagerçš„æ ¸å¿ƒç³»ç»Ÿå°±ç»ªäº‹ä»¶
+            SubscribeToSystemEvents();
         }
 
         private void OnDestroy()
         {
             if (Instance == this)
             {
-                UnsubscribeFromEvents();
+                UnsubscribeFromAllEvents();
                 Instance = null;
             }
         }
 
         #endregion
 
-        #region ³õÊ¼»¯
+        #region äº‹ä»¶é©±åŠ¨åˆå§‹åŒ–
 
         /// <summary>
-        /// ³õÊ¼»¯×´Ì¬»º´æ
+        /// è®¢é˜…ç³»ç»Ÿäº‹ä»¶
+        /// </summary>
+        private void SubscribeToSystemEvents()
+        {
+            LogDebug("è®¢é˜…CardSystemManageräº‹ä»¶");
+
+            // è®¢é˜…æ ¸å¿ƒç³»ç»Ÿå°±ç»ªäº‹ä»¶
+            CardSystemManager.OnCoreSystemReady += OnCoreSystemReady;
+
+            // è®¢é˜…ç³»ç»Ÿåˆå§‹åŒ–å®Œæˆäº‹ä»¶
+            CardSystemManager.OnSystemInitialized += OnSystemInitialized;
+        }
+
+        /// <summary>
+        /// æ ¸å¿ƒç³»ç»Ÿå°±ç»ªäº‹ä»¶å¤„ç†
+        /// </summary>
+        private void OnCoreSystemReady()
+        {
+            LogDebug("æ”¶åˆ°æ ¸å¿ƒç³»ç»Ÿå°±ç»ªäº‹ä»¶ï¼Œå¼€å§‹åˆå§‹åŒ–æ¡¥æ¥å™¨");
+            isWaitingForCoreSystem = false;
+
+            // ç«‹å³å°è¯•åˆå§‹åŒ–
+            Initialize();
+        }
+
+        /// <summary>
+        /// ç³»ç»Ÿåˆå§‹åŒ–å®Œæˆäº‹ä»¶å¤„ç†
+        /// </summary>
+        private void OnSystemInitialized(bool success)
+        {
+            if (success)
+            {
+                LogDebug("CardSystemManageråˆå§‹åŒ–æˆåŠŸ");
+
+                // å¦‚æœè¿˜åœ¨ç­‰å¾…æ ¸å¿ƒç³»ç»Ÿï¼Œè¯´æ˜äº‹ä»¶å¯èƒ½ä¸¢å¤±ï¼Œå°è¯•åˆå§‹åŒ–
+                if (isWaitingForCoreSystem)
+                {
+                    LogDebug("å°è¯•ç«‹å³åˆå§‹åŒ–ï¼ˆå¯èƒ½é”™è¿‡äº†æ ¸å¿ƒç³»ç»Ÿå°±ç»ªäº‹ä»¶ï¼‰");
+                    isWaitingForCoreSystem = false;
+                    Initialize();
+                }
+            }
+            else
+            {
+                LogError("CardSystemManageråˆå§‹åŒ–å¤±è´¥ï¼Œæ¡¥æ¥å™¨æ— æ³•æ­£å¸¸å·¥ä½œ");
+            }
+        }
+
+        #endregion
+
+        #region åˆå§‹åŒ–
+
+        /// <summary>
+        /// åˆå§‹åŒ–çŠ¶æ€ç¼“å­˜
         /// </summary>
         private void InitializeStateCaches()
         {
@@ -100,81 +158,114 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// ÑÓ³Ù³õÊ¼»¯ÇÅ½ÓÆ÷
+        /// åˆå§‹åŒ–æ¡¥æ¥å™¨
         /// </summary>
-        private void DelayedInitialize()
+        public void Initialize()
         {
+            if (isInitialized)
+            {
+                LogDebug("æ¡¥æ¥å™¨å·²åˆå§‹åŒ–ï¼Œè·³è¿‡é‡å¤åˆå§‹åŒ–");
+                return;
+            }
+
+            LogDebug("å¼€å§‹åˆå§‹åŒ–CardGameBridge");
+
+            // è·å–ç³»ç»Ÿå¼•ç”¨
+            if (!AcquireSystemReferences())
+            {
+                LogError("ç³»ç»Ÿå¼•ç”¨è·å–å¤±è´¥ï¼Œå°†åœ¨5ç§’åé‡è¯•");
+                // å»¶è¿Ÿé‡è¯•ï¼Œè€Œä¸æ˜¯ç›´æ¥å¤±è´¥
+                Invoke(nameof(RetryInitialization), 5.0f);
+                return;
+            }
+
+            // éªŒè¯æ•ˆæœç³»ç»Ÿæ˜¯å¦å·²åˆå§‹åŒ–
+            if (!ValidateEffectSystemReady())
+            {
+                LogError("æ•ˆæœç³»ç»Ÿæœªå°±ç»ªï¼Œå°†åœ¨3ç§’åé‡è¯•");
+                Invoke(nameof(RetryInitialization), 3.0f);
+                return;
+            }
+
+            // è®¢é˜…æ¸¸æˆäº‹ä»¶
+            SubscribeToGameEvents();
+
+            isInitialized = true;
+            LogDebug("CardGameBridgeåˆå§‹åŒ–å®Œæˆ");
+        }
+
+        /// <summary>
+        /// é‡è¯•åˆå§‹åŒ–
+        /// </summary>
+        private void RetryInitialization()
+        {
+            LogDebug("é‡è¯•åˆå§‹åŒ–CardGameBridge");
             Initialize();
         }
 
         /// <summary>
-        /// ³õÊ¼»¯ÇÅ½ÓÆ÷
-        /// </summary>
-        public void Initialize()
-        {
-            LogDebug("¿ªÊ¼³õÊ¼»¯CardGameBridge");
-
-            // »ñÈ¡ÏµÍ³ÒıÓÃ
-            if (!AcquireSystemReferences())
-            {
-                Debug.LogError("[CardGameBridge] ÏµÍ³ÒıÓÃ»ñÈ¡Ê§°Ü");
-                return;
-            }
-
-            // ÑéÖ¤Ğ§¹ûÏµÍ³ÊÇ·ñÒÑ³õÊ¼»¯
-            if (!ValidateEffectSystemReady())
-            {
-                Debug.LogError("[CardGameBridge] Ğ§¹ûÏµÍ³Î´¾ÍĞ÷£¬³õÊ¼»¯Ê§°Ü");
-                return;
-            }
-
-            // ¶©ÔÄÊÂ¼ş
-            SubscribeToEvents();
-
-            LogDebug("CardGameBridge³õÊ¼»¯Íê³É");
-        }
-
-        /// <summary>
-        /// »ñÈ¡ÏµÍ³ÒıÓÃ
+        /// è·å–ç³»ç»Ÿå¼•ç”¨
         /// </summary>
         private bool AcquireSystemReferences()
         {
             bool allReferencesAcquired = true;
 
-            // »ñÈ¡PlayerCardManager
-            playerCardManager = PlayerCardManager.Instance;
+            // ä¼˜å…ˆä»CardSystemManagerè·å–å¼•ç”¨
+            var cardSystemManager = CardSystemManager.Instance;
+            if (cardSystemManager != null)
+            {
+                playerCardManager = cardSystemManager.GetPlayerCardManager();
+                effectSystem = cardSystemManager.GetEffectSystem();
+                cardConfig = cardSystemManager.GetCardConfig();
+
+                LogDebug("ä»CardSystemManagerè·å–ç³»ç»Ÿå¼•ç”¨æˆåŠŸ");
+            }
+            else
+            {
+                LogWarning("CardSystemManagerä¸å¯ç”¨ï¼Œå°è¯•ç›´æ¥è·å–å¼•ç”¨");
+
+                // å›é€€åˆ°ç›´æ¥è·å–
+                playerCardManager = PlayerCardManager.Instance;
+                effectSystem = CardEffectSystem.Instance;
+                cardConfig = Resources.Load<CardConfig>("CardConfig");
+            }
+
+            // éªŒè¯æ ¸å¿ƒå¼•ç”¨
             if (playerCardManager == null)
             {
-                Debug.LogError("[CardGameBridge] ÎŞ·¨»ñÈ¡PlayerCardManagerÊµÀı");
+                LogError("æ— æ³•è·å–PlayerCardManagerå®ä¾‹");
                 allReferencesAcquired = false;
             }
 
-            // »ñÈ¡CardEffectSystem£¨Ó¦¸ÃÒÑ¾­ÓÉCardSystemManager³õÊ¼»¯£©
-            effectSystem = CardEffectSystem.Instance;
             if (effectSystem == null)
             {
-                Debug.LogError("[CardGameBridge] ÎŞ·¨»ñÈ¡CardEffectSystemÊµÀı");
+                LogError("æ— æ³•è·å–CardEffectSystemå®ä¾‹");
                 allReferencesAcquired = false;
             }
 
-            // »ñÈ¡CardConfig
-            cardConfig = playerCardManager?.Config;
             if (cardConfig == null)
             {
-                cardConfig = Resources.Load<CardConfig>("CardConfig");
-                if (cardConfig == null)
-                {
-                    Debug.LogError("[CardGameBridge] ÎŞ·¨»ñÈ¡CardConfig");
-                    allReferencesAcquired = false;
-                }
+                LogError("æ— æ³•è·å–CardConfig");
+                allReferencesAcquired = false;
             }
 
-            // »ñÈ¡ÆäËû¹ÜÀíÆ÷£¨ÔÊĞíÎª¿Õ£¬ÔËĞĞÊ±»ñÈ¡£©
-            // PlayerHPManagerÊÇÆÕÍ¨Àà£¬Í¨¹ıHostGameManager»ñÈ¡
+            // è·å–å…¶ä»–ç®¡ç†å™¨ï¼ˆå…è®¸ä¸ºç©ºï¼Œè¿è¡Œæ—¶è·å–ï¼‰
+            AcquireGameManagerReferences();
+
+            LogDebug($"ç³»ç»Ÿå¼•ç”¨è·å–å®Œæˆ - æ ¸å¿ƒç³»ç»Ÿ:{allReferencesAcquired}, HP:{hpManager != null}, Timer:{timerManager != null}, Host:{hostGameManager != null}, Network:{networkManager != null}");
+            return allReferencesAcquired;
+        }
+
+        /// <summary>
+        /// è·å–æ¸¸æˆç®¡ç†å™¨å¼•ç”¨
+        /// </summary>
+        private void AcquireGameManagerReferences()
+        {
+            // PlayerHPManageræ˜¯æ™®é€šç±»ï¼Œé€šè¿‡HostGameManagerè·å–
             hostGameManager = HostGameManager.Instance;
             if (hostGameManager != null)
             {
-                // Í¨¹ı·´Éä»ñÈ¡HostGameManagerµÄhpManager×Ö¶Î
+                // é€šè¿‡åå°„è·å–HostGameManagerçš„hpManagerå­—æ®µ
                 var hpManagerField = hostGameManager.GetType().GetField("hpManager",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (hpManagerField != null)
@@ -185,170 +276,182 @@ namespace Cards.Integration
 
             timerManager = FindObjectOfType<TimerManager>();
             networkManager = NetworkManager.Instance;
-
-            LogDebug($"ÏµÍ³ÒıÓÃ»ñÈ¡Íê³É - HP:{hpManager != null}, Timer:{timerManager != null}, Host:{hostGameManager != null}, Network:{networkManager != null}");
-            return allReferencesAcquired;
         }
 
         /// <summary>
-        /// ÑéÖ¤Ğ§¹ûÏµÍ³ÊÇ·ñÒÑ×¼±¸¾ÍĞ÷
+        /// éªŒè¯æ•ˆæœç³»ç»Ÿæ˜¯å¦å·²å‡†å¤‡å°±ç»ª
         /// </summary>
         private bool ValidateEffectSystemReady()
         {
             if (effectSystem == null)
             {
-                LogError("Ğ§¹ûÏµÍ³ÊµÀı²»´æÔÚ");
+                LogError("æ•ˆæœç³»ç»Ÿå®ä¾‹ä¸å­˜åœ¨");
                 return false;
             }
 
             if (!effectSystem.IsSystemReady())
             {
-                LogError("Ğ§¹ûÏµÍ³Î´¾ÍĞ÷");
+                LogError("æ•ˆæœç³»ç»Ÿæœªå°±ç»ª");
                 return false;
             }
 
-            LogDebug("Ğ§¹ûÏµÍ³ÑéÖ¤Í¨¹ı");
+            LogDebug("æ•ˆæœç³»ç»ŸéªŒè¯é€šè¿‡");
             return true;
         }
 
         /// <summary>
-        /// ¶©ÔÄÊÂ¼ş
+        /// è®¢é˜…æ¸¸æˆäº‹ä»¶
         /// </summary>
-        private void SubscribeToEvents()
+        private void SubscribeToGameEvents()
         {
-            // ¶©ÔÄ»ØºÏÍê³ÉÊÂ¼ş£¬ÇåÀí¸ÃÍæ¼ÒµÄÁÙÊ±Ğ§¹û
+            // è®¢é˜…å›åˆå®Œæˆäº‹ä»¶ï¼Œæ¸…ç†è¯¥ç©å®¶çš„ä¸´æ—¶æ•ˆæœ
             if (playerCardManager != null)
             {
                 playerCardManager.OnUsageOpportunityReset += OnPlayerTurnCompleted;
             }
 
-            LogDebug("ÒÑ¶©ÔÄÏà¹ØÊÂ¼ş");
+            LogDebug("å·²è®¢é˜…æ¸¸æˆäº‹ä»¶");
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…æ¸¸æˆäº‹ä»¶
         /// </summary>
-        private void UnsubscribeFromEvents()
+        private void UnsubscribeFromGameEvents()
         {
             if (playerCardManager != null)
             {
                 playerCardManager.OnUsageOpportunityReset -= OnPlayerTurnCompleted;
             }
 
-            LogDebug("ÒÑÈ¡ÏûÊÂ¼ş¶©ÔÄ");
+            LogDebug("å·²å–æ¶ˆæ¸¸æˆäº‹ä»¶è®¢é˜…");
+        }
+
+        /// <summary>
+        /// å–æ¶ˆè®¢é˜…æ‰€æœ‰äº‹ä»¶
+        /// </summary>
+        private void UnsubscribeFromAllEvents()
+        {
+            // å–æ¶ˆç³»ç»Ÿäº‹ä»¶è®¢é˜…
+            CardSystemManager.OnCoreSystemReady -= OnCoreSystemReady;
+            CardSystemManager.OnSystemInitialized -= OnSystemInitialized;
+
+            // å–æ¶ˆæ¸¸æˆäº‹ä»¶è®¢é˜…
+            UnsubscribeFromGameEvents();
+
+            LogDebug("å·²å–æ¶ˆæ‰€æœ‰äº‹ä»¶è®¢é˜…");
         }
 
         #endregion
 
-        #region ÏµÍ³·ÃÎÊ´úÀí - ¹©CardEffectsÊ¹ÓÃ
+        #region ç³»ç»Ÿè®¿é—®ä»£ç† - ä¾›CardEffectsä½¿ç”¨
 
         /// <summary>
-        /// ĞŞ¸ÄÍæ¼ÒÉúÃüÖµ
+        /// ä¿®æ”¹ç©å®¶ç”Ÿå‘½å€¼
         /// </summary>
         public static bool ModifyPlayerHealth(int playerId, int healthChange)
         {
             if (Instance?.hpManager == null)
             {
-                Instance?.LogDebug("PlayerHPManager²»¿ÉÓÃ£¬ÎŞ·¨ĞŞ¸ÄÉúÃüÖµ");
+                Instance?.LogDebug("PlayerHPManagerä¸å¯ç”¨ï¼Œæ— æ³•ä¿®æ”¹ç”Ÿå‘½å€¼");
                 return false;
             }
 
             bool success = false;
             if (healthChange > 0)
             {
-                // »ØÑª
+                // å›è¡€
                 success = Instance.hpManager.HealPlayer((ushort)playerId, healthChange, out int newHealth);
-                Instance?.LogDebug($"Íæ¼Ò{playerId}»ØÑª{healthChange}µã£¬ĞÂÑªÁ¿:{newHealth}£¬³É¹¦:{success}");
+                Instance?.LogDebug($"ç©å®¶{playerId}å›è¡€{healthChange}ç‚¹ï¼Œæ–°è¡€é‡:{newHealth}ï¼ŒæˆåŠŸ:{success}");
             }
             else if (healthChange < 0)
             {
-                // ¿ÛÑª
+                // æ‰£è¡€
                 success = Instance.hpManager.ApplyDamage((ushort)playerId, out int newHealth, out bool isDead, -healthChange);
-                Instance?.LogDebug($"Íæ¼Ò{playerId}¿ÛÑª{-healthChange}µã£¬ĞÂÑªÁ¿:{newHealth}£¬ËÀÍö:{isDead}£¬³É¹¦:{success}");
+                Instance?.LogDebug($"ç©å®¶{playerId}æ‰£è¡€{-healthChange}ç‚¹ï¼Œæ–°è¡€é‡:{newHealth}ï¼Œæ­»äº¡:{isDead}ï¼ŒæˆåŠŸ:{success}");
             }
 
             return success;
         }
 
         /// <summary>
-        /// ÉèÖÃÍæ¼ÒÊ±¼ä¼Ó³É
+        /// è®¾ç½®ç©å®¶æ—¶é—´åŠ æˆ
         /// </summary>
         public static void SetPlayerTimeBonus(int playerId, float bonusTime)
         {
             if (Instance == null) return;
 
             Instance.playerTimeBonuses[playerId] = bonusTime;
-            Instance.LogDebug($"ÉèÖÃÍæ¼Ò{playerId}Ê±¼ä¼Ó³É:{bonusTime}Ãë");
+            Instance.LogDebug($"è®¾ç½®ç©å®¶{playerId}æ—¶é—´åŠ æˆ:{bonusTime}ç§’");
         }
 
         /// <summary>
-        /// ÉèÖÃÍæ¼ÒÊ±¼ä¼õ³É
+        /// è®¾ç½®ç©å®¶æ—¶é—´å‡æˆ
         /// </summary>
         public static void SetPlayerTimePenalty(int playerId, float penaltyTime)
         {
             if (Instance == null) return;
 
             Instance.playerTimePenalties[playerId] = penaltyTime;
-            Instance.LogDebug($"ÉèÖÃÍæ¼Ò{playerId}Ê±¼ä¼õ³É:{penaltyTime}Ãë");
+            Instance.LogDebug($"è®¾ç½®ç©å®¶{playerId}æ—¶é—´å‡æˆ:{penaltyTime}ç§’");
         }
 
         /// <summary>
-        /// ÉèÖÃÍæ¼ÒÌø¹ı±ê¼Ç
+        /// è®¾ç½®ç©å®¶è·³è¿‡æ ‡è®°
         /// </summary>
         public static void SetPlayerSkipFlag(int playerId, bool shouldSkip = true)
         {
             if (Instance == null) return;
 
             Instance.playerSkipFlags[playerId] = shouldSkip;
-            Instance.LogDebug($"ÉèÖÃÍæ¼Ò{playerId}Ìø¹ı±ê¼Ç:{shouldSkip}");
+            Instance.LogDebug($"è®¾ç½®ç©å®¶{playerId}è·³è¿‡æ ‡è®°:{shouldSkip}");
         }
 
         /// <summary>
-        /// ÉèÖÃÍæ¼ÒÏÂ´ÎÌâÄ¿ÀàĞÍ
+        /// è®¾ç½®ç©å®¶ä¸‹æ¬¡é¢˜ç›®ç±»å‹
         /// </summary>
         public static void SetPlayerNextQuestionType(int playerId, string questionType)
         {
             if (Instance == null) return;
 
             Instance.playerQuestionTypes[playerId] = questionType;
-            Instance.LogDebug($"ÉèÖÃÍæ¼Ò{playerId}ÏÂ´ÎÌâÄ¿ÀàĞÍ:{questionType}");
+            Instance.LogDebug($"è®¾ç½®ç©å®¶{playerId}ä¸‹æ¬¡é¢˜ç›®ç±»å‹:{questionType}");
         }
 
         /// <summary>
-        /// ÉèÖÃ´ğÌâ´úÀí
+        /// è®¾ç½®ç­”é¢˜ä»£ç†
         /// </summary>
         public static void SetAnswerDelegate(int originalPlayerId, int delegatePlayerId)
         {
             if (Instance == null) return;
 
             Instance.playerAnswerDelegates[originalPlayerId] = delegatePlayerId;
-            Instance.LogDebug($"ÉèÖÃÍæ¼Ò{originalPlayerId}µÄ´ğÌâ´úÀíÎªÍæ¼Ò{delegatePlayerId}");
+            Instance.LogDebug($"è®¾ç½®ç©å®¶{originalPlayerId}çš„ç­”é¢˜ä»£ç†ä¸ºç©å®¶{delegatePlayerId}");
         }
 
         /// <summary>
-        /// ÉèÖÃÍæ¼Ò¶îÍâÌáÊ¾
+        /// è®¾ç½®ç©å®¶é¢å¤–æç¤º
         /// </summary>
         public static void SetPlayerExtraHint(int playerId, bool hasExtraHint = true)
         {
             if (Instance == null) return;
 
             Instance.playerExtraHints[playerId] = hasExtraHint;
-            Instance.LogDebug($"ÉèÖÃÍæ¼Ò{playerId}¶îÍâÌáÊ¾:{hasExtraHint}");
+            Instance.LogDebug($"è®¾ç½®ç©å®¶{playerId}é¢å¤–æç¤º:{hasExtraHint}");
         }
 
         /// <summary>
-        /// ÉèÖÃÈ«¾ÖÉËº¦±¶Êı
+        /// è®¾ç½®å…¨å±€ä¼¤å®³å€æ•°
         /// </summary>
         public static void SetGlobalDamageMultiplier(float multiplier)
         {
             if (Instance == null) return;
 
             Instance.globalDamageMultiplier = multiplier;
-            Instance.LogDebug($"ÉèÖÃÈ«¾ÖÉËº¦±¶Êı:{multiplier}");
+            Instance.LogDebug($"è®¾ç½®å…¨å±€ä¼¤å®³å€æ•°:{multiplier}");
         }
 
         /// <summary>
-        /// ¸øÍæ¼ÒÌí¼Ó¿¨ÅÆ
+        /// ç»™ç©å®¶æ·»åŠ å¡ç‰Œ
         /// </summary>
         public static bool GiveCardToPlayer(int playerId, int cardId = 0, int count = 1)
         {
@@ -364,12 +467,12 @@ namespace Cards.Integration
                 }
             }
 
-            Instance?.LogDebug($"¸øÍæ¼Ò{playerId}Ìí¼Ó{count}ÕÅ¿¨ÅÆ(ID:{cardId})£¬³É¹¦:{success}");
+            Instance?.LogDebug($"ç»™ç©å®¶{playerId}æ·»åŠ {count}å¼ å¡ç‰Œ(ID:{cardId})ï¼ŒæˆåŠŸ:{success}");
             return success;
         }
 
         /// <summary>
-        /// ÍµÈ¡Íæ¼Ò¿¨ÅÆ
+        /// å·å–ç©å®¶å¡ç‰Œ
         /// </summary>
         public static int? StealRandomCardFromPlayer(int fromPlayerId, int toPlayerId)
         {
@@ -378,35 +481,35 @@ namespace Cards.Integration
             var fromPlayerHand = Instance.playerCardManager.GetPlayerHand(fromPlayerId);
             if (fromPlayerHand.Count == 0)
             {
-                Instance?.LogDebug($"Íæ¼Ò{fromPlayerId}Ã»ÓĞ¿ÉÍµÈ¡µÄ¿¨ÅÆ");
+                Instance?.LogDebug($"ç©å®¶{fromPlayerId}æ²¡æœ‰å¯å·å–çš„å¡ç‰Œ");
                 return null;
             }
 
-            // Ëæ»úÑ¡ÔñÒ»ÕÅ¿¨ÅÆ
+            // éšæœºé€‰æ‹©ä¸€å¼ å¡ç‰Œ
             int randomIndex = Random.Range(0, fromPlayerHand.Count);
             int stolenCardId = fromPlayerHand[randomIndex];
 
-            // Ö´ĞĞ×ªÒÆ
+            // æ‰§è¡Œè½¬ç§»
             bool success = Instance.playerCardManager.TransferCard(fromPlayerId, toPlayerId, stolenCardId);
 
             if (success)
             {
-                Instance?.LogDebug($"³É¹¦´ÓÍæ¼Ò{fromPlayerId}ÍµÈ¡¿¨ÅÆ{stolenCardId}µ½Íæ¼Ò{toPlayerId}");
+                Instance?.LogDebug($"æˆåŠŸä»ç©å®¶{fromPlayerId}å·å–å¡ç‰Œ{stolenCardId}åˆ°ç©å®¶{toPlayerId}");
                 return stolenCardId;
             }
             else
             {
-                Instance?.LogDebug($"ÍµÈ¡¿¨ÅÆÊ§°Ü");
+                Instance?.LogDebug($"å·å–å¡ç‰Œå¤±è´¥");
                 return null;
             }
         }
 
         #endregion
 
-        #region Ğ§¹û×´Ì¬²éÑ¯ - ¹©ÓÎÏ·ÏµÍ³Ê¹ÓÃ
+        #region æ•ˆæœçŠ¶æ€æŸ¥è¯¢ - ä¾›æ¸¸æˆç³»ç»Ÿä½¿ç”¨
 
         /// <summary>
-        /// »ñÈ¡Íæ¼ÒÊ±¼äµ÷Õû£¨¼Ó³É-¼õ³É£©
+        /// è·å–ç©å®¶æ—¶é—´è°ƒæ•´ï¼ˆåŠ æˆ-å‡æˆï¼‰
         /// </summary>
         public float GetPlayerTimeAdjustment(int playerId)
         {
@@ -416,7 +519,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// ¼ì²éÍæ¼ÒÊÇ·ñÓ¦¸ÃÌø¹ı
+        /// æ£€æŸ¥ç©å®¶æ˜¯å¦åº”è¯¥è·³è¿‡
         /// </summary>
         public bool ShouldPlayerSkip(int playerId)
         {
@@ -424,7 +527,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// »ñÈ¡Íæ¼ÒÖ¸¶¨µÄÌâÄ¿ÀàĞÍ
+        /// è·å–ç©å®¶æŒ‡å®šçš„é¢˜ç›®ç±»å‹
         /// </summary>
         public string GetPlayerSpecifiedQuestionType(int playerId)
         {
@@ -432,7 +535,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// »ñÈ¡Íæ¼ÒµÄ´ğÌâ´úÀí
+        /// è·å–ç©å®¶çš„ç­”é¢˜ä»£ç†
         /// </summary>
         public int? GetPlayerAnswerDelegate(int playerId)
         {
@@ -440,7 +543,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// ¼ì²éÍæ¼ÒÊÇ·ñÓĞ¶îÍâÌáÊ¾
+        /// æ£€æŸ¥ç©å®¶æ˜¯å¦æœ‰é¢å¤–æç¤º
         /// </summary>
         public bool HasPlayerExtraHint(int playerId)
         {
@@ -448,7 +551,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// »ñÈ¡µ±Ç°ÉËº¦±¶Êı
+        /// è·å–å½“å‰ä¼¤å®³å€æ•°
         /// </summary>
         public float GetCurrentDamageMultiplier()
         {
@@ -457,10 +560,10 @@ namespace Cards.Integration
 
         #endregion
 
-        #region ÓÎÏ·Á÷³Ì¼¯³É¹³×Ó
+        #region æ¸¸æˆæµç¨‹é›†æˆé’©å­
 
         /// <summary>
-        /// ÔÚ¼ÆÊ±Æ÷Æô¶¯Ç°µ÷ÓÃ£¬Ó¦ÓÃÊ±¼äµ÷Õû
+        /// åœ¨è®¡æ—¶å™¨å¯åŠ¨å‰è°ƒç”¨ï¼Œåº”ç”¨æ—¶é—´è°ƒæ•´
         /// </summary>
         public void OnTimerStarting(int playerId, ref float timeLimit)
         {
@@ -468,52 +571,52 @@ namespace Cards.Integration
             if (adjustment != 0)
             {
                 timeLimit += adjustment;
-                LogDebug($"Íæ¼Ò{playerId}Ê±¼äµ÷Õû:{adjustment}Ãë£¬×îÖÕÊ±ÏŞ:{timeLimit}Ãë");
+                LogDebug($"ç©å®¶{playerId}æ—¶é—´è°ƒæ•´:{adjustment}ç§’ï¼Œæœ€ç»ˆæ—¶é™:{timeLimit}ç§’");
 
-                // Çå³ıÊ±¼äĞ§¹û£¨Ò»´ÎĞÔÉúĞ§£©
+                // æ¸…é™¤æ—¶é—´æ•ˆæœï¼ˆä¸€æ¬¡æ€§ç”Ÿæ•ˆï¼‰
                 playerTimeBonuses.Remove(playerId);
                 playerTimePenalties.Remove(playerId);
             }
         }
 
         /// <summary>
-        /// ÔÚ´ğÌâ¿ªÊ¼Ç°µ÷ÓÃ£¬¼ì²éÌø¹ıºÍ´úÀí
+        /// åœ¨ç­”é¢˜å¼€å§‹å‰è°ƒç”¨ï¼Œæ£€æŸ¥è·³è¿‡å’Œä»£ç†
         /// </summary>
         public bool OnQuestionStarting(int playerId, out int actualAnswerPlayerId)
         {
             actualAnswerPlayerId = playerId;
 
-            // ¼ì²éÌø¹ı
+            // æ£€æŸ¥è·³è¿‡
             if (ShouldPlayerSkip(playerId))
             {
-                LogDebug($"Íæ¼Ò{playerId}Ìø¹ı´ËÌâ");
-                playerSkipFlags.Remove(playerId); // Çå³ıÌø¹ı±ê¼Ç
-                return false; // ·µ»Øfalse±íÊ¾Ìø¹ı
+                LogDebug($"ç©å®¶{playerId}è·³è¿‡æ­¤é¢˜");
+                playerSkipFlags.Remove(playerId); // æ¸…é™¤è·³è¿‡æ ‡è®°
+                return false; // è¿”å›falseè¡¨ç¤ºè·³è¿‡
             }
 
-            // ¼ì²é´ğÌâ´úÀí
+            // æ£€æŸ¥ç­”é¢˜ä»£ç†
             var delegatePlayer = GetPlayerAnswerDelegate(playerId);
             if (delegatePlayer.HasValue)
             {
                 actualAnswerPlayerId = delegatePlayer.Value;
-                LogDebug($"Íæ¼Ò{playerId}µÄ´ğÌâ´úÀíÎªÍæ¼Ò{actualAnswerPlayerId}");
-                playerAnswerDelegates.Remove(playerId); // Çå³ı´úÀí±ê¼Ç
+                LogDebug($"ç©å®¶{playerId}çš„ç­”é¢˜ä»£ç†ä¸ºç©å®¶{actualAnswerPlayerId}");
+                playerAnswerDelegates.Remove(playerId); // æ¸…é™¤ä»£ç†æ ‡è®°
             }
 
-            return true; // ·µ»Øtrue±íÊ¾Õı³£´ğÌâ
+            return true; // è¿”å›trueè¡¨ç¤ºæ­£å¸¸ç­”é¢˜
         }
 
         /// <summary>
-        /// ÔÚÉËº¦¼ÆËãÇ°µ÷ÓÃ£¬Ó¦ÓÃÉËº¦±¶Êı
+        /// åœ¨ä¼¤å®³è®¡ç®—å‰è°ƒç”¨ï¼Œåº”ç”¨ä¼¤å®³å€æ•°
         /// </summary>
         public int OnDamageCalculating(int originalDamage)
         {
             if (globalDamageMultiplier != 1.0f)
             {
                 int modifiedDamage = Mathf.RoundToInt(originalDamage * globalDamageMultiplier);
-                LogDebug($"ÉËº¦±¶ÊıÓ¦ÓÃ:{originalDamage} x {globalDamageMultiplier} = {modifiedDamage}");
+                LogDebug($"ä¼¤å®³å€æ•°åº”ç”¨:{originalDamage} x {globalDamageMultiplier} = {modifiedDamage}");
 
-                // ÖØÖÃÉËº¦±¶Êı£¨Ò»´ÎĞÔÉúĞ§£©
+                // é‡ç½®ä¼¤å®³å€æ•°ï¼ˆä¸€æ¬¡æ€§ç”Ÿæ•ˆï¼‰
                 globalDamageMultiplier = 1.0f;
                 return modifiedDamage;
             }
@@ -522,33 +625,33 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// ÔÚÌâÄ¿Éú³ÉÇ°µ÷ÓÃ£¬¼ì²éÖ¸¶¨ÌâÄ¿ÀàĞÍ
+        /// åœ¨é¢˜ç›®ç”Ÿæˆå‰è°ƒç”¨ï¼Œæ£€æŸ¥æŒ‡å®šé¢˜ç›®ç±»å‹
         /// </summary>
         public string OnQuestionTypeSelecting(int playerId)
         {
             string specifiedType = GetPlayerSpecifiedQuestionType(playerId);
             if (!string.IsNullOrEmpty(specifiedType))
             {
-                LogDebug($"Íæ¼Ò{playerId}Ö¸¶¨ÌâÄ¿ÀàĞÍ:{specifiedType}");
-                playerQuestionTypes.Remove(playerId); // Çå³ıÖ¸¶¨ÀàĞÍ£¨Ò»´ÎĞÔÉúĞ§£©
+                LogDebug($"ç©å®¶{playerId}æŒ‡å®šé¢˜ç›®ç±»å‹:{specifiedType}");
+                playerQuestionTypes.Remove(playerId); // æ¸…é™¤æŒ‡å®šç±»å‹ï¼ˆä¸€æ¬¡æ€§ç”Ÿæ•ˆï¼‰
                 return specifiedType;
             }
 
-            return null; // ·µ»Ønull±íÊ¾Õı³£Ëæ»úÑ¡Ôñ
+            return null; // è¿”å›nullè¡¨ç¤ºæ­£å¸¸éšæœºé€‰æ‹©
         }
 
         #endregion
 
-        #region Íæ¼Ò×´Ì¬²éÑ¯ - ¹©CardEffectSystemÊ¹ÓÃ
+        #region ç©å®¶çŠ¶æ€æŸ¥è¯¢ - ä¾›CardEffectSystemä½¿ç”¨
 
         /// <summary>
-        /// »ñÈ¡ËùÓĞ´æ»îÍæ¼ÒID
+        /// è·å–æ‰€æœ‰å­˜æ´»ç©å®¶ID
         /// </summary>
         public static List<int> GetAllAlivePlayerIds()
         {
             if (Instance?.hpManager == null)
             {
-                Instance?.LogDebug("PlayerHPManager²»¿ÉÓÃ£¬·µ»Ø¿ÕÁĞ±í");
+                Instance?.LogDebug("PlayerHPManagerä¸å¯ç”¨ï¼Œè¿”å›ç©ºåˆ—è¡¨");
                 return new List<int>();
             }
 
@@ -560,28 +663,28 @@ namespace Cards.Integration
                 result.Add((int)playerId);
             }
 
-            Instance?.LogDebug($"»ñÈ¡µ½{result.Count}Ãû´æ»îÍæ¼Ò");
+            Instance?.LogDebug($"è·å–åˆ°{result.Count}åå­˜æ´»ç©å®¶");
             return result;
         }
 
         /// <summary>
-        /// ¸ù¾İID»ñÈ¡¿¨ÅÆÊı¾İ
+        /// æ ¹æ®IDè·å–å¡ç‰Œæ•°æ®
         /// </summary>
         public static CardData GetCardDataById(int cardId)
         {
             if (Instance?.cardConfig == null)
             {
-                Instance?.LogDebug("CardConfig²»¿ÉÓÃ£¬ÎŞ·¨»ñÈ¡¿¨ÅÆÊı¾İ");
+                Instance?.LogDebug("CardConfigä¸å¯ç”¨ï¼Œæ— æ³•è·å–å¡ç‰Œæ•°æ®");
                 return null;
             }
 
             var cardData = Instance.cardConfig.GetCardById(cardId);
-            Instance?.LogDebug($"»ñÈ¡¿¨ÅÆÊı¾İ:{cardId} -> {cardData?.cardName ?? "Î´ÕÒµ½"}");
+            Instance?.LogDebug($"è·å–å¡ç‰Œæ•°æ®:{cardId} -> {cardData?.cardName ?? "æœªæ‰¾åˆ°"}");
             return cardData;
         }
 
         /// <summary>
-        /// ¼ì²éÍæ¼ÒÊÇ·ñ´æ»î
+        /// æ£€æŸ¥ç©å®¶æ˜¯å¦å­˜æ´»
         /// </summary>
         public static bool IsPlayerAlive(int playerId)
         {
@@ -590,7 +693,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// »ñÈ¡ËùÓĞÍæ¼ÒID£¨°üÀ¨ËÀÍöµÄ£©
+        /// è·å–æ‰€æœ‰ç©å®¶IDï¼ˆåŒ…æ‹¬æ­»äº¡çš„ï¼‰
         /// </summary>
         public static List<int> GetAllPlayerIds()
         {
@@ -602,46 +705,46 @@ namespace Cards.Integration
 
         #endregion
 
-        #region ÊÂ¼ş´¦Àí
+        #region äº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// Íæ¼Ò»ØºÏÍê³É´¦Àí
+        /// ç©å®¶å›åˆå®Œæˆå¤„ç†
         /// </summary>
         private void OnPlayerTurnCompleted(int playerId)
         {
-            // ÇåÀí¸ÃÍæ¼ÒµÄÒ»´ÎĞÔĞ§¹û£¨Èç¹ûÓĞµÄ»°£©
-            // ×¢Òâ£º´ó²¿·ÖĞ§¹ûÓ¦¸ÃÔÚÊ¹ÓÃÊ±¾ÍÇåÀí£¬ÕâÀïÖ»ÊÇ±£ÏÕ
-            LogDebug($"Íæ¼Ò{playerId}»ØºÏÍê³É£¬ÇåÀíÏà¹Ø×´Ì¬");
+            // æ¸…ç†è¯¥ç©å®¶çš„ä¸€æ¬¡æ€§æ•ˆæœï¼ˆå¦‚æœæœ‰çš„è¯ï¼‰
+            // æ³¨æ„ï¼šå¤§éƒ¨åˆ†æ•ˆæœåº”è¯¥åœ¨ä½¿ç”¨æ—¶å°±æ¸…ç†ï¼Œè¿™é‡Œåªæ˜¯ä¿é™©
+            LogDebug($"ç©å®¶{playerId}å›åˆå®Œæˆï¼Œæ¸…ç†ç›¸å…³çŠ¶æ€");
         }
 
         #endregion
 
-        #region ÍøÂçÍ¬²½Ö§³Ö
+        #region ç½‘ç»œåŒæ­¥æ”¯æŒ
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆÊ¹ÓÃÏûÏ¢£¨¹©"ÀÏÊ¦²¥±¨"¹¦ÄÜÊ¹ÓÃ£©
+        /// å¹¿æ’­å¡ç‰Œä½¿ç”¨æ¶ˆæ¯ï¼ˆä¾›"è€å¸ˆæ’­æŠ¥"åŠŸèƒ½ä½¿ç”¨ï¼‰
         /// </summary>
         public static void BroadcastCardUsage(int playerId, int cardId, int targetPlayerId, string cardName)
         {
             if (Instance?.networkManager == null) return;
 
-            string message = $"Íæ¼Ò{playerId}Ê¹ÓÃÁË{cardName}";
+            string message = $"ç©å®¶{playerId}ä½¿ç”¨äº†{cardName}";
             if (targetPlayerId > 0)
             {
-                message += $"£¬Ä¿±êÊÇÍæ¼Ò{targetPlayerId}";
+                message += $"ï¼Œç›®æ ‡æ˜¯ç©å®¶{targetPlayerId}";
             }
 
-            Instance.LogDebug($"¹ã²¥¿¨ÅÆÊ¹ÓÃÏûÏ¢: {message}");
-            // TODO: Í¨¹ıNetworkManager¹ã²¥¿¨ÅÆÊ¹ÓÃÏûÏ¢
+            Instance.LogDebug($"å¹¿æ’­å¡ç‰Œä½¿ç”¨æ¶ˆæ¯: {message}");
+            // TODO: é€šè¿‡NetworkManagerå¹¿æ’­å¡ç‰Œä½¿ç”¨æ¶ˆæ¯
             // Instance.networkManager.BroadcastCardUsageMessage(playerId, cardId, targetPlayerId, message);
         }
 
         #endregion
 
-        #region ÇåÀíºÍÖØÖÃ
+        #region æ¸…ç†å’Œé‡ç½®
 
         /// <summary>
-        /// ÇåÀíËùÓĞĞ§¹û×´Ì¬
+        /// æ¸…ç†æ‰€æœ‰æ•ˆæœçŠ¶æ€
         /// </summary>
         public void ClearAllEffectStates()
         {
@@ -653,11 +756,11 @@ namespace Cards.Integration
             playerExtraHints.Clear();
             globalDamageMultiplier = 1.0f;
 
-            LogDebug("ËùÓĞĞ§¹û×´Ì¬ÒÑÇåÀí");
+            LogDebug("æ‰€æœ‰æ•ˆæœçŠ¶æ€å·²æ¸…ç†");
         }
 
         /// <summary>
-        /// ÇåÀíÖ¸¶¨Íæ¼ÒµÄĞ§¹û×´Ì¬
+        /// æ¸…ç†æŒ‡å®šç©å®¶çš„æ•ˆæœçŠ¶æ€
         /// </summary>
         public void ClearPlayerEffectStates(int playerId)
         {
@@ -668,32 +771,34 @@ namespace Cards.Integration
             playerAnswerDelegates.Remove(playerId);
             playerExtraHints.Remove(playerId);
 
-            LogDebug($"Íæ¼Ò{playerId}µÄĞ§¹û×´Ì¬ÒÑÇåÀí");
+            LogDebug($"ç©å®¶{playerId}çš„æ•ˆæœçŠ¶æ€å·²æ¸…ç†");
         }
 
         #endregion
 
-        #region µ÷ÊÔºÍ×´Ì¬²éÑ¯
+        #region è°ƒè¯•å’ŒçŠ¶æ€æŸ¥è¯¢
 
         /// <summary>
-        /// »ñÈ¡µ±Ç°Ğ§¹û×´Ì¬ÕªÒª
+        /// è·å–å½“å‰æ•ˆæœçŠ¶æ€æ‘˜è¦
         /// </summary>
         public string GetEffectStatesSummary()
         {
-            var summary = "=== ¿¨ÅÆĞ§¹û×´Ì¬ ===\n";
-            summary += $"Ê±¼ä¼Ó³É: {playerTimeBonuses.Count}¸ö\n";
-            summary += $"Ê±¼ä¼õ³É: {playerTimePenalties.Count}¸ö\n";
-            summary += $"Ìø¹ı±ê¼Ç: {playerSkipFlags.Count}¸ö\n";
-            summary += $"ÌâÄ¿ÀàĞÍÖ¸¶¨: {playerQuestionTypes.Count}¸ö\n";
-            summary += $"´ğÌâ´úÀí: {playerAnswerDelegates.Count}¸ö\n";
-            summary += $"¶îÍâÌáÊ¾: {playerExtraHints.Count}¸ö\n";
-            summary += $"È«¾ÖÉËº¦±¶Êı: {globalDamageMultiplier}\n";
+            var summary = "=== å¡ç‰Œæ•ˆæœçŠ¶æ€ ===\n";
+            summary += $"æ—¶é—´åŠ æˆ: {playerTimeBonuses.Count}ä¸ª\n";
+            summary += $"æ—¶é—´å‡æˆ: {playerTimePenalties.Count}ä¸ª\n";
+            summary += $"è·³è¿‡æ ‡è®°: {playerSkipFlags.Count}ä¸ª\n";
+            summary += $"é¢˜ç›®ç±»å‹æŒ‡å®š: {playerQuestionTypes.Count}ä¸ª\n";
+            summary += $"ç­”é¢˜ä»£ç†: {playerAnswerDelegates.Count}ä¸ª\n";
+            summary += $"é¢å¤–æç¤º: {playerExtraHints.Count}ä¸ª\n";
+            summary += $"å…¨å±€ä¼¤å®³å€æ•°: {globalDamageMultiplier}\n";
+            summary += $"åˆå§‹åŒ–çŠ¶æ€: {(isInitialized ? "å·²åˆå§‹åŒ–" : "æœªåˆå§‹åŒ–")}\n";
+            summary += $"ç­‰å¾…æ ¸å¿ƒç³»ç»Ÿ: {(isWaitingForCoreSystem ? "æ˜¯" : "å¦")}\n";
 
             return summary;
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -704,7 +809,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// ¾¯¸æÈÕÖ¾
+        /// è­¦å‘Šæ—¥å¿—
         /// </summary>
         private void LogWarning(string message)
         {
@@ -715,7 +820,7 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// ´íÎóÈÕÖ¾
+        /// é”™è¯¯æ—¥å¿—
         /// </summary>
         private void LogError(string message)
         {
@@ -724,26 +829,66 @@ namespace Cards.Integration
 
         #endregion
 
-        #region ¹«¹²½Ó¿Ú
+        #region å…¬å…±æ¥å£
 
         /// <summary>
-        /// Ç¿ÖÆË¢ĞÂÏµÍ³ÒıÓÃ£¨ÔËĞĞÊ±Ê¹ÓÃ£©
+        /// å¼ºåˆ¶åˆ·æ–°ç³»ç»Ÿå¼•ç”¨ï¼ˆè¿è¡Œæ—¶ä½¿ç”¨ï¼‰
         /// </summary>
         public void RefreshSystemReferences()
         {
-            LogDebug("Ë¢ĞÂÏµÍ³ÒıÓÃ");
+            LogDebug("åˆ·æ–°ç³»ç»Ÿå¼•ç”¨");
             AcquireSystemReferences();
         }
 
         /// <summary>
-        /// ¼ì²éÇÅ½ÓÆ÷ÊÇ·ñ×¼±¸¾ÍĞ÷
+        /// æ£€æŸ¥æ¡¥æ¥å™¨æ˜¯å¦å‡†å¤‡å°±ç»ª
         /// </summary>
         public bool IsReady()
         {
-            return playerCardManager != null &&
+            return isInitialized &&
+                   playerCardManager != null &&
                    effectSystem != null &&
                    effectSystem.IsSystemReady() &&
                    cardConfig != null;
+        }
+
+        /// <summary>
+        /// æ‰‹åŠ¨è§¦å‘åˆå§‹åŒ–ï¼ˆè°ƒè¯•ç”¨ï¼‰
+        /// </summary>
+        [ContextMenu("æ‰‹åŠ¨åˆå§‹åŒ–")]
+        public void ManualInitialize()
+        {
+            LogDebug("[è°ƒè¯•] æ‰‹åŠ¨è§¦å‘åˆå§‹åŒ–");
+            isWaitingForCoreSystem = false;
+            isInitialized = false;
+            Initialize();
+        }
+
+        /// <summary>
+        /// æ˜¾ç¤ºæ¡¥æ¥å™¨çŠ¶æ€ï¼ˆè°ƒè¯•ç”¨ï¼‰
+        /// </summary>
+        [ContextMenu("æ˜¾ç¤ºæ¡¥æ¥å™¨çŠ¶æ€")]
+        public void ShowBridgeStatus()
+        {
+            Debug.Log(GetEffectStatesSummary());
+        }
+
+        /// <summary>
+        /// æµ‹è¯•ç³»ç»Ÿå¼•ç”¨ï¼ˆè°ƒè¯•ç”¨ï¼‰
+        /// </summary>
+        [ContextMenu("æµ‹è¯•ç³»ç»Ÿå¼•ç”¨")]
+        public void TestSystemReferences()
+        {
+            LogDebug("=== ç³»ç»Ÿå¼•ç”¨æµ‹è¯• ===");
+            LogDebug($"PlayerCardManager: {(playerCardManager != null ? "âœ“" : "âœ—")}");
+            LogDebug($"CardEffectSystem: {(effectSystem != null ? "âœ“" : "âœ—")}");
+            LogDebug($"CardConfig: {(cardConfig != null ? "âœ“" : "âœ—")}");
+            LogDebug($"HostGameManager: {(hostGameManager != null ? "âœ“" : "âœ—")}");
+            LogDebug($"PlayerHPManager: {(hpManager != null ? "âœ“" : "âœ—")}");
+            LogDebug($"TimerManager: {(timerManager != null ? "âœ“" : "âœ—")}");
+            LogDebug($"NetworkManager: {(networkManager != null ? "âœ“" : "âœ—")}");
+            LogDebug($"CardSystemManager: {(CardSystemManager.Instance != null ? "âœ“" : "âœ—")}");
+            LogDebug($"æ¡¥æ¥å™¨å°±ç»ª: {(IsReady() ? "âœ“" : "âœ—")}");
         }
 
         #endregion

@@ -8,6 +8,7 @@ using Cards.Effects;
 using Cards.Player;
 using Cards.Network;
 using Cards.Integration;
+using Cards.UI;
 
 namespace Cards.Core
 {
@@ -34,6 +35,8 @@ namespace Cards.Core
         private PlayerCardManager playerCardManager;
         private CardNetworkManager cardNetworkManager;
         private CardGameBridge cardGameBridge;
+        private CardUIManager cardUIManager;
+        private CardUIComponents cardUIComponents;
 
         // 系统状态
         private bool isInitialized = false;
@@ -50,6 +53,21 @@ namespace Cards.Core
         /// 系统错误事件
         /// </summary>
         public static event Action<string> OnSystemError;
+
+        /// <summary>
+        /// 核心系统就绪事件（供其他系统监听）
+        /// </summary>
+        public static event Action OnCoreSystemReady;
+
+        /// <summary>
+        /// UI系统就绪事件
+        /// </summary>
+        public static event Action OnUISystemReady;
+
+        /// <summary>
+        /// 玩家数据就绪事件
+        /// </summary>
+        public static event Action<int> OnPlayerDataReady;
 
         #endregion
 
@@ -171,13 +189,33 @@ namespace Cards.Core
 
             yield return null;
 
-            // 5. 初始化游戏桥接器（必须在效果系统之后）
-            success = InitializeGameBridge(out errorMessage);
-            if (!success){LogDebug($"游戏桥接器初始化失败: {errorMessage}");}
+            // 触发核心系统就绪事件
+            LogDebug("核心系统初始化完成，触发就绪事件");
+            OnCoreSystemReady?.Invoke();
 
             yield return null;
 
-            // 6. 建立事件连接
+            // 5. 初始化UI系统（依赖核心系统）
+            success = InitializeUISystem(out errorMessage);
+            if (!success)
+            {
+                LogDebug($"UI系统初始化失败: {errorMessage}");
+                // UI初始化失败不影响整体，但要记录警告
+            }
+
+            yield return null;
+
+            // 6. 初始化游戏桥接器（必须在效果系统之后）
+            success = InitializeGameBridge(out errorMessage);
+            if (!success)
+            {
+                LogDebug($"游戏桥接器初始化失败: {errorMessage}");
+                // 桥接器初始化失败不影响整体，但要记录警告
+            }
+
+            yield return null;
+
+            // 7. 建立事件连接
             success = EstablishEventConnections(out errorMessage);
             if (!success)
             {
@@ -348,6 +386,59 @@ namespace Cards.Core
         }
 
         /// <summary>
+        /// 初始化UI系统
+        /// </summary>
+        private bool InitializeUISystem(out string errorMessage)
+        {
+            try
+            {
+                LogDebug("初始化UI系统");
+
+                // 初始化CardUIComponents
+                cardUIComponents = CardUIComponents.Instance;
+                if (cardUIComponents == null)
+                {
+                    var uiComponentsGO = new GameObject("CardUIComponents");
+                    uiComponentsGO.transform.SetParent(transform);
+                    cardUIComponents = uiComponentsGO.AddComponent<CardUIComponents>();
+                }
+
+                // 初始化CardUIManager
+                cardUIManager = FindObjectOfType<CardUIManager>();
+                if (cardUIManager == null)
+                {
+                    LogDebug("未找到现有的CardUIManager，尝试创建新实例");
+                    var uiManagerGO = new GameObject("CardUIManager");
+                    uiManagerGO.transform.SetParent(transform);
+                    cardUIManager = uiManagerGO.AddComponent<CardUIManager>();
+                }
+
+                // 等待一帧确保UI组件完全初始化
+                StartCoroutine(DelayedUIInitialization());
+
+                LogDebug("UI系统初始化完成");
+                errorMessage = "";
+                return true;
+            }
+            catch (Exception e)
+            {
+                errorMessage = $"UI系统初始化失败: {e.Message}";
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 延迟UI初始化完成处理
+        /// </summary>
+        private IEnumerator DelayedUIInitialization()
+        {
+            yield return null; // 等待一帧
+
+            LogDebug("UI系统延迟初始化完成，触发UI就绪事件");
+            OnUISystemReady?.Invoke();
+        }
+
+        /// <summary>
         /// 初始化游戏桥接器（必须在效果系统初始化后调用）
         /// </summary>
         private bool InitializeGameBridge(out string errorMessage)
@@ -409,6 +500,9 @@ namespace Cards.Core
                     playerCardManager.OnCardUsed += HandlePlayerCardUsed;
                     playerCardManager.OnCardAcquired += HandlePlayerCardAcquired;
                     playerCardManager.OnCardTransferred += HandlePlayerCardTransferred;
+
+                    // 订阅手牌变化事件，转发给UI系统
+                    playerCardManager.OnHandSizeChanged += HandlePlayerHandChanged;
                 }
 
                 // 订阅网络事件（如果可用）
@@ -448,6 +542,9 @@ namespace Cards.Core
             {
                 cardNetworkManager.BroadcastCardUsed((ushort)playerId, cardId, (ushort)targetPlayerId);
             }
+
+            // 通知UI更新
+            RequestUIUpdate(playerId);
         }
 
         /// <summary>
@@ -462,6 +559,9 @@ namespace Cards.Core
             {
                 cardNetworkManager.BroadcastCardAdded((ushort)playerId, cardId);
             }
+
+            // 通知UI更新
+            RequestUIUpdate(playerId);
         }
 
         /// <summary>
@@ -475,6 +575,54 @@ namespace Cards.Core
             if (cardNetworkManager != null && cardNetworkManager.CanSendRPC())
             {
                 cardNetworkManager.BroadcastCardTransferred((ushort)fromPlayerId, cardId, (ushort)toPlayerId);
+            }
+
+            // 通知相关玩家的UI更新
+            RequestUIUpdate(fromPlayerId);
+            RequestUIUpdate(toPlayerId);
+        }
+
+        /// <summary>
+        /// 处理玩家手牌变化
+        /// </summary>
+        private void HandlePlayerHandChanged(int playerId, int newHandSize)
+        {
+            LogDebug($"玩家{playerId}手牌数量变化: {newHandSize}");
+
+            // 通知UI更新
+            RequestUIUpdate(playerId);
+        }
+
+        /// <summary>
+        /// 请求UI更新
+        /// </summary>
+        private void RequestUIUpdate(int playerId)
+        {
+            if (cardUIManager != null)
+            {
+                // 延迟一帧执行UI更新，确保数据已完全同步
+                StartCoroutine(DelayedUIUpdate(playerId));
+            }
+        }
+
+        /// <summary>
+        /// 延迟UI更新
+        /// </summary>
+        private IEnumerator DelayedUIUpdate(int playerId)
+        {
+            yield return null; // 等待一帧
+
+            try
+            {
+                if (cardUIManager != null)
+                {
+                    // 触发UI更新（这里需要根据CardUIManager的实际接口调整）
+                    cardUIManager.RefreshPlayerCardDisplay(playerId);
+                }
+            }
+            catch (Exception e)
+            {
+                LogDebug($"UI更新失败: {e.Message}");
             }
         }
 
@@ -528,6 +676,7 @@ namespace Cards.Core
                 playerCardManager.OnCardUsed -= HandlePlayerCardUsed;
                 playerCardManager.OnCardAcquired -= HandlePlayerCardAcquired;
                 playerCardManager.OnCardTransferred -= HandlePlayerCardTransferred;
+                playerCardManager.OnHandSizeChanged -= HandlePlayerHandChanged;
             }
 
             if (cardNetworkManager != null)
@@ -585,6 +734,12 @@ namespace Cards.Core
                 if (playerCardManager != null)
                 {
                     playerCardManager.InitializePlayer(playerId, playerName);
+
+                    // 触发玩家数据就绪事件
+                    OnPlayerDataReady?.Invoke(playerId);
+
+                    // 请求UI更新
+                    RequestUIUpdate(playerId);
                 }
             }
             catch (Exception e)
@@ -611,6 +766,12 @@ namespace Cards.Core
                 {
                     cardGameBridge.ClearPlayerEffectStates(playerId);
                 }
+
+                // 清理UI显示
+                if (cardUIManager != null)
+                {
+                    cardUIManager.ClearPlayerDisplay(playerId);
+                }
             }
             catch (Exception e)
             {
@@ -635,6 +796,11 @@ namespace Cards.Core
                 if (cardGameBridge != null)
                 {
                     cardGameBridge.ClearAllEffectStates();
+                }
+
+                if (cardUIManager != null)
+                {
+                    cardUIManager.ClearAllDisplays();
                 }
 
                 LogDebug("游戏结束处理完成");
@@ -671,6 +837,14 @@ namespace Cards.Core
         }
 
         /// <summary>
+        /// 检查UI系统是否就绪
+        /// </summary>
+        public bool IsUISystemReady()
+        {
+            return cardUIManager != null && cardUIComponents != null;
+        }
+
+        /// <summary>
         /// 获取系统状态摘要
         /// </summary>
         public string GetSystemStatus()
@@ -678,11 +852,14 @@ namespace Cards.Core
             var status = "=== 卡牌系统状态 ===\n";
             status += $"系统就绪: {(IsSystemReady() ? "✓" : "✗")}\n";
             status += $"网络就绪: {(IsNetworkReady() ? "✓" : "✗")}\n";
+            status += $"UI系统就绪: {(IsUISystemReady() ? "✓" : "✗")}\n";
             status += $"配置: {(cardConfig != null ? "✓" : "✗")}\n";
             status += $"效果系统: {(cardEffectSystem?.IsSystemReady() == true ? "✓" : "✗")}\n";
             status += $"玩家管理: {(playerCardManager?.IsInitialized == true ? "✓" : "✗")}\n";
             status += $"游戏桥接: {(cardGameBridge?.IsReady() == true ? "✓" : "✗")}\n";
             status += $"网络管理: {(cardNetworkManager != null ? "✓" : "✗")}\n";
+            status += $"UI管理: {(cardUIManager != null ? "✓" : "✗")}\n";
+            status += $"UI组件: {(cardUIComponents != null ? "✓" : "✗")}\n";
             return status;
         }
 
@@ -718,24 +895,23 @@ namespace Cards.Core
             return cardGameBridge;
         }
 
-        #endregion
-
-        #region 开发者工具
+        /// <summary>
+        /// 获取UI管理器实例（供外部访问）
+        /// </summary>
+        public CardUIManager GetCardUIManager()
+        {
+            return cardUIManager;
+        }
 
         /// <summary>
-        /// 强制重新初始化系统（调试用）
+        /// 获取UI组件实例（供外部访问）
         /// </summary>
-        [ContextMenu("重新初始化")]
-        public void Reinitialize()
+        public CardUIComponents GetCardUIComponents()
         {
-            LogDebug("[调试] 重新初始化系统");
-
-            UnsubscribeFromEvents();
-            isInitialized = false;
-            isInitializing = false;
-
-            Initialize();
+            return cardUIComponents;
         }
+
+        #endregion
 
         /// <summary>
         /// 显示系统状态（调试用）
@@ -746,28 +922,6 @@ namespace Cards.Core
             Debug.Log(GetSystemStatus());
         }
 
-        /// <summary>
-        /// 验证效果系统完整性（调试用）
-        /// </summary>
-        [ContextMenu("验证效果系统")]
-        public void ValidateEffectSystem()
-        {
-            if (cardEffectSystem == null)
-            {
-                LogError("效果系统未初始化");
-                return;
-            }
-
-            if (!cardEffectSystem.IsSystemReady())
-            {
-                LogError("效果系统未就绪");
-                return;
-            }
-
-            LogDebug("效果系统验证通过");
-        }
-
-        #endregion
 
         #region 工具方法
 
@@ -788,6 +942,42 @@ namespace Cards.Core
         private void LogError(string message)
         {
             Debug.LogError($"[CardSystemManager] {message}");
+        }
+
+        #endregion
+
+        #region 静态访问接口
+
+        /// <summary>
+        /// 静态访问玩家管理器
+        /// </summary>
+        public static PlayerCardManager GetPlayerCardManagerStatic()
+        {
+            return Instance?.playerCardManager;
+        }
+
+        /// <summary>
+        /// 静态访问卡牌配置
+        /// </summary>
+        public static CardConfig GetCardConfigStatic()
+        {
+            return Instance?.cardConfig;
+        }
+
+        /// <summary>
+        /// 静态访问UI管理器
+        /// </summary>
+        public static CardUIManager GetCardUIManagerStatic()
+        {
+            return Instance?.cardUIManager;
+        }
+
+        /// <summary>
+        /// 静态检查系统是否就绪
+        /// </summary>
+        public static bool IsSystemReadyStatic()
+        {
+            return Instance?.IsSystemReady() == true;
         }
 
         #endregion

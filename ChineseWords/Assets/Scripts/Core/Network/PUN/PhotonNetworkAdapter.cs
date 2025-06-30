@@ -16,7 +16,7 @@ namespace Core.Network
     public class PhotonNetworkAdapter : MonoBehaviourPun, IConnectionCallbacks, IMatchmakingCallbacks, ILobbyCallbacks
     {
         [Header("Photon配置")]
-        [SerializeField] private string gameVersion = "0.4.4";
+        [SerializeField] private string gameVersion = "0.5";
         [SerializeField] private bool enableDebugLogs = true;
 
         // 移除单例模式，改为通过PersistentNetworkManager访问
@@ -756,44 +756,6 @@ namespace Core.Network
             return player.CustomProperties;
         }
 
-        /// <summary>
-        /// 设置房间自定义属性（仅Master Client可用）
-        /// </summary>
-        public void SetRoomProperties(ExitGames.Client.Photon.Hashtable properties)
-        {
-            if (!PhotonNetwork.IsConnected || !PhotonNetwork.InRoom)
-            {
-                LogDebug("未连接或未在房间中，无法设置房间属性");
-                return;
-            }
-
-            if (!PhotonNetwork.IsMasterClient)
-            {
-                LogDebug("不是Master Client，无法设置房间属性");
-                return;
-            }
-
-            if (properties == null || properties.Count == 0)
-            {
-                LogDebug("房间属性为空");
-                return;
-            }
-
-            LogDebug($"设置房间属性，共 {properties.Count} 个");
-            PhotonNetwork.CurrentRoom.SetCustomProperties(properties);
-        }
-
-        /// <summary>
-        /// 获取房间自定义属性
-        /// </summary>
-        public ExitGames.Client.Photon.Hashtable GetRoomProperties()
-        {
-            if (!PhotonNetwork.InRoom || PhotonNetwork.CurrentRoom == null)
-                return new ExitGames.Client.Photon.Hashtable();
-
-            return PhotonNetwork.CurrentRoom.CustomProperties;
-        }
-
         #endregion
 
         #region 调试方法
@@ -810,27 +772,6 @@ namespace Core.Network
         public void ShowPhotonStatus()
         {
             Debug.Log($"=== Photon状态 ===\n{GetPhotonStatus()}");
-        }
-
-        [ContextMenu("强制触发连接事件")]
-        public void ForceTriggeredConnectedEvent()
-        {
-            if (PhotonNetwork.IsConnected && !hasTriggeredConnectedEvent)
-            {
-                hasTriggeredConnectedEvent = true;
-                OnPhotonConnected?.Invoke();
-                LogDebug("手动触发连接事件");
-            }
-        }
-
-        [ContextMenu("重置连接状态")]
-        public void ResetConnectionState()
-        {
-            hasTriggeredConnectedEvent = false;
-            isWaitingForRoomOperation = false;
-            isPendingClient = false;
-            pendingRoomName = "";
-            LogDebug("连接状态已重置");
         }
 
         #endregion

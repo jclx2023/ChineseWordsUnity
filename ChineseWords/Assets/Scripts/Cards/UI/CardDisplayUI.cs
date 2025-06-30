@@ -995,48 +995,6 @@ namespace Cards.UI
             }
         }
 
-        /// <summary>
-        /// 错误日志
-        /// </summary>
-        private void LogError(string message)
-        {
-            Debug.LogError($"[CardDisplayUI] {message}");
-        }
-
-        #endregion
-
-        #region Unity编辑器调试
-
-#if UNITY_EDITOR
-        private void OnDrawGizmosSelected()
-        {
-            if (!showDebugGizmos) return;
-
-            // 绘制扇形中心点
-            Gizmos.color = Color.green;
-            Vector3 centerWorld = transform.TransformPoint(new Vector3(fanCenter.x, fanCenter.y, 0));
-            Gizmos.DrawWireSphere(centerWorld, 20f);
-
-            // 绘制扇形范围
-            Gizmos.color = Color.yellow;
-            float startAngle = -fanAngleSpread / 2f;
-            float endAngle = fanAngleSpread / 2f;
-
-            for (float angle = startAngle; angle <= endAngle; angle += 5f)
-            {
-                float radians = angle * Mathf.Deg2Rad;
-                Vector3 direction = new Vector3(Mathf.Sin(radians), Mathf.Cos(radians), 0) * fanRadius;
-                Vector3 worldPos = centerWorld + direction;
-                Gizmos.DrawLine(centerWorld, worldPos);
-            }
-
-            // 绘制缩略图位置
-            Gizmos.color = Color.red;
-            Vector3 thumbnailWorld = transform.TransformPoint(new Vector3(thumbnailPosition.x, thumbnailPosition.y, 0));
-            Gizmos.DrawWireCube(thumbnailWorld, new Vector3(50f, 70f, 10f));
-        }
-#endif
-
         #endregion
 
         #region 清理资源
