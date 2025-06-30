@@ -29,17 +29,17 @@ namespace Cards.Effects
 
         private void Awake()
         {
-            // 单例模式
-            if (Instance == null)
-            {
-                Instance = this;
-                DontDestroyOnLoad(gameObject);
-                InitializeSystem();
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            //// 单例模式
+            //if (Instance == null)
+            //{
+            //    Instance = this;
+            //    InitializeSystem();
+            //}
+            //else
+            //{
+            //    Destroy(gameObject);
+            //}
+            LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
         }
 
         private void OnDestroy()
@@ -100,19 +100,7 @@ namespace Cards.Effects
         /// </summary>
         public void RegisterEffect(EffectType effectType, ICardEffect effect)
         {
-            if (effect == null)
-            {
-                LogError($"尝试注册空效果: {effectType}");
-                return;
-            }
-
-            if (registeredEffects.ContainsKey(effectType))
-            {
-                LogWarning($"效果 {effectType} 已存在，将被覆盖");
-            }
-
             registeredEffects[effectType] = effect;
-            LogDebug($"效果已注册: {effectType}");
         }
 
         /// <summary>

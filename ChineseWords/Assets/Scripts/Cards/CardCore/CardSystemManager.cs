@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using UnityEngine.SceneManagement;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -13,36 +12,36 @@ using Cards.UI;
 namespace Cards.Core
 {
     /// <summary>
-    /// 轻量化卡牌系统管理器
-    /// 负责统一管理和协调卡牌相关子系统的初始化和引用
-    /// 确保所有子系统按正确顺序初始化，避免重复初始化
+    /// 卡牌系统管理器 - 重构版
+    /// 完全控制系统创建顺序和依赖注入，解决时序问题
     /// </summary>
     public class CardSystemManager : MonoBehaviour
     {
         [Header("系统配置")]
         [SerializeField] public CardConfig cardConfig;
-        [SerializeField] private bool autoInitializeOnStart = true;
         [SerializeField] private bool enableDebugLogs = true;
-
-        [Header("初始化设置")]
-        [SerializeField] private float initializationDelay = 0.1f;
 
         // 单例实例
         public static CardSystemManager Instance { get; private set; }
 
-        // 子系统引用
+        // 系统引用仓库
         private CardEffectSystem cardEffectSystem;
         private PlayerCardManager playerCardManager;
         private CardNetworkManager cardNetworkManager;
         private CardGameBridge cardGameBridge;
-        private CardUIManager cardUIManager;
         private CardUIComponents cardUIComponents;
+        private CardUIManager cardUIManager;
+
+        // 子对象引用
+        private Transform coreSystemsParent;
+        private Transform networkSystemsParent;
+        private Transform integrationSystemsParent;
+        private Transform uiSystemsParent;
 
         // 系统状态
         private bool isInitialized = false;
-        private bool isInitializing = false;
 
-        #region 事件定义
+        #region 系统就绪事件
 
         /// <summary>
         /// 系统初始化完成事件
@@ -50,22 +49,17 @@ namespace Cards.Core
         public static event Action<bool> OnSystemInitialized;
 
         /// <summary>
-        /// 系统错误事件
-        /// </summary>
-        public static event Action<string> OnSystemError;
-
-        /// <summary>
-        /// 核心系统就绪事件（供其他系统监听）
+        /// 核心系统就绪事件
         /// </summary>
         public static event Action OnCoreSystemReady;
 
         /// <summary>
-        /// UI系统就绪事件
+        /// UI系统就绪事件（为兼容性保留）
         /// </summary>
         public static event Action OnUISystemReady;
 
         /// <summary>
-        /// 玩家数据就绪事件
+        /// 玩家数据就绪事件（为兼容性保留）
         /// </summary>
         public static event Action<int> OnPlayerDataReady;
 
@@ -82,26 +76,23 @@ namespace Cards.Core
             }
             else
             {
-                LogDebug("发现重复的CardSystemManager实例，销毁当前实例");
+                LogError("发现重复的CardSystemManager实例");
                 Destroy(gameObject);
+                return;
             }
         }
 
         private void Start()
         {
-            if (autoInitializeOnStart)
-            {
-                StartCoroutine(DelayedInitialization());
-            }
+            InitializeCardSystem();
         }
 
         private void OnDestroy()
         {
             if (Instance == this)
             {
-                UnsubscribeFromEvents();
+                CleanupSystems();
                 Instance = null;
-                LogDebug("CardSystemManager已销毁");
             }
         }
 
@@ -110,434 +101,449 @@ namespace Cards.Core
         #region 系统初始化
 
         /// <summary>
-        /// 延迟初始化
+        /// 初始化卡牌系统
         /// </summary>
-        private IEnumerator DelayedInitialization()
+        private void InitializeCardSystem()
         {
-            LogDebug("开始延迟初始化");
-            yield return new WaitForSeconds(initializationDelay);
-
-            if (!isInitialized && !isInitializing)
-            {
-                yield return StartCoroutine(InitializeCardSystem());
-            }
-        }
-
-        /// <summary>
-        /// 初始化卡牌系统（公共接口）
-        /// </summary>
-        public void Initialize()
-        {
-            if (isInitialized)
-            {
-                LogDebug("卡牌系统已初始化");
-                return;
-            }
-
-            if (isInitializing)
-            {
-                LogDebug("卡牌系统正在初始化中");
-                return;
-            }
-
-            StartCoroutine(InitializeCardSystem());
-        }
-
-        /// <summary>
-        /// 初始化卡牌系统协程
-        /// </summary>
-        private IEnumerator InitializeCardSystem()
-        {
-            isInitializing = true;
             LogDebug("开始初始化卡牌系统");
 
-            bool success = true;
-            string errorMessage = "";
-
-            // 1. 初始化配置
-            success = InitializeConfig(out errorMessage);
-            if (!success)
-            {
-                FinishInitialization(false, errorMessage);
-                yield break;
-            }
-
-            yield return null;
-
-            // 2. 初始化效果系统（包含效果注册）
-            success = InitializeEffectSystem(out errorMessage);
-            if (!success)
-            {
-                FinishInitialization(false, errorMessage);
-                yield break;
-            }
-
-            yield return null;
-
-            // 3. 初始化玩家管理器
-            success = InitializePlayerManager(out errorMessage);
-            if (!success)
-            {
-                FinishInitialization(false, errorMessage);
-                yield break;
-            }
-
-            yield return null;
-
-            // 4. 初始化网络管理器
-            InitializeNetworkManager(); // 网络初始化失败不影响整体
-
-            yield return null;
-
-            // 触发核心系统就绪事件
-            LogDebug("核心系统初始化完成，触发就绪事件");
-            OnCoreSystemReady?.Invoke();
-
-            yield return null;
-
-            // 5. 初始化UI系统（依赖核心系统）
-            success = InitializeUISystem(out errorMessage);
-            if (!success)
-            {
-                LogDebug($"UI系统初始化失败: {errorMessage}");
-                // UI初始化失败不影响整体，但要记录警告
-            }
-
-            yield return null;
-
-            // 6. 初始化游戏桥接器（必须在效果系统之后）
-            success = InitializeGameBridge(out errorMessage);
-            if (!success)
-            {
-                LogDebug($"游戏桥接器初始化失败: {errorMessage}");
-                // 桥接器初始化失败不影响整体，但要记录警告
-            }
-
-            yield return null;
-
-            // 7. 建立事件连接
-            success = EstablishEventConnections(out errorMessage);
-            if (!success)
-            {
-                FinishInitialization(false, errorMessage);
-                yield break;
-            }
-
-            FinishInitialization(true, "系统初始化成功");
-        }
-
-        /// <summary>
-        /// 完成初始化
-        /// </summary>
-        private void FinishInitialization(bool success, string message)
-        {
-            isInitializing = false;
-            isInitialized = success;
-
-            if (success)
-            {
-                LogDebug(message);
-            }
-            else
-            {
-                LogError(message);
-                OnSystemError?.Invoke(message);
-            }
-
-            OnSystemInitialized?.Invoke(success);
-        }
-
-        /// <summary>
-        /// 初始化配置
-        /// </summary>
-        private bool InitializeConfig(out string errorMessage)
-        {
             try
             {
-                LogDebug("初始化卡牌配置");
+                // 阶段1：验证配置
+                ValidateConfiguration();
 
+                // 阶段2：创建GameObject结构
+                CreateGameObjectStructure();
+
+                // 阶段3：创建核心系统
+                CreateCoreSystems();
+
+                // 阶段4：创建网络系统
+                CreateNetworkSystems();
+
+                // 阶段5：创建UI系统
+                CreateUISystems();
+
+                // 阶段6：创建集成系统
+                CreateIntegrationSystems();
+
+                // 阶段7：注入依赖
+                InjectDependencies();
+
+                // 阶段8：建立事件连接
+                EstablishEventConnections();
+
+                // 完成初始化
+                FinishInitialization(true);
+            }
+            catch (Exception e)
+            {
+                LogError($"系统初始化失败: {e.Message}");
+                FinishInitialization(false);
+                throw; // 严格模式：重新抛出异常
+            }
+        }
+
+        /// <summary>
+        /// 验证配置
+        /// </summary>
+        private void ValidateConfiguration()
+        {
+            LogDebug("验证系统配置");
+
+            if (cardConfig == null)
+            {
+                cardConfig = Resources.Load<CardConfig>("CardConfig");
                 if (cardConfig == null)
                 {
-                    cardConfig = Resources.Load<CardConfig>("CardConfig");
-                    if (cardConfig == null)
-                    {
-                        errorMessage = "无法加载CardConfig资源";
-                        return false;
-                    }
+                    throw new InvalidOperationException("无法加载CardConfig资源");
                 }
-
-                if (!cardConfig.ValidateConfig())
-                {
-                    errorMessage = "CardConfig验证失败";
-                    return false;
-                }
-
-                LogDebug($"卡牌配置加载成功: {cardConfig.AllCards.Count}张卡牌");
-                errorMessage = "";
-                return true;
             }
-            catch (Exception e)
+
+            if (!cardConfig.ValidateConfig())
             {
-                errorMessage = $"配置初始化失败: {e.Message}";
-                return false;
+                throw new InvalidOperationException("CardConfig验证失败");
             }
+
+            LogDebug($"配置验证成功: {cardConfig.AllCards.Count}张卡牌");
         }
 
         /// <summary>
-        /// 初始化效果系统（负责创建实例和注册所有效果）
+        /// 创建GameObject结构
         /// </summary>
-        private bool InitializeEffectSystem(out string errorMessage)
+        private void CreateGameObjectStructure()
         {
-            try
-            {
-                LogDebug("初始化CardEffectSystem");
+            LogDebug("创建GameObject层级结构");
 
-                cardEffectSystem = CardEffectSystem.Instance;
-                if (cardEffectSystem == null)
-                {
-                    var effectSystemGO = new GameObject("CardEffectSystem");
-                    effectSystemGO.transform.SetParent(transform);
-                    cardEffectSystem = effectSystemGO.AddComponent<CardEffectSystem>();
-                }
+            // 创建核心系统容器
+            var coreSystemsGO = new GameObject("CoreSystems");
+            coreSystemsGO.transform.SetParent(transform);
+            coreSystemsParent = coreSystemsGO.transform;
 
-                // 统一在这里注册所有效果，避免重复注册
-                LogDebug("注册所有卡牌效果");
-                CardEffectRegistrar.RegisterAllEffects(cardEffectSystem);
+            // 创建网络系统容器
+            var networkSystemsGO = new GameObject("NetworkSystems");
+            networkSystemsGO.transform.SetParent(transform);
+            networkSystemsParent = networkSystemsGO.transform;
 
-                if (!cardEffectSystem.IsSystemReady())
-                {
-                    errorMessage = "CardEffectSystem未正确初始化";
-                    return false;
-                }
+            // 创建UI系统容器
+            var uiSystemsGO = new GameObject("UISystems");
+            uiSystemsGO.transform.SetParent(transform);
+            uiSystemsParent = uiSystemsGO.transform;
 
-                LogDebug("CardEffectSystem初始化并注册效果完成");
-                errorMessage = "";
-                return true;
-            }
-            catch (Exception e)
-            {
-                errorMessage = $"效果系统初始化失败: {e.Message}";
-                return false;
-            }
+            // 创建集成系统容器
+            var integrationSystemsGO = new GameObject("IntegrationSystems");
+            integrationSystemsGO.transform.SetParent(transform);
+            integrationSystemsParent = integrationSystemsGO.transform;
+
+            LogDebug("GameObject结构创建完成");
         }
 
         /// <summary>
-        /// 初始化玩家管理器
+        /// 创建核心系统
         /// </summary>
-        private bool InitializePlayerManager(out string errorMessage)
+        private void CreateCoreSystems()
         {
-            try
+            LogDebug("创建核心系统");
+
+            // 创建效果系统
+            var effectSystemGO = new GameObject("CardEffectSystem");
+            effectSystemGO.transform.SetParent(coreSystemsParent);
+            cardEffectSystem = effectSystemGO.AddComponent<CardEffectSystem>();
+
+            // 手动设置单例
+            if (!SetSystemInstance(cardEffectSystem))
             {
-                LogDebug("初始化PlayerCardManager");
-
-                playerCardManager = PlayerCardManager.Instance;
-                if (playerCardManager == null)
-                {
-                    var playerManagerGO = new GameObject("PlayerCardManager");
-                    playerManagerGO.transform.SetParent(transform);
-                    playerCardManager = playerManagerGO.AddComponent<PlayerCardManager>();
-                }
-
-                if (!playerCardManager.IsInitialized)
-                {
-                    playerCardManager.Initialize();
-                }
-
-                if (!playerCardManager.IsInitialized)
-                {
-                    errorMessage = "PlayerCardManager初始化失败";
-                    return false;
-                }
-
-                LogDebug("PlayerCardManager初始化成功");
-                errorMessage = "";
-                return true;
+                throw new InvalidOperationException("CardEffectSystem单例设置失败");
             }
-            catch (Exception e)
+
+            // 注册效果
+            CardEffectRegistrar.RegisterAllEffects(cardEffectSystem);
+
+            // 验证效果系统
+            if (!cardEffectSystem.IsSystemReady())
             {
-                errorMessage = $"玩家管理器初始化失败: {e.Message}";
-                return false;
+                throw new InvalidOperationException("CardEffectSystem初始化失败");
             }
+
+            // 创建玩家管理器
+            var playerManagerGO = new GameObject("PlayerCardManager");
+            playerManagerGO.transform.SetParent(coreSystemsParent);
+            playerCardManager = playerManagerGO.AddComponent<PlayerCardManager>();
+
+            // 手动设置单例
+            if (!SetSystemInstance(playerCardManager))
+            {
+                throw new InvalidOperationException("PlayerCardManager单例设置失败");
+            }
+
+            // 初始化玩家管理器
+            playerCardManager.Initialize();
+            if (!playerCardManager.IsInitialized)
+            {
+                throw new InvalidOperationException("PlayerCardManager初始化失败");
+            }
+
+            LogDebug("核心系统创建完成");
+
+            // 触发核心系统就绪事件
+            OnCoreSystemReady?.Invoke();
         }
 
         /// <summary>
-        /// 初始化网络管理器
+        /// 创建网络系统
         /// </summary>
-        private void InitializeNetworkManager()
+        private void CreateNetworkSystems()
         {
+            LogDebug("创建网络系统");
+
             try
             {
-                LogDebug("初始化网络管理器");
                 cardNetworkManager = CardNetworkManager.Instance;
-
                 if (cardNetworkManager != null)
                 {
-                    LogDebug("网络管理器初始化成功");
+                    LogDebug("网络管理器已存在");
                 }
                 else
                 {
-                    LogDebug("网络管理器不可用");
+                    LogDebug("网络管理器不可用，跳过");
                 }
             }
             catch (Exception e)
             {
-                LogDebug($"网络管理器初始化警告: {e.Message}");
+                LogDebug($"网络系统创建警告: {e.Message}");
+                // 网络系统失败不影响核心功能
             }
         }
 
         /// <summary>
-        /// 初始化UI系统
+        /// 创建UI系统
         /// </summary>
-        private bool InitializeUISystem(out string errorMessage)
+        private void CreateUISystems()
         {
-            try
+            LogDebug("创建UI系统");
+
+            // 创建CardUIComponents
+            var uiComponentsGO = new GameObject("CardUIComponents");
+            uiComponentsGO.transform.SetParent(uiSystemsParent);
+            cardUIComponents = uiComponentsGO.AddComponent<CardUIComponents>();
+
+            // 手动设置单例
+            if (!SetSystemInstance(cardUIComponents))
             {
-                LogDebug("初始化UI系统");
-
-                // 初始化CardUIComponents
-                cardUIComponents = CardUIComponents.Instance;
-                if (cardUIComponents == null)
-                {
-                    var uiComponentsGO = new GameObject("CardUIComponents");
-                    uiComponentsGO.transform.SetParent(transform);
-                    cardUIComponents = uiComponentsGO.AddComponent<CardUIComponents>();
-                }
-
-                // 初始化CardUIManager
-                cardUIManager = FindObjectOfType<CardUIManager>();
-                if (cardUIManager == null)
-                {
-                    LogDebug("未找到现有的CardUIManager，尝试创建新实例");
-                    var uiManagerGO = new GameObject("CardUIManager");
-                    uiManagerGO.transform.SetParent(transform);
-                    cardUIManager = uiManagerGO.AddComponent<CardUIManager>();
-                }
-
-                // 等待一帧确保UI组件完全初始化
-                StartCoroutine(DelayedUIInitialization());
-
-                LogDebug("UI系统初始化完成");
-                errorMessage = "";
-                return true;
+                throw new InvalidOperationException("CardUIComponents单例设置失败");
             }
-            catch (Exception e)
+
+            // 创建CardUIManager
+            var uiManagerGO = new GameObject("CardUIManager");
+            uiManagerGO.transform.SetParent(uiSystemsParent);
+            cardUIManager = uiManagerGO.AddComponent<CardUIManager>();
+
+            // 手动设置单例
+            if (!SetSystemInstance(cardUIManager))
             {
-                errorMessage = $"UI系统初始化失败: {e.Message}";
-                return false;
+                throw new InvalidOperationException("CardUIManager单例设置失败");
             }
-        }
 
-        /// <summary>
-        /// 延迟UI初始化完成处理
-        /// </summary>
-        private IEnumerator DelayedUIInitialization()
-        {
-            yield return null; // 等待一帧
+            LogDebug("UI系统创建完成");
 
-            LogDebug("UI系统延迟初始化完成，触发UI就绪事件");
+            // 触发UI系统就绪事件
             OnUISystemReady?.Invoke();
         }
 
         /// <summary>
-        /// 初始化游戏桥接器（必须在效果系统初始化后调用）
+        /// 创建集成系统
         /// </summary>
-        private bool InitializeGameBridge(out string errorMessage)
+        private void CreateIntegrationSystems()
         {
-            try
+            LogDebug("创建集成系统");
+
+            // 创建游戏桥接器
+            var bridgeGO = new GameObject("CardGameBridge");
+            bridgeGO.transform.SetParent(integrationSystemsParent);
+            cardGameBridge = bridgeGO.AddComponent<CardGameBridge>();
+
+            // 手动设置单例
+            if (!SetSystemInstance(cardGameBridge))
             {
-                LogDebug("初始化游戏桥接器");
+                throw new InvalidOperationException("CardGameBridge单例设置失败");
+            }
 
-                cardGameBridge = CardGameBridge.Instance;
-                if (cardGameBridge == null)
+            LogDebug("集成系统创建完成");
+        }
+
+        /// <summary>
+        /// 注入依赖
+        /// </summary>
+        private void InjectDependencies()
+        {
+            LogDebug("注入系统依赖");
+
+            // 为CardGameBridge注入依赖
+            if (cardGameBridge != null)
+            {
+                var bridgeInjector = cardGameBridge.GetComponent<ISystemDependencyInjection>();
+                if (bridgeInjector != null)
                 {
-                    var bridgeGO = new GameObject("CardGameBridge");
-                    bridgeGO.transform.SetParent(transform);
-                    cardGameBridge = bridgeGO.AddComponent<CardGameBridge>();
-                }
-
-                if (cardGameBridge != null)
-                {
-                    // 刷新系统引用，确保桥接器能获取到已初始化的系统
-                    cardGameBridge.RefreshSystemReferences();
-
-                    if (cardGameBridge.IsReady())
-                    {
-                        LogDebug("游戏桥接器初始化成功");
-                        errorMessage = "";
-                        return true;
-                    }
-                    else
-                    {
-                        errorMessage = "游戏桥接器未就绪";
-                        return false;
-                    }
+                    bridgeInjector.InjectDependencies(
+                        cardEffectSystem,
+                        playerCardManager,
+                        cardConfig,
+                        cardNetworkManager
+                    );
                 }
                 else
                 {
-                    errorMessage = "无法创建游戏桥接器实例";
-                    return false;
+                    // 如果CardGameBridge还没有实现依赖注入接口，使用反射临时解决
+                    InjectDependenciesViaReflection();
                 }
             }
-            catch (Exception e)
+
+            // 为CardUIManager注入依赖
+            if (cardUIManager != null)
             {
-                errorMessage = $"游戏桥接器初始化失败: {e.Message}";
-                return false;
+                var uiInjector = cardUIManager.GetComponent<IUISystemDependencyInjection>();
+                if (uiInjector != null)
+                {
+                    uiInjector.InjectDependencies(
+                        cardEffectSystem,
+                        playerCardManager,
+                        cardConfig,
+                        cardNetworkManager,
+                        cardUIComponents
+                    );
+                }
+                else
+                {
+                    // 使用反射注入UI依赖
+                    InjectUIDependenciesViaReflection();
+                }
             }
+
+            LogDebug("依赖注入完成");
+        }
+
+        /// <summary>
+        /// 通过反射注入依赖（临时方案）
+        /// </summary>
+        private void InjectDependenciesViaReflection()
+        {
+            if (cardGameBridge == null) return;
+
+            var bridgeType = cardGameBridge.GetType();
+
+            // 注入效果系统引用
+            var effectSystemField = bridgeType.GetField("effectSystem",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            effectSystemField?.SetValue(cardGameBridge, cardEffectSystem);
+
+            // 注入玩家管理器引用
+            var playerManagerField = bridgeType.GetField("playerCardManager",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            playerManagerField?.SetValue(cardGameBridge, playerCardManager);
+
+            // 注入配置引用
+            var configField = bridgeType.GetField("cardConfig",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            configField?.SetValue(cardGameBridge, cardConfig);
+
+            // 注入网络管理器引用
+            var networkManagerField = bridgeType.GetField("networkManager",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            networkManagerField?.SetValue(cardGameBridge, cardNetworkManager);
+
+            LogDebug("通过反射完成依赖注入");
+        }
+
+        /// <summary>
+        /// 通过反射注入UI依赖（临时方案）
+        /// </summary>
+        private void InjectUIDependenciesViaReflection()
+        {
+            if (cardUIManager == null) return;
+
+            var uiManagerType = cardUIManager.GetType();
+
+            // 注入系统引用
+            var playerManagerField = uiManagerType.GetField("playerCardManager",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            playerManagerField?.SetValue(cardUIManager, playerCardManager);
+
+            var configField = uiManagerType.GetField("cardConfig",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            configField?.SetValue(cardUIManager, cardConfig);
+
+            var componentsField = uiManagerType.GetField("cardUIComponents",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            componentsField?.SetValue(cardUIManager, cardUIComponents);
+
+            var networkManagerField = uiManagerType.GetField("cardNetworkManager",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            networkManagerField?.SetValue(cardUIManager, cardNetworkManager);
+
+            // 设置初始化标记
+            var isInjectedField = uiManagerType.GetField("isDependencyInjected",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            isInjectedField?.SetValue(cardUIManager, true);
+
+            LogDebug("通过反射完成UI依赖注入");
         }
 
         /// <summary>
         /// 建立事件连接
         /// </summary>
-        private bool EstablishEventConnections(out string errorMessage)
+        private void EstablishEventConnections()
         {
-            try
+            LogDebug("建立事件连接");
+
+            // 订阅玩家管理器事件
+            if (playerCardManager != null)
             {
-                LogDebug("建立事件连接");
+                playerCardManager.OnCardUsed += HandlePlayerCardUsed;
+                playerCardManager.OnCardAcquired += HandlePlayerCardAcquired;
+                playerCardManager.OnCardTransferred += HandlePlayerCardTransferred;
+                playerCardManager.OnHandSizeChanged += HandlePlayerHandChanged;
+            }
 
-                // 订阅核心事件
-                if (playerCardManager != null)
-                {
-                    playerCardManager.OnCardUsed += HandlePlayerCardUsed;
-                    playerCardManager.OnCardAcquired += HandlePlayerCardAcquired;
-                    playerCardManager.OnCardTransferred += HandlePlayerCardTransferred;
+            // 订阅网络事件（如果可用）
+            if (cardNetworkManager != null)
+            {
+                CardNetworkManager.OnCardUsed += HandleNetworkCardUsed;
+                CardNetworkManager.OnCardAdded += HandleNetworkCardAdded;
+                CardNetworkManager.OnCardRemoved += HandleNetworkCardRemoved;
+                CardNetworkManager.OnCardTransferred += HandleNetworkCardTransferred;
+            }
 
-                    // 订阅手牌变化事件，转发给UI系统
-                    playerCardManager.OnHandSizeChanged += HandlePlayerHandChanged;
-                }
+            // 初始化UI系统
+            if (cardUIManager != null)
+            {
+                // 调用UI管理器的初始化方法
+                var initMethod = cardUIManager.GetType().GetMethod("InitializeFromSystemManager",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                initMethod?.Invoke(cardUIManager, null);
+            }
 
-                // 订阅网络事件（如果可用）
-                if (cardNetworkManager != null)
-                {
-                    CardNetworkManager.OnCardUsed += HandleNetworkCardUsed;
-                    CardNetworkManager.OnCardAdded += HandleNetworkCardAdded;
-                    CardNetworkManager.OnCardRemoved += HandleNetworkCardRemoved;
-                    CardNetworkManager.OnCardTransferred += HandleNetworkCardTransferred;
-                    CardNetworkManager.OnCardMessage += HandleNetworkCardMessage;
-                }
+            LogDebug("事件连接建立完成");
+        }
 
-                LogDebug("事件连接建立完成");
-                errorMessage = "";
+        /// <summary>
+        /// 手动设置系统单例
+        /// </summary>
+        private bool SetSystemInstance<T>(T instance) where T : MonoBehaviour
+        {
+            var type = typeof(T);
+            var instanceProperty = type.GetProperty("Instance",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+            if (instanceProperty != null && instanceProperty.CanWrite)
+            {
+                instanceProperty.SetValue(null, instance);
+                LogDebug($"{type.Name}单例设置成功");
                 return true;
             }
-            catch (Exception e)
+            else
             {
-                errorMessage = $"事件连接建立失败: {e.Message}";
-                return false;
+                // 如果没有可写的Instance属性，尝试调用设置方法
+                var setInstanceMethod = type.GetMethod("SetInstance",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (setInstanceMethod != null)
+                {
+                    setInstanceMethod.Invoke(null, new object[] { instance });
+                    LogDebug($"{type.Name}单例通过方法设置成功");
+                    return true;
+                }
             }
+
+            LogError($"{type.Name}单例设置失败");
+            return false;
+        }
+
+        /// <summary>
+        /// 完成初始化
+        /// </summary>
+        private void FinishInitialization(bool success)
+        {
+            isInitialized = success;
+
+            if (success)
+            {
+                LogDebug("卡牌系统初始化成功");
+            }
+            else
+            {
+                LogError("卡牌系统初始化失败");
+            }
+
+            OnSystemInitialized?.Invoke(success);
         }
 
         #endregion
 
         #region 事件处理
 
-        /// <summary>
-        /// 处理玩家卡牌使用
-        /// </summary>
         private void HandlePlayerCardUsed(int playerId, int cardId, int targetPlayerId)
         {
             LogDebug($"玩家{playerId}使用卡牌{cardId}, 目标:{targetPlayerId}");
 
-            // 同步到网络
             if (cardNetworkManager != null && cardNetworkManager.CanSendRPC())
             {
                 cardNetworkManager.BroadcastCardUsed((ushort)playerId, cardId, (ushort)targetPlayerId);
@@ -547,14 +553,10 @@ namespace Cards.Core
             RequestUIUpdate(playerId);
         }
 
-        /// <summary>
-        /// 处理玩家卡牌获得
-        /// </summary>
         private void HandlePlayerCardAcquired(int playerId, int cardId, string cardName)
         {
             LogDebug($"玩家{playerId}获得{cardName}");
 
-            // 同步到网络
             if (cardNetworkManager != null && cardNetworkManager.CanSendRPC())
             {
                 cardNetworkManager.BroadcastCardAdded((ushort)playerId, cardId);
@@ -564,27 +566,20 @@ namespace Cards.Core
             RequestUIUpdate(playerId);
         }
 
-        /// <summary>
-        /// 处理卡牌转移
-        /// </summary>
         private void HandlePlayerCardTransferred(int fromPlayerId, int toPlayerId, int cardId)
         {
             LogDebug($"卡牌{cardId}从玩家{fromPlayerId}转移到玩家{toPlayerId}");
 
-            // 同步到网络
             if (cardNetworkManager != null && cardNetworkManager.CanSendRPC())
             {
                 cardNetworkManager.BroadcastCardTransferred((ushort)fromPlayerId, cardId, (ushort)toPlayerId);
             }
 
-            // 通知相关玩家的UI更新
+            // 通知UI更新
             RequestUIUpdate(fromPlayerId);
             RequestUIUpdate(toPlayerId);
         }
 
-        /// <summary>
-        /// 处理玩家手牌变化
-        /// </summary>
         private void HandlePlayerHandChanged(int playerId, int newHandSize)
         {
             LogDebug($"玩家{playerId}手牌数量变化: {newHandSize}");
@@ -600,7 +595,6 @@ namespace Cards.Core
         {
             if (cardUIManager != null)
             {
-                // 延迟一帧执行UI更新，确保数据已完全同步
                 StartCoroutine(DelayedUIUpdate(playerId));
             }
         }
@@ -616,7 +610,6 @@ namespace Cards.Core
             {
                 if (cardUIManager != null)
                 {
-                    // 触发UI更新（这里需要根据CardUIManager的实际接口调整）
                     cardUIManager.RefreshPlayerCardDisplay(playerId);
                 }
             }
@@ -626,69 +619,24 @@ namespace Cards.Core
             }
         }
 
-        /// <summary>
-        /// 处理网络卡牌使用
-        /// </summary>
         private void HandleNetworkCardUsed(ushort playerId, int cardId, ushort targetPlayerId, string cardName)
         {
             LogDebug($"网络同步: 玩家{playerId}使用{cardName}");
         }
 
-        /// <summary>
-        /// 处理网络卡牌添加
-        /// </summary>
         private void HandleNetworkCardAdded(ushort playerId, int cardId)
         {
             LogDebug($"网络同步: 玩家{playerId}获得卡牌{cardId}");
         }
 
-        /// <summary>
-        /// 处理网络卡牌移除
-        /// </summary>
         private void HandleNetworkCardRemoved(ushort playerId, int cardId)
         {
             LogDebug($"网络同步: 玩家{playerId}失去卡牌{cardId}");
         }
 
-        /// <summary>
-        /// 处理网络卡牌转移
-        /// </summary>
         private void HandleNetworkCardTransferred(ushort fromPlayerId, int cardId, ushort toPlayerId)
         {
             LogDebug($"网络同步: 卡牌{cardId}从玩家{fromPlayerId}转移到玩家{toPlayerId}");
-        }
-
-        /// <summary>
-        /// 处理网络卡牌消息
-        /// </summary>
-        private void HandleNetworkCardMessage(string message, ushort fromPlayerId)
-        {
-            LogDebug($"网络消息: {message} (来自玩家{fromPlayerId})");
-        }
-
-        /// <summary>
-        /// 取消订阅所有事件
-        /// </summary>
-        private void UnsubscribeFromEvents()
-        {
-            if (playerCardManager != null)
-            {
-                playerCardManager.OnCardUsed -= HandlePlayerCardUsed;
-                playerCardManager.OnCardAcquired -= HandlePlayerCardAcquired;
-                playerCardManager.OnCardTransferred -= HandlePlayerCardTransferred;
-                playerCardManager.OnHandSizeChanged -= HandlePlayerHandChanged;
-            }
-
-            if (cardNetworkManager != null)
-            {
-                CardNetworkManager.OnCardUsed -= HandleNetworkCardUsed;
-                CardNetworkManager.OnCardAdded -= HandleNetworkCardAdded;
-                CardNetworkManager.OnCardRemoved -= HandleNetworkCardRemoved;
-                CardNetworkManager.OnCardTransferred -= HandleNetworkCardTransferred;
-                CardNetworkManager.OnCardMessage -= HandleNetworkCardMessage;
-            }
-
-            LogDebug("已取消所有事件订阅");
         }
 
         #endregion
@@ -708,18 +656,12 @@ namespace Cards.Core
                 return;
             }
 
-            try
+            foreach (int playerId in playerIds)
             {
-                foreach (int playerId in playerIds)
-                {
-                    OnPlayerJoined(playerId, $"Player{playerId}");
-                }
-                LogDebug("游戏开始处理完成");
+                OnPlayerJoined(playerId, $"Player{playerId}");
             }
-            catch (Exception e)
-            {
-                LogError($"游戏开始处理失败: {e.Message}");
-            }
+
+            LogDebug("游戏开始处理完成");
         }
 
         /// <summary>
@@ -729,22 +671,15 @@ namespace Cards.Core
         {
             LogDebug($"玩家加入: {playerId} ({playerName})");
 
-            try
+            if (playerCardManager != null)
             {
-                if (playerCardManager != null)
-                {
-                    playerCardManager.InitializePlayer(playerId, playerName);
+                playerCardManager.InitializePlayer(playerId, playerName);
 
-                    // 触发玩家数据就绪事件
-                    OnPlayerDataReady?.Invoke(playerId);
+                // 触发玩家数据就绪事件
+                OnPlayerDataReady?.Invoke(playerId);
 
-                    // 请求UI更新
-                    RequestUIUpdate(playerId);
-                }
-            }
-            catch (Exception e)
-            {
-                LogError($"玩家{playerId}加入处理失败: {e.Message}");
+                // 请求UI更新
+                RequestUIUpdate(playerId);
             }
         }
 
@@ -755,27 +690,20 @@ namespace Cards.Core
         {
             LogDebug($"玩家离开: {playerId}");
 
-            try
+            if (playerCardManager != null)
             {
-                if (playerCardManager != null)
-                {
-                    playerCardManager.RemovePlayer(playerId);
-                }
-
-                if (cardGameBridge != null)
-                {
-                    cardGameBridge.ClearPlayerEffectStates(playerId);
-                }
-
-                // 清理UI显示
-                if (cardUIManager != null)
-                {
-                    cardUIManager.ClearPlayerDisplay(playerId);
-                }
+                playerCardManager.RemovePlayer(playerId);
             }
-            catch (Exception e)
+
+            if (cardGameBridge != null)
             {
-                LogError($"玩家{playerId}离开处理失败: {e.Message}");
+                cardGameBridge.ClearPlayerEffectStates(playerId);
+            }
+
+            // 清理UI显示
+            if (cardUIManager != null)
+            {
+                cardUIManager.ClearPlayerDisplay(playerId);
             }
         }
 
@@ -786,34 +714,27 @@ namespace Cards.Core
         {
             LogDebug("游戏结束");
 
-            try
+            if (playerCardManager != null)
             {
-                if (playerCardManager != null)
-                {
-                    playerCardManager.ClearAllPlayers();
-                }
-
-                if (cardGameBridge != null)
-                {
-                    cardGameBridge.ClearAllEffectStates();
-                }
-
-                if (cardUIManager != null)
-                {
-                    cardUIManager.ClearAllDisplays();
-                }
-
-                LogDebug("游戏结束处理完成");
+                playerCardManager.ClearAllPlayers();
             }
-            catch (Exception e)
+
+            if (cardGameBridge != null)
             {
-                LogError($"游戏结束处理失败: {e.Message}");
+                cardGameBridge.ClearAllEffectStates();
             }
+
+            if (cardUIManager != null)
+            {
+                cardUIManager.ClearAllDisplays();
+            }
+
+            LogDebug("游戏结束处理完成");
         }
 
         #endregion
 
-        #region 公共查询接口
+        #region 公共接口（最小化）
 
         /// <summary>
         /// 检查系统是否就绪
@@ -825,109 +746,96 @@ namespace Cards.Core
                    cardEffectSystem != null &&
                    cardEffectSystem.IsSystemReady() &&
                    playerCardManager != null &&
-                   playerCardManager.IsInitialized;
+                   playerCardManager.IsInitialized &&
+                   cardGameBridge != null &&
+                   cardUIComponents != null &&
+                   cardUIManager != null;
         }
 
-        /// <summary>
-        /// 检查网络是否就绪
-        /// </summary>
-        public bool IsNetworkReady()
+        public CardEffectSystem GetEffectSystem()
         {
-            return cardNetworkManager != null && cardNetworkManager.CanSendRPC();
+            return cardEffectSystem;
         }
-
-        /// <summary>
-        /// 检查UI系统是否就绪
-        /// </summary>
-        public bool IsUISystemReady()
+        public PlayerCardManager GetPlayerCardManager()
         {
-            return cardUIManager != null && cardUIComponents != null;
+            return playerCardManager;
         }
-
-        /// <summary>
-        /// 获取系统状态摘要
-        /// </summary>
-        public string GetSystemStatus()
+        public CardGameBridge GetCardGameBridge()
         {
-            var status = "=== 卡牌系统状态 ===\n";
-            status += $"系统就绪: {(IsSystemReady() ? "✓" : "✗")}\n";
-            status += $"网络就绪: {(IsNetworkReady() ? "✓" : "✗")}\n";
-            status += $"UI系统就绪: {(IsUISystemReady() ? "✓" : "✗")}\n";
-            status += $"配置: {(cardConfig != null ? "✓" : "✗")}\n";
-            status += $"效果系统: {(cardEffectSystem?.IsSystemReady() == true ? "✓" : "✗")}\n";
-            status += $"玩家管理: {(playerCardManager?.IsInitialized == true ? "✓" : "✗")}\n";
-            status += $"游戏桥接: {(cardGameBridge?.IsReady() == true ? "✓" : "✗")}\n";
-            status += $"网络管理: {(cardNetworkManager != null ? "✓" : "✗")}\n";
-            status += $"UI管理: {(cardUIManager != null ? "✓" : "✗")}\n";
-            status += $"UI组件: {(cardUIComponents != null ? "✓" : "✗")}\n";
-            return status;
+            return cardGameBridge;
         }
-
-        /// <summary>
-        /// 获取卡牌配置（供外部访问）
-        /// </summary>
+        public CardUIComponents GetCardUIComponents()
+        {
+            return cardUIComponents;
+        }
+        public CardUIManager GetCardUIManager()
+        {
+            return cardUIManager;
+        }
         public CardConfig GetCardConfig()
         {
             return cardConfig;
         }
 
-        /// <summary>
-        /// 获取效果系统实例（供外部访问）
-        /// </summary>
-        public CardEffectSystem GetEffectSystem()
-        {
-            return cardEffectSystem;
-        }
+        #endregion
 
-        /// <summary>
-        /// 获取玩家管理器实例（供外部访问）
-        /// </summary>
-        public PlayerCardManager GetPlayerCardManager()
+        #region 静态访问接口
+        public static PlayerCardManager GetPlayerCardManagerStatic()
         {
-            return playerCardManager;
+            return Instance?.playerCardManager;
         }
-
-        /// <summary>
-        /// 获取游戏桥接器实例（供外部访问）
-        /// </summary>
-        public CardGameBridge GetCardGameBridge()
+        public static CardConfig GetCardConfigStatic()
         {
-            return cardGameBridge;
+            return Instance?.cardConfig;
         }
-
-        /// <summary>
-        /// 获取UI管理器实例（供外部访问）
-        /// </summary>
-        public CardUIManager GetCardUIManager()
+        public static CardUIManager GetCardUIManagerStatic()
         {
-            return cardUIManager;
+            return Instance?.cardUIManager;
         }
-
-        /// <summary>
-        /// 获取UI组件实例（供外部访问）
-        /// </summary>
-        public CardUIComponents GetCardUIComponents()
+        public static CardUIComponents GetCardUIComponentsStatic()
         {
-            return cardUIComponents;
+            return Instance?.cardUIComponents;
+        }
+        public static bool IsSystemReadyStatic()
+        {
+            return Instance?.IsSystemReady() == true;
         }
 
         #endregion
 
+        #region 系统清理
+
         /// <summary>
-        /// 显示系统状态（调试用）
+        /// 清理系统
         /// </summary>
-        [ContextMenu("显示系统状态")]
-        public void ShowSystemStatus()
+        private void CleanupSystems()
         {
-            Debug.Log(GetSystemStatus());
+            LogDebug("清理系统资源");
+
+            // 取消事件订阅
+            if (playerCardManager != null)
+            {
+                playerCardManager.OnCardUsed -= HandlePlayerCardUsed;
+                playerCardManager.OnCardAcquired -= HandlePlayerCardAcquired;
+                playerCardManager.OnCardTransferred -= HandlePlayerCardTransferred;
+                playerCardManager.OnHandSizeChanged -= HandlePlayerHandChanged;
+            }
+
+            if (cardNetworkManager != null)
+            {
+                CardNetworkManager.OnCardUsed -= HandleNetworkCardUsed;
+                CardNetworkManager.OnCardAdded -= HandleNetworkCardAdded;
+                CardNetworkManager.OnCardRemoved -= HandleNetworkCardRemoved;
+                CardNetworkManager.OnCardTransferred -= HandleNetworkCardTransferred;
+            }
+
+            LogDebug("系统清理完成");
         }
 
+        #endregion
 
         #region 工具方法
 
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -936,50 +844,38 @@ namespace Cards.Core
             }
         }
 
-        /// <summary>
-        /// 错误日志
-        /// </summary>
         private void LogError(string message)
         {
             Debug.LogError($"[CardSystemManager] {message}");
         }
 
         #endregion
+    }
 
-        #region 静态访问接口
+    /// <summary>
+    /// 系统依赖注入接口
+    /// </summary>
+    public interface ISystemDependencyInjection
+    {
+        void InjectDependencies(
+            CardEffectSystem effectSystem,
+            PlayerCardManager playerCardManager,
+            CardConfig cardConfig,
+            CardNetworkManager networkManager
+        );
+    }
 
-        /// <summary>
-        /// 静态访问玩家管理器
-        /// </summary>
-        public static PlayerCardManager GetPlayerCardManagerStatic()
-        {
-            return Instance?.playerCardManager;
-        }
-
-        /// <summary>
-        /// 静态访问卡牌配置
-        /// </summary>
-        public static CardConfig GetCardConfigStatic()
-        {
-            return Instance?.cardConfig;
-        }
-
-        /// <summary>
-        /// 静态访问UI管理器
-        /// </summary>
-        public static CardUIManager GetCardUIManagerStatic()
-        {
-            return Instance?.cardUIManager;
-        }
-
-        /// <summary>
-        /// 静态检查系统是否就绪
-        /// </summary>
-        public static bool IsSystemReadyStatic()
-        {
-            return Instance?.IsSystemReady() == true;
-        }
-
-        #endregion
+    /// <summary>
+    /// UI系统依赖注入接口
+    /// </summary>
+    public interface IUISystemDependencyInjection
+    {
+        void InjectDependencies(
+            CardEffectSystem effectSystem,
+            PlayerCardManager playerCardManager,
+            CardConfig cardConfig,
+            CardNetworkManager networkManager,
+            CardUIComponents uiComponents
+        );
     }
 }

@@ -471,13 +471,6 @@ namespace Cards.Core
                 cardIds.Add(card.cardId);
             }
 
-            // 验证系统设置
-            if (!systemSettings.Validate())
-            {
-                Debug.LogError($"{CardConstants.LOG_TAG} 系统设置验证失败");
-                return false;
-            }
-
             // 验证抽卡设置
             if (!drawSettings.Validate())
             {
@@ -486,7 +479,7 @@ namespace Cards.Core
             }
 
             Debug.Log($"{CardConstants.LOG_TAG} 卡牌配置验证成功，共{allCards.Count}张卡牌");
-            Debug.Log(GetCardStatistics());
+            //Debug.Log(GetCardStatistics());
             return true;
         }
 

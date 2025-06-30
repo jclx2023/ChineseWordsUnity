@@ -57,19 +57,18 @@ namespace Cards.Integration
 
         private void Awake()
         {
-            // 单例模式
-            if (Instance == null)
-            {
-                Instance = this;
-                DontDestroyOnLoad(gameObject);
-
-                InitializeStateCaches();
-                LogDebug("CardGameBridge实例已创建");
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            //// 单例模式
+            //if (Instance == null)
+            //{
+            //    Instance = this;
+            //    InitializeStateCaches();
+            //    LogDebug("CardGameBridge实例已创建");
+            //}
+            //else
+            //{
+            //    Destroy(gameObject);
+            //}
+            LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
         }
 
         private void Start()
@@ -778,28 +777,6 @@ namespace Cards.Integration
 
         #region 调试和状态查询
 
-        /// <summary>
-        /// 获取当前效果状态摘要
-        /// </summary>
-        public string GetEffectStatesSummary()
-        {
-            var summary = "=== 卡牌效果状态 ===\n";
-            summary += $"时间加成: {playerTimeBonuses.Count}个\n";
-            summary += $"时间减成: {playerTimePenalties.Count}个\n";
-            summary += $"跳过标记: {playerSkipFlags.Count}个\n";
-            summary += $"题目类型指定: {playerQuestionTypes.Count}个\n";
-            summary += $"答题代理: {playerAnswerDelegates.Count}个\n";
-            summary += $"额外提示: {playerExtraHints.Count}个\n";
-            summary += $"全局伤害倍数: {globalDamageMultiplier}\n";
-            summary += $"初始化状态: {(isInitialized ? "已初始化" : "未初始化")}\n";
-            summary += $"等待核心系统: {(isWaitingForCoreSystem ? "是" : "否")}\n";
-
-            return summary;
-        }
-
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -807,10 +784,6 @@ namespace Cards.Integration
                 Debug.Log($"[CardGameBridge] {message}");
             }
         }
-
-        /// <summary>
-        /// 警告日志
-        /// </summary>
         private void LogWarning(string message)
         {
             if (enableDebugLogs)
@@ -818,10 +791,6 @@ namespace Cards.Integration
                 Debug.LogWarning($"[CardGameBridge] {message}");
             }
         }
-
-        /// <summary>
-        /// 错误日志
-        /// </summary>
         private void LogError(string message)
         {
             Debug.LogError($"[CardGameBridge] {message}");
@@ -850,45 +819,6 @@ namespace Cards.Integration
                    effectSystem != null &&
                    effectSystem.IsSystemReady() &&
                    cardConfig != null;
-        }
-
-        /// <summary>
-        /// 手动触发初始化（调试用）
-        /// </summary>
-        [ContextMenu("手动初始化")]
-        public void ManualInitialize()
-        {
-            LogDebug("[调试] 手动触发初始化");
-            isWaitingForCoreSystem = false;
-            isInitialized = false;
-            Initialize();
-        }
-
-        /// <summary>
-        /// 显示桥接器状态（调试用）
-        /// </summary>
-        [ContextMenu("显示桥接器状态")]
-        public void ShowBridgeStatus()
-        {
-            Debug.Log(GetEffectStatesSummary());
-        }
-
-        /// <summary>
-        /// 测试系统引用（调试用）
-        /// </summary>
-        [ContextMenu("测试系统引用")]
-        public void TestSystemReferences()
-        {
-            LogDebug("=== 系统引用测试 ===");
-            LogDebug($"PlayerCardManager: {(playerCardManager != null ? "✓" : "✗")}");
-            LogDebug($"CardEffectSystem: {(effectSystem != null ? "✓" : "✗")}");
-            LogDebug($"CardConfig: {(cardConfig != null ? "✓" : "✗")}");
-            LogDebug($"HostGameManager: {(hostGameManager != null ? "✓" : "✗")}");
-            LogDebug($"PlayerHPManager: {(hpManager != null ? "✓" : "✗")}");
-            LogDebug($"TimerManager: {(timerManager != null ? "✓" : "✗")}");
-            LogDebug($"NetworkManager: {(networkManager != null ? "✓" : "✗")}");
-            LogDebug($"CardSystemManager: {(CardSystemManager.Instance != null ? "✓" : "✗")}");
-            LogDebug($"桥接器就绪: {(IsReady() ? "✓" : "✗")}");
         }
 
         #endregion

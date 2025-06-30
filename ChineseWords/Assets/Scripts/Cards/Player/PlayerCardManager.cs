@@ -38,30 +38,10 @@ namespace Cards.Player
         private bool isInitialized = false;
 
         #region 事件定义
-
-        /// <summary>
-        /// 卡牌使用事件 - playerId, cardId, targetPlayerId（如果有）
-        /// </summary>
         public System.Action<int, int, int> OnCardUsed;
-
-        /// <summary>
-        /// 卡牌获得事件 - playerId, cardId, cardName
-        /// </summary>
         public System.Action<int, int, string> OnCardAcquired;
-
-        /// <summary>
-        /// 使用机会重置事件 - playerId
-        /// </summary>
         public System.Action<int> OnUsageOpportunityReset;
-
-        /// <summary>
-        /// 卡牌转移事件 - fromPlayerId, toPlayerId, cardId
-        /// </summary>
         public System.Action<int, int, int> OnCardTransferred;
-
-        /// <summary>
-        /// 手牌数量变化事件 - playerId, newHandSize
-        /// </summary>
         public System.Action<int, int> OnHandSizeChanged;
 
         #endregion
@@ -70,20 +50,18 @@ namespace Cards.Player
 
         private void Awake()
         {
-            // 单例模式
-            if (Instance == null)
-            {
-                Instance = this;
-                DontDestroyOnLoad(gameObject);
-
-                playerCardStates = new Dictionary<int, EnhancedPlayerCardState>();
-
-                LogDebug("PlayerCardManager实例已创建");
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            //// 单例模式
+            //if (Instance == null)
+            //{
+            //    Instance = this;
+            //    playerCardStates = new Dictionary<int, EnhancedPlayerCardState>();
+            //    LogDebug("PlayerCardManager实例已创建");
+            //}
+            //else
+            //{
+            //    Destroy(gameObject);
+            //}
+            LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
         }
 
         private void Start()

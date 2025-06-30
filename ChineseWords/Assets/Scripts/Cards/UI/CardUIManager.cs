@@ -5,23 +5,20 @@ using System.Collections.Generic;
 using Cards.Core;
 using Cards.Player;
 using Core.Network;
+using Cards.Effects;
+using Cards.Network;
 
 namespace Cards.UI
 {
     /// <summary>
-    /// 卡牌UI管理器 - 调度中心
-    /// 负责统一管理卡牌UI系统，协调各模块行为，处理输入和状态管理
-    /// 支持事件驱动的初始化和数据同步
+    /// 卡牌UI管理器 - 重构版
+    /// 移除事件驱动初始化，改为被动初始化，由CardSystemManager完全控制
     /// </summary>
-    public class CardUIManager : MonoBehaviour
+    public class CardUIManager : MonoBehaviour, IUISystemDependencyInjection
     {
         [Header("Canvas设置")]
         [SerializeField] private Canvas cardUICanvas; // 独立的卡牌UI Canvas
         [SerializeField] private int canvasSortingOrder = 105; // Canvas层级
-
-        [Header("组件引用（可选，留空则自动查找/创建）")]
-        [SerializeField] private CardUIComponents cardUIComponents; // 组件工厂（可选）
-        [SerializeField] private CardDisplayUI cardDisplayUI; // 展示控制器（可选）
 
         [Header("输入设置")]
         [SerializeField] private KeyCode cardDisplayTriggerKey = KeyCode.E; // 卡牌展示触发键
@@ -41,7 +38,6 @@ namespace Cards.UI
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private bool showReleaseArea = false; // 显示释放区域
 
         // 单例实例
         public static CardUIManager Instance { get; private set; }
@@ -58,9 +54,17 @@ namespace Cards.UI
 
         private UIState currentUIState = UIState.Thumbnail;
         private bool isInitialized = false;
-        private bool isWaitingForSystemReady = true;
+        private bool isDependencyInjected = false;
         private bool isMyTurn = false;
         private bool canUseCards = true;
+
+        // 依赖注入的系统引用
+        private CardEffectSystem cardEffectSystem;
+        private PlayerCardManager playerCardManager;
+        private CardConfig cardConfig;
+        private CardNetworkManager cardNetworkManager;
+        private CardUIComponents cardUIComponents;
+        private CardDisplayUI cardDisplayUI;
 
         // 卡牌数据
         private List<CardDisplayData> currentHandCards = new List<CardDisplayData>();
@@ -68,7 +72,7 @@ namespace Cards.UI
         private CardData pendingCardData = null; // 等待目标选择的卡牌
         private int myPlayerId = -1;
 
-        // 拖拽相关（TODO: 箭头绘制）
+        // 拖拽相关
         private bool isDragging = false;
         private Vector3 dragStartPosition;
 
@@ -86,32 +90,30 @@ namespace Cards.UI
 
         private void Awake()
         {
-            if (Instance == null)
-            {
-                Instance = this;
-                InitializeManager();
-            }
-            else
-            {
-                LogDebug("发现重复的CardUIManager实例，销毁当前实例");
-                Destroy(gameObject);
-            }
+            //if (Instance == null)
+            //{
+            //    Instance = this;
+            //    LogDebug("CardUIManager实例已创建");
+            //}
+            //else
+            //{
+            //    LogDebug("发现重复的CardUIManager实例，销毁当前实例");
+            //    Destroy(gameObject);
+            //}
+            LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
         }
 
         private void Start()
         {
-            // 订阅系统事件并等待初始化
-            SubscribeToSystemEvents();
-        }
+            // 等待依赖注入完成
+            if (!isDependencyInjected)
+            {
+                LogDebug("等待依赖注入完成");
+                return;
+            }
 
-        private void OnEnable()
-        {
-            SubscribeToEvents();
-        }
-
-        private void OnDisable()
-        {
-            UnsubscribeFromEvents();
+            // 如果依赖已注入，开始初始化
+            StartCoroutine(DelayedInitialization());
         }
 
         private void Update()
@@ -122,79 +124,63 @@ namespace Cards.UI
             HandleDragging();
         }
 
+        private void OnDestroy()
+        {
+            CleanupUI();
+
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+        }
+
         #endregion
 
-        #region 事件驱动初始化
+        #region 依赖注入接口实现
 
         /// <summary>
-        /// 订阅系统事件
+        /// 实现IUISystemDependencyInjection接口
         /// </summary>
-        private void SubscribeToSystemEvents()
+        public void InjectDependencies(
+            CardEffectSystem effectSystem,
+            PlayerCardManager playerCardManager,
+            CardConfig cardConfig,
+            CardNetworkManager networkManager,
+            CardUIComponents uiComponents)
         {
-            LogDebug("订阅CardSystemManager事件");
+            LogDebug("开始依赖注入");
 
-            // 订阅UI系统就绪事件
-            CardSystemManager.OnUISystemReady += OnUISystemReady;
+            this.cardEffectSystem = effectSystem;
+            this.playerCardManager = playerCardManager;
+            this.cardConfig = cardConfig;
+            this.cardNetworkManager = networkManager;
+            this.cardUIComponents = uiComponents;
 
-            // 订阅系统初始化完成事件
-            CardSystemManager.OnSystemInitialized += OnSystemInitialized;
+            isDependencyInjected = true;
 
-            // 订阅玩家数据就绪事件
-            CardSystemManager.OnPlayerDataReady += OnPlayerDataReady;
+            LogDebug("依赖注入完成");
+
+            // 如果Start已经被调用，立即开始初始化
+            if (gameObject.activeInHierarchy)
+            {
+                StartCoroutine(DelayedInitialization());
+            }
         }
 
         /// <summary>
-        /// UI系统就绪事件处理
+        /// 由CardSystemManager调用的初始化方法
         /// </summary>
-        private void OnUISystemReady()
+        public void InitializeFromSystemManager()
         {
-            LogDebug("收到UI系统就绪事件，开始初始化UI管理器");
-            isWaitingForSystemReady = false;
+            LogDebug("收到来自CardSystemManager的初始化调用");
+
+            if (!isDependencyInjected)
+            {
+                LogError("依赖未注入，无法初始化");
+                return;
+            }
 
             StartCoroutine(DelayedInitialization());
-        }
-
-        /// <summary>
-        /// 系统初始化完成事件处理
-        /// </summary>
-        private void OnSystemInitialized(bool success)
-        {
-            if (success)
-            {
-                LogDebug("CardSystemManager初始化成功");
-
-                // 如果还在等待系统就绪，尝试初始化
-                if (isWaitingForSystemReady)
-                {
-                    LogDebug("尝试立即初始化（可能错过了UI就绪事件）");
-                    isWaitingForSystemReady = false;
-                    StartCoroutine(DelayedInitialization());
-                }
-            }
-            else
-            {
-                LogError("CardSystemManager初始化失败，UI管理器无法正常工作");
-            }
-        }
-
-        /// <summary>
-        /// 玩家数据就绪事件处理
-        /// </summary>
-        private void OnPlayerDataReady(int playerId)
-        {
-            LogDebug($"玩家{playerId}数据就绪，刷新手牌显示");
-
-            // 确定我的玩家ID
-            if (myPlayerId == -1 && NetworkManager.Instance != null)
-            {
-                myPlayerId = NetworkManager.Instance.ClientId;
-            }
-
-            // 如果是我的数据，刷新显示
-            if (playerId == myPlayerId)
-            {
-                RefreshPlayerCardDisplay(playerId);
-            }
         }
 
         #endregion
@@ -202,54 +188,74 @@ namespace Cards.UI
         #region 初始化
 
         /// <summary>
-        /// 初始化管理器
-        /// </summary>
-        private void InitializeManager()
-        {
-            // 设置Canvas
-            SetupCanvas();
-
-            LogDebug("CardUIManager基础初始化完成，等待系统就绪");
-        }
-
-        /// <summary>
         /// 延迟初始化
         /// </summary>
         private IEnumerator DelayedInitialization()
         {
+            if (isInitialized)
+            {
+                LogDebug("已经初始化，跳过重复初始化");
+                yield break;
+            }
+
+            LogDebug("开始延迟初始化");
+
             // 等待一帧确保所有系统完全就绪
             yield return null;
 
-            // 查找或创建组件
-            FindOrCreateComponents();
-
-            // 验证系统依赖
-            if (!ValidateSystemDependencies())
+            // 验证依赖
+            if (!ValidateDependencies())
             {
-                LogError("系统依赖验证失败，将在3秒后重试");
-                yield return new WaitForSeconds(3f);
-
-                // 重试验证
-                if (!ValidateSystemDependencies())
-                {
-                    LogError("系统依赖验证仍然失败，CardUIManager无法正常工作");
-                    yield break;
-                }
+                LogError("依赖验证失败，无法初始化UI");
+                yield break;
             }
+
+            // 设置Canvas
+            SetupCanvas();
+
+            // 创建或查找CardDisplayUI
+            SetupCardDisplayUI();
 
             // 获取我的玩家ID
-            if (NetworkManager.Instance != null)
-            {
-                myPlayerId = NetworkManager.Instance.ClientId;
-                LogDebug($"确定我的玩家ID: {myPlayerId}");
-            }
+            GetMyPlayerId();
+
+            // 订阅事件
+            SubscribeToEvents();
 
             // 初始化完成
             isInitialized = true;
-            LogDebug("CardUIManager完全初始化完成");
+            LogDebug("CardUIManager初始化完成");
 
-            // 直接显示缩略图（不再需要按E键）
+            // 直接显示缩略图
             RefreshAndShowThumbnail();
+        }
+
+        /// <summary>
+        /// 验证依赖
+        /// </summary>
+        private bool ValidateDependencies()
+        {
+            bool isValid = true;
+
+            if (cardConfig == null)
+            {
+                LogError("CardConfig未注入");
+                isValid = false;
+            }
+
+            if (playerCardManager == null)
+            {
+                LogError("PlayerCardManager未注入");
+                isValid = false;
+            }
+
+            if (cardUIComponents == null)
+            {
+                LogError("CardUIComponents未注入");
+                isValid = false;
+            }
+
+            return isValid;
         }
 
         /// <summary>
@@ -281,98 +287,44 @@ namespace Cards.UI
             }
             else
             {
-                // 设置现有Canvas
                 cardUICanvas.sortingOrder = canvasSortingOrder;
             }
         }
 
         /// <summary>
-        /// 查找或创建组件
+        /// 设置CardDisplayUI
         /// </summary>
-        private void FindOrCreateComponents()
+        private void SetupCardDisplayUI()
         {
-            // 优先从CardSystemManager获取组件
-            var cardSystemManager = CardSystemManager.Instance;
-            if (cardSystemManager != null)
-            {
-                cardUIComponents = cardSystemManager.GetCardUIComponents();
-                LogDebug("从CardSystemManager获取CardUIComponents");
-            }
-
-            // 如果没有获取到，查找或创建
-            if (cardUIComponents == null)
-            {
-                cardUIComponents = CardUIComponents.Instance;
-                if (cardUIComponents == null)
-                {
-                    cardUIComponents = FindObjectOfType<CardUIComponents>();
-                    if (cardUIComponents == null)
-                    {
-                        GameObject componentsObject = new GameObject("CardUIComponents");
-                        componentsObject.transform.SetParent(transform, false);
-                        cardUIComponents = componentsObject.AddComponent<CardUIComponents>();
-                        LogDebug("创建了新的CardUIComponents实例");
-                    }
-                    else
-                    {
-                        LogDebug("找到了场景中的CardUIComponents实例");
-                    }
-                }
-                else
-                {
-                    LogDebug("使用全局CardUIComponents单例");
-                }
-            }
-
-            // 查找或创建CardDisplayUI
+            cardDisplayUI = GetComponentInChildren<CardDisplayUI>();
             if (cardDisplayUI == null)
             {
-                cardDisplayUI = GetComponentInChildren<CardDisplayUI>();
-                if (cardDisplayUI == null)
-                {
-                    GameObject displayObject = new GameObject("CardDisplayUI");
-                    displayObject.transform.SetParent(cardUICanvas.transform, false);
-                    cardDisplayUI = displayObject.AddComponent<CardDisplayUI>();
-                    LogDebug("创建了新的CardDisplayUI实例");
-                }
-                else
-                {
-                    LogDebug("找到了子对象中的CardDisplayUI实例");
-                }
+                GameObject displayObject = new GameObject("CardDisplayUI");
+                displayObject.transform.SetParent(cardUICanvas.transform, false);
+                cardDisplayUI = displayObject.AddComponent<CardDisplayUI>();
+                LogDebug("创建了新的CardDisplayUI实例");
+            }
+            else
+            {
+                LogDebug("找到了子对象中的CardDisplayUI实例");
             }
         }
 
         /// <summary>
-        /// 验证系统依赖
+        /// 获取我的玩家ID
         /// </summary>
-        private bool ValidateSystemDependencies()
+        private void GetMyPlayerId()
         {
-            bool isValid = true;
-
-            if (cardUIComponents == null)
+            if (NetworkManager.Instance != null)
             {
-                LogError("CardUIComponents未找到");
-                isValid = false;
+                myPlayerId = NetworkManager.Instance.ClientId;
+                LogDebug($"确定我的玩家ID: {myPlayerId}");
             }
-
-            if (cardDisplayUI == null)
+            else
             {
-                LogError("CardDisplayUI未找到");
-                isValid = false;
+                LogWarning("NetworkManager不可用，无法确定玩家ID");
+                myPlayerId = 1; // 默认值
             }
-
-            if (CardSystemManager.Instance == null)
-            {
-                LogError("CardSystemManager未找到");
-                isValid = false;
-            }
-            else if (!CardSystemManager.Instance.IsSystemReady())
-            {
-                LogError("CardSystemManager未就绪");
-                isValid = false;
-            }
-
-            return isValid;
         }
 
         #endregion
@@ -385,7 +337,10 @@ namespace Cards.UI
         private void SubscribeToEvents()
         {
             // 订阅回合变化事件
-            NetworkManager.OnPlayerTurnChanged += OnPlayerTurnChanged;
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.OnPlayerTurnChanged += OnPlayerTurnChanged;
+            }
 
             // 订阅卡牌显示UI事件
             if (cardDisplayUI != null)
@@ -393,15 +348,6 @@ namespace Cards.UI
                 cardDisplayUI.OnCardSelected += OnCardSelected;
                 cardDisplayUI.OnCardHoverEnter += OnCardHoverEnter;
                 cardDisplayUI.OnCardHoverExit += OnCardHoverExit;
-            }
-
-            // 订阅卡牌系统事件
-            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
-            if (playerCardManager != null)
-            {
-                playerCardManager.OnHandSizeChanged += OnHandSizeChanged;
-                playerCardManager.OnCardAcquired += OnCardAcquired;
-                playerCardManager.OnCardUsed += OnCardUsed;
             }
 
             LogDebug("事件订阅完成");
@@ -412,11 +358,6 @@ namespace Cards.UI
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            // 取消系统事件订阅
-            CardSystemManager.OnUISystemReady -= OnUISystemReady;
-            CardSystemManager.OnSystemInitialized -= OnSystemInitialized;
-            CardSystemManager.OnPlayerDataReady -= OnPlayerDataReady;
-
             // 取消订阅回合变化事件
             if (NetworkManager.Instance != null)
             {
@@ -431,15 +372,6 @@ namespace Cards.UI
                 cardDisplayUI.OnCardHoverExit -= OnCardHoverExit;
             }
 
-            // 取消订阅卡牌系统事件
-            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
-            if (playerCardManager != null)
-            {
-                playerCardManager.OnHandSizeChanged -= OnHandSizeChanged;
-                playerCardManager.OnCardAcquired -= OnCardAcquired;
-                playerCardManager.OnCardUsed -= OnCardUsed;
-            }
-
             LogDebug("取消事件订阅");
         }
 
@@ -452,7 +384,6 @@ namespace Cards.UI
         /// </summary>
         private void OnPlayerTurnChanged(ushort newTurnPlayerId)
         {
-            // 检查是否是我的回合
             bool wasMyTurn = isMyTurn;
             isMyTurn = (myPlayerId == newTurnPlayerId);
 
@@ -470,44 +401,7 @@ namespace Cards.UI
                 }
             }
 
-            // 更新UI状态
             UpdateUIAvailability();
-        }
-
-        /// <summary>
-        /// 处理手牌数量变化
-        /// </summary>
-        private void OnHandSizeChanged(int playerId, int newHandSize)
-        {
-            if (playerId == myPlayerId)
-            {
-                LogDebug($"我的手牌数量变化: {newHandSize}");
-                RefreshPlayerCardDisplay(playerId);
-            }
-        }
-
-        /// <summary>
-        /// 处理卡牌获得事件
-        /// </summary>
-        private void OnCardAcquired(int playerId, int cardId, string cardName)
-        {
-            if (playerId == myPlayerId)
-            {
-                LogDebug($"我获得了卡牌: {cardName}");
-                RefreshPlayerCardDisplay(playerId);
-            }
-        }
-
-        /// <summary>
-        /// 处理卡牌使用事件
-        /// </summary>
-        private void OnCardUsed(int playerId, int cardId, int targetPlayerId)
-        {
-            if (playerId == myPlayerId)
-            {
-                LogDebug($"我使用了卡牌: {cardId}");
-                RefreshPlayerCardDisplay(playerId);
-            }
         }
 
         /// <summary>
@@ -550,7 +444,6 @@ namespace Cards.UI
         /// </summary>
         private void OnCardHoverEnter(GameObject cardUI)
         {
-            // 实现悬停提示
             ShowCardTooltip(cardUI);
         }
 
@@ -559,7 +452,6 @@ namespace Cards.UI
         /// </summary>
         private void OnCardHoverExit(GameObject cardUI)
         {
-            // 隐藏悬停提示
             HideCardTooltip();
         }
 
@@ -672,7 +564,6 @@ namespace Cards.UI
         /// </summary>
         private bool NeedsTargetSelection(CardData cardData)
         {
-            // 根据卡牌的目标类型判断
             return cardData.targetType == TargetType.SinglePlayer ||
                    cardData.targetType == TargetType.AllPlayers;
         }
@@ -688,8 +579,6 @@ namespace Cards.UI
             SetUIState(UIState.TargetSelection);
 
             LogDebug($"开始目标选择 - 卡牌: {cardData.cardName}");
-
-            // 显示目标选择提示
             ShowTargetSelectionUI(cardData);
         }
 
@@ -711,7 +600,6 @@ namespace Cards.UI
 
             message += "\nESC-取消";
 
-            // TODO: 显示实际的UI面板，这里先用Debug
             LogDebug(message);
         }
 
@@ -759,17 +647,6 @@ namespace Cards.UI
         {
             pendingCardData = null;
             draggedCard = null;
-
-            // 隐藏目标选择UI
-            HideTargetSelectionUI();
-        }
-
-        /// <summary>
-        /// 隐藏目标选择UI
-        /// </summary>
-        private void HideTargetSelectionUI()
-        {
-            // TODO: 隐藏实际的UI面板
         }
 
         /// <summary>
@@ -777,7 +654,6 @@ namespace Cards.UI
         /// </summary>
         private bool ValidateTarget(CardData cardData, int targetPlayerId)
         {
-            // 基础验证
             if (cardData.targetType == TargetType.Self && targetPlayerId != myPlayerId)
             {
                 return false;
@@ -785,7 +661,6 @@ namespace Cards.UI
 
             if (cardData.targetType == TargetType.SinglePlayer)
             {
-                // 验证目标玩家是否存在且存活
                 return IsValidPlayerTarget(targetPlayerId);
             }
 
@@ -802,7 +677,6 @@ namespace Cards.UI
         /// </summary>
         private bool IsValidPlayerTarget(int playerId)
         {
-            // 简化实现，实际应该检查玩家是否存在且存活
             return playerId >= 1 && playerId <= 4;
         }
 
@@ -821,10 +695,7 @@ namespace Cards.UI
             isDragging = true;
             dragStartPosition = cardUI.transform.position;
 
-            // 切换到拖拽状态
             SetUIState(UIState.Dragging);
-
-            // TODO: 创建拖拽箭头
 
             LogDebug($"开始拖拽卡牌: {cardUI.name}");
         }
@@ -842,18 +713,6 @@ namespace Cards.UI
                 EndDragging();
                 return;
             }
-
-            // TODO: 更新拖拽箭头位置
-            UpdateDragArrow();
-        }
-
-        /// <summary>
-        /// 更新拖拽箭头 (TODO)
-        /// </summary>
-        private void UpdateDragArrow()
-        {
-            // TODO: 实现箭头绘制逻辑
-            // 箭头从卡牌位置以曲线形式指向鼠标位置
         }
 
         /// <summary>
@@ -892,8 +751,6 @@ namespace Cards.UI
         {
             isDragging = false;
             draggedCard = null;
-
-            // TODO: 销毁拖拽箭头
 
             // 返回到扇形展示状态
             SetUIState(UIState.FanDisplay);
@@ -945,7 +802,6 @@ namespace Cards.UI
             }
 
             // 通过PlayerCardManager使用卡牌
-            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
             if (playerCardManager != null)
             {
                 bool success = playerCardManager.UseCard(myPlayerId, cardId, targetPlayerId);
@@ -975,26 +831,11 @@ namespace Cards.UI
         /// </summary>
         private bool ValidateCardUsage(int cardId)
         {
-            // 使用CardSystemManager的验证逻辑
-            var cardSystemManager = CardSystemManager.Instance;
-            if (cardSystemManager?.GetCardConfig() == null)
-            {
-                LogError("CardSystemManager或配置不可用");
-                return false;
-            }
-
             // 查找卡牌数据
             var cardData = GetCardDataById(cardId);
             if (cardData == null)
             {
                 LogError($"未找到卡牌数据: {cardId}");
-                return false;
-            }
-
-            // 检查游戏状态
-            if (!Cards.Core.CardUtilities.Validator.ValidateGameState(true))
-            {
-                LogDebug("游戏状态验证失败");
                 return false;
             }
 
@@ -1006,7 +847,6 @@ namespace Cards.UI
             }
 
             // 检查玩家手牌中是否有这张卡
-            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
             if (playerCardManager != null)
             {
                 var playerHand = playerCardManager.GetPlayerHand(myPlayerId);
@@ -1036,8 +876,6 @@ namespace Cards.UI
             if (cardData == null) return;
 
             string tooltip = $"{cardData.cardName}\n{cardData.description}";
-
-            // TODO: 显示实际的提示UI，这里先用Debug
             LogDebug($"卡牌提示: {tooltip}");
         }
 
@@ -1054,20 +892,26 @@ namespace Cards.UI
         #region 公共接口
 
         /// <summary>
-        /// 显示卡牌UI（从外部调用）
+        /// 显示扇形展示
         /// </summary>
-        public void ShowCardUI()
+        public void ShowFanDisplay()
         {
-            LogDebug("显示卡牌UI");
+            if (currentUIState != UIState.Thumbnail)
+            {
+                LogWarning("当前状态不是Thumbnail，无法显示扇形展示");
+                return;
+            }
+
+            LogDebug("显示扇形展示");
 
             // 刷新手牌数据
             RefreshHandCards();
 
-            // 显示缩略图
-            ShowThumbnail();
-
-            // 触发事件
-            OnCardUIOpened?.Invoke();
+            // 显示扇形展示
+            if (cardDisplayUI != null && cardDisplayUI.ShowFanDisplayWithCards(currentHandCards))
+            {
+                SetUIState(UIState.FanDisplay);
+            }
         }
 
         /// <summary>
@@ -1094,35 +938,12 @@ namespace Cards.UI
                 cardDisplayUI.HideCardDisplay();
             }
 
-            // 设置回缩略图状态而不是Hidden
+            // 设置回缩略图状态
             SetUIState(UIState.Thumbnail);
             RefreshAndShowThumbnail();
 
             // 触发事件
             OnCardUIClosed?.Invoke();
-        }
-
-        /// <summary>
-        /// 显示扇形展示
-        /// </summary>
-        public void ShowFanDisplay()
-        {
-            if (currentUIState != UIState.Thumbnail)
-            {
-                LogWarning("当前状态不是Thumbnail，无法显示扇形展示");
-                return;
-            }
-
-            LogDebug("显示扇形展示");
-
-            // 刷新手牌数据
-            RefreshHandCards();
-
-            // 显示扇形展示
-            if (cardDisplayUI != null && cardDisplayUI.ShowFanDisplayWithCards(currentHandCards))
-            {
-                SetUIState(UIState.FanDisplay);
-            }
         }
 
         /// <summary>
@@ -1185,7 +1006,6 @@ namespace Cards.UI
         {
             LogDebug("强制禁用卡牌UI");
 
-            // 如果当前有展示，先隐藏
             if (currentUIState == UIState.FanDisplay)
             {
                 if (cardDisplayUI != null)
@@ -1223,14 +1043,12 @@ namespace Cards.UI
         {
             currentHandCards.Clear();
 
-            var playerCardManager = CardSystemManager.GetPlayerCardManagerStatic();
             if (playerCardManager != null && myPlayerId != -1)
             {
                 try
                 {
                     // 获取真实的手牌数据
                     var playerHand = playerCardManager.GetPlayerHand(myPlayerId);
-                    var cardConfig = CardSystemManager.GetCardConfigStatic();
 
                     if (cardConfig != null)
                     {
@@ -1278,7 +1096,6 @@ namespace Cards.UI
         /// </summary>
         private CardData GetCardDataById(int cardId)
         {
-            var cardConfig = CardSystemManager.GetCardConfigStatic();
             return cardConfig?.GetCardById(cardId);
         }
 
@@ -1320,14 +1137,45 @@ namespace Cards.UI
         /// </summary>
         private void UpdateUIAvailability()
         {
-            canUseCards = !isMyTurn && isInitialized; // 非回合时且已初始化才可以使用卡牌
+            canUseCards = !isMyTurn && isInitialized;
 
             LogDebug($"UI可用性更新 - 我的回合: {isMyTurn}, 可用卡牌: {canUseCards}, 已初始化: {isInitialized}");
         }
 
         #endregion
 
-        #region 调试工具
+        #region 资源清理
+
+        /// <summary>
+        /// 清理UI资源
+        /// </summary>
+        private void CleanupUI()
+        {
+            LogDebug("清理UI资源");
+
+            // 取消事件订阅
+            UnsubscribeFromEvents();
+
+            // 清理各种状态
+            if (isDragging)
+            {
+                CleanupDragging();
+            }
+
+            if (currentUIState == UIState.TargetSelection)
+            {
+                ClearTargetSelection();
+            }
+
+            // 清理数据
+            currentHandCards.Clear();
+
+            LogDebug("UI资源清理完成");
+        }
+
+        #endregion
+
+        #region 工具方法
 
         private void LogDebug(string message)
         {
@@ -1348,35 +1196,6 @@ namespace Cards.UI
         private void LogError(string message)
         {
             Debug.LogError($"[CardUIManager] {message}");
-        }
-
-        #endregion
-
-        #region 清理资源
-
-        private void OnDestroy()
-        {
-            // 取消事件订阅
-            UnsubscribeFromEvents();
-
-            // 清理各种状态
-            if (isDragging)
-            {
-                CleanupDragging();
-            }
-
-            if (currentUIState == UIState.TargetSelection)
-            {
-                ClearTargetSelection();
-            }
-
-            // 清理实例引用
-            if (Instance == this)
-            {
-                Instance = null;
-            }
-
-            LogDebug("CardUIManager已销毁，资源已清理");
         }
 
         #endregion

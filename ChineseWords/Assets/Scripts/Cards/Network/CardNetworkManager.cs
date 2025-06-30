@@ -53,12 +53,6 @@ namespace Cards.Network
 
         private void Start()
         {
-            // 验证场景
-            if (!ValidateScene())
-            {
-                return;
-            }
-
             // 订阅卡牌系统事件
             SubscribeToCardEvents();
 
@@ -82,23 +76,6 @@ namespace Cards.Network
         #endregion
 
         #region 初始化和验证
-
-        /// <summary>
-        /// 验证当前场景是否适合CardNetworkManager
-        /// </summary>
-        private bool ValidateScene()
-        {
-            string sceneName = SceneManager.GetActiveScene().name;
-            if (!sceneName.Contains("NetworkGame") && !sceneName.Contains("Game"))
-            {
-                Debug.LogWarning($"[CardNetworkManager] 当前场景 {sceneName} 不适合使用卡牌网络功能");
-                Destroy(gameObject);
-                return false;
-            }
-
-            LogDebug($"场景验证通过: {sceneName}");
-            return true;
-        }
 
         /// <summary>
         /// 订阅卡牌系统事件

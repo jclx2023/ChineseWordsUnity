@@ -62,25 +62,7 @@ namespace Cards.UI
         /// </summary>
         private void LoadCardUIPrefab()
         {
-            if (cardUIPrefab == null)
-            {
-                LogDebug($"开始从Resources加载预制体: {CARD_UI_PREFAB_PATH}");
-
-                cardUIPrefab = Resources.Load<GameObject>(CARD_UI_PREFAB_PATH);
-
-                if (cardUIPrefab != null)
-                {
-                    LogDebug($"预制体加载成功: {cardUIPrefab.name}");
-                }
-                else
-                {
-                    LogError($"预制体加载失败，请确认路径是否正确: Resources/{CARD_UI_PREFAB_PATH}.prefab");
-                }
-            }
-            else
-            {
-                LogDebug("预制体已设置，跳过动态加载");
-            }
+            cardUIPrefab = Resources.Load<GameObject>(CARD_UI_PREFAB_PATH);
         }
 
 
