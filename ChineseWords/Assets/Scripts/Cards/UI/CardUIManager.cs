@@ -90,16 +90,6 @@ namespace Cards.UI
 
         private void Awake()
         {
-            //if (Instance == null)
-            //{
-            //    Instance = this;
-            //    LogDebug("CardUIManager实例已创建");
-            //}
-            //else
-            //{
-            //    LogDebug("发现重复的CardUIManager实例，销毁当前实例");
-            //    Destroy(gameObject);
-            //}
             LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
         }
 

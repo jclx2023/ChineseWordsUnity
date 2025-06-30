@@ -33,19 +33,8 @@ namespace Cards.UI
 
         private void Awake()
         {
-            if (Instance == null)
-            {
-                Instance = this;
-                LogDebug("CardUIComponents实例已创建");
-
-                // 动态加载预制体
-                LoadCardUIPrefab();
-            }
-            else
-            {
-                LogDebug("发现重复的CardUIComponents实例，销毁当前实例");
-                Destroy(gameObject);
-            }
+            LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
+            LoadCardUIPrefab();
         }
 
         private void Start()

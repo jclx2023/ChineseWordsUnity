@@ -5,6 +5,7 @@ using Core;
 using Core.Network;
 using Cards.Core;
 using Cards.Effects;
+using System;
 
 namespace Cards.Player
 {
@@ -50,18 +51,8 @@ namespace Cards.Player
 
         private void Awake()
         {
-            //// 单例模式
-            //if (Instance == null)
-            //{
-            //    Instance = this;
-            //    playerCardStates = new Dictionary<int, EnhancedPlayerCardState>();
-            //    LogDebug("PlayerCardManager实例已创建");
-            //}
-            //else
-            //{
-            //    Destroy(gameObject);
-            //}
             LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
+            playerCardStates = new Dictionary<int, EnhancedPlayerCardState>();
         }
 
         private void Start()
@@ -95,14 +86,33 @@ namespace Cards.Player
 
             try
             {
-                // 获取卡牌配置
                 if (cardConfig == null)
                 {
-                    cardConfig = Resources.Load<CardConfig>("CardConfig");
+                    LogDebug("尝试从Resources加载CardConfig...");
+
+                    // 尝试加载
+                    cardConfig = Resources.Load<CardConfig>("QuestionConfigs/CardConfig");
+
                     if (cardConfig == null)
                     {
-                        Debug.LogError("[PlayerCardManager] 无法加载CardConfig资源");
-                        return;
+                        // 调试：列出Resources文件夹中的所有资源
+                        var allResources = Resources.LoadAll("QuestionConfigs");
+                        LogDebug($"QuestionConfigs文件夹中找到{allResources.Length}个资源:");
+
+                        foreach (var resource in allResources)
+                        {
+                            LogDebug($"- {resource.name} ({resource.GetType().Name})");
+                        }
+
+                        // 尝试直接加载所有CardConfig类型的资源
+                        var allCardConfigs = Resources.LoadAll<CardConfig>("QuestionConfigs");
+                        LogDebug($"找到{allCardConfigs.Length}个CardConfig类型的资源");
+
+                        throw new InvalidOperationException("无法加载CardConfig资源");
+                    }
+                    else
+                    {
+                        LogDebug("CardConfig加载成功！");
                     }
                 }
 

@@ -29,17 +29,8 @@ namespace Cards.Effects
 
         private void Awake()
         {
-            //// 单例模式
-            //if (Instance == null)
-            //{
-            //    Instance = this;
-            //    InitializeSystem();
-            //}
-            //else
-            //{
-            //    Destroy(gameObject);
-            //}
             LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
+            InitializeSystem();
         }
 
         private void OnDestroy()

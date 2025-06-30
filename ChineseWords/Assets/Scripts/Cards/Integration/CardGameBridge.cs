@@ -57,18 +57,8 @@ namespace Cards.Integration
 
         private void Awake()
         {
-            //// 单例模式
-            //if (Instance == null)
-            //{
-            //    Instance = this;
-            //    InitializeStateCaches();
-            //    LogDebug("CardGameBridge实例已创建");
-            //}
-            //else
-            //{
-            //    Destroy(gameObject);
-            //}
             LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
+            InitializeStateCaches();
         }
 
         private void Start()
@@ -226,7 +216,7 @@ namespace Cards.Integration
                 // 回退到直接获取
                 playerCardManager = PlayerCardManager.Instance;
                 effectSystem = CardEffectSystem.Instance;
-                cardConfig = Resources.Load<CardConfig>("CardConfig");
+                cardConfig = Resources.Load<CardConfig>("QuestionConfigs/CardConfig");
             }
 
             // 验证核心引用

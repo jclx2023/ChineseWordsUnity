@@ -153,7 +153,7 @@ namespace Cards.Core
 
             if (cardConfig == null)
             {
-                cardConfig = Resources.Load<CardConfig>("CardConfig");
+                cardConfig = Resources.Load<CardConfig>("QuestionConfigs/CardConfig");
                 if (cardConfig == null)
                 {
                     throw new InvalidOperationException("无法加载CardConfig资源");
