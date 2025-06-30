@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using Core.Network;
 using Cards.Core;
 using Cards.Player;
@@ -9,9 +11,9 @@ using Cards.Network;
 namespace Cards.Network
 {
     /// <summary>
-    /// 卡牌网络管理器 - 简化版
-    /// 专门处理卡牌相关的网络同步，只在 NetworkGameScene 中存在
-    /// 通过 NetworkManager 进行 RPC 通信
+    /// 卡牌网络管理器 - 轻量化修复版
+    /// 专门处理卡牌相关的网络同步，配合CardSystemManager管理
+    /// 移除循环依赖，采用被动初始化模式
     /// </summary>
     public class CardNetworkManager : MonoBehaviour
     {
@@ -19,6 +21,9 @@ namespace Cards.Network
         [SerializeField] private bool enableDebugLogs = true;
 
         public static CardNetworkManager Instance { get; private set; }
+
+        // 初始化状态
+        private bool isInitialized = false;
 
         #region 卡牌网络事件
 
@@ -41,30 +46,25 @@ namespace Cards.Network
 
         private void Awake()
         {
+            // 单例设置 - 支持场景预置和程序创建两种方式
             if (Instance == null)
             {
                 Instance = this;
+                LogDebug("CardNetworkManager实例已创建");
             }
-            else
+            else if (Instance != this)
             {
+                LogDebug("发现重复的CardNetworkManager实例，销毁当前实例");
                 Destroy(gameObject);
+                return;
             }
-        }
-
-        private void Start()
-        {
-            // 订阅卡牌系统事件
-            SubscribeToCardEvents();
-
-            LogDebug("CardNetworkManager初始化完成");
         }
 
         private void OnDestroy()
         {
-            // 取消订阅
-            UnsubscribeFromCardEvents();
+            // 清理单例和事件订阅
+            UnsubscribeFromNetworkEvents();
 
-            // 清理单例
             if (Instance == this)
             {
                 Instance = null;
@@ -75,56 +75,203 @@ namespace Cards.Network
 
         #endregion
 
-        #region 初始化和验证
+        #region 初始化接口 - 供CardSystemManager调用
 
         /// <summary>
-        /// 订阅卡牌系统事件
+        /// 初始化网络管理器
+        /// 由CardSystemManager在适当时机调用
         /// </summary>
-        private void SubscribeToCardEvents()
+        public void Initialize()
         {
+            if (isInitialized)
+            {
+                LogDebug("CardNetworkManager已经初始化，跳过重复初始化");
+                return;
+            }
+
+            LogDebug("开始初始化CardNetworkManager");
+
             try
             {
-                // 订阅PlayerCardManager的事件
-                if (PlayerCardManager.Instance != null)
-                {
-                    // 这里可以订阅PlayerCardManager的相关事件
-                    // PlayerCardManager.OnCardUsed += HandleLocalCardUsed;
-                    LogDebug("已订阅PlayerCardManager事件");
-                }
-                else
-                {
-                    LogDebug("PlayerCardManager暂未初始化，将在运行时动态订阅");
-                }
+                // 订阅网络事件
+                SubscribeToNetworkEvents();
+
+                isInitialized = true;
+                LogDebug("CardNetworkManager初始化完成");
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 订阅卡牌事件失败: {e.Message}");
+                LogError($"CardNetworkManager初始化失败: {e.Message}");
             }
         }
 
         /// <summary>
-        /// 取消订阅卡牌系统事件
+        /// 系统就绪后检查现有玩家
+        /// 由CardSystemManager在完全初始化后调用
         /// </summary>
-        private void UnsubscribeFromCardEvents()
+        public void CheckExistingPlayersAfterSystemReady()
         {
+            if (!isInitialized)
+            {
+                LogWarning("CardNetworkManager尚未初始化，无法检查现有玩家");
+                return;
+            }
+
+            LogDebug("系统就绪后检查现有玩家");
+
             try
             {
-                // 取消订阅PlayerCardManager的事件
-                if (PlayerCardManager.Instance != null)
+                // 如果已经在房间中，初始化现有玩家
+                if (IsNetworkAvailable() && Photon.Pun.PhotonNetwork.InRoom)
                 {
-                    // PlayerCardManager.OnCardUsed -= HandleLocalCardUsed;
-                    LogDebug("已取消订阅PlayerCardManager事件");
+                    LogDebug("已在房间中，通知CardSystemManager初始化玩家");
+                    InitializeExistingPlayers();
+                }
+                else
+                {
+                    LogDebug("不在房间中或网络不可用");
                 }
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 取消订阅卡牌事件失败: {e.Message}");
+                LogError($"检查现有玩家失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 检查是否已初始化
+        /// </summary>
+        public bool IsInitialized => isInitialized;
+
+        #endregion
+
+        #region 网络事件订阅
+
+        /// <summary>
+        /// 订阅网络事件
+        /// </summary>
+        private void SubscribeToNetworkEvents()
+        {
+            try
+            {
+                if (NetworkManager.Instance != null)
+                {
+                    // 订阅玩家加入/离开事件
+                    NetworkManager.OnPlayerJoined += OnNetworkPlayerJoined;
+                    NetworkManager.OnPlayerLeft += OnNetworkPlayerLeft;
+
+                    LogDebug("已订阅NetworkManager事件");
+                }
+                else
+                {
+                    LogWarning("NetworkManager不存在，无法订阅网络事件");
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogError($"订阅网络事件失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 取消订阅网络事件
+        /// </summary>
+        private void UnsubscribeFromNetworkEvents()
+        {
+            try
+            {
+                if (NetworkManager.Instance != null)
+                {
+                    NetworkManager.OnPlayerJoined -= OnNetworkPlayerJoined;
+                    NetworkManager.OnPlayerLeft -= OnNetworkPlayerLeft;
+
+                    LogDebug("已取消订阅NetworkManager事件");
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogError($"取消订阅网络事件失败: {e.Message}");
             }
         }
 
         #endregion
 
-        #region 卡牌网络广播方法 - 简化版
+        #region 网络事件处理
+
+        /// <summary>
+        /// 网络玩家加入事件
+        /// </summary>
+        private void OnNetworkPlayerJoined(ushort playerId)
+        {
+            LogDebug($"玩家{playerId}加入，通知CardSystemManager");
+
+            if (CardSystemManager.Instance != null)
+            {
+                CardSystemManager.Instance.OnPlayerJoined(playerId, $"Player{playerId}");
+            }
+            else
+            {
+                LogWarning("CardSystemManager不可用，无法处理玩家加入");
+            }
+        }
+
+        /// <summary>
+        /// 网络玩家离开事件
+        /// </summary>
+        private void OnNetworkPlayerLeft(ushort playerId)
+        {
+            LogDebug($"玩家{playerId}离开，通知CardSystemManager");
+
+            if (CardSystemManager.Instance != null)
+            {
+                CardSystemManager.Instance.OnPlayerLeft(playerId);
+            }
+            else
+            {
+                LogWarning("CardSystemManager不可用，无法处理玩家离开");
+            }
+        }
+
+        /// <summary>
+        /// 初始化现有玩家
+        /// </summary>
+        private void InitializeExistingPlayers()
+        {
+            try
+            {
+                if (Photon.Pun.PhotonNetwork.InRoom && CardSystemManager.Instance != null)
+                {
+                    var playerIds = new List<int>();
+
+                    foreach (var player in Photon.Pun.PhotonNetwork.PlayerList)
+                    {
+                        playerIds.Add(player.ActorNumber);
+                    }
+
+                    if (playerIds.Count > 0)
+                    {
+                        LogDebug($"通知CardSystemManager初始化{playerIds.Count}名现有玩家");
+                        CardSystemManager.Instance.OnGameStarted(playerIds);
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                LogError($"初始化现有玩家失败: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 检查网络是否可用
+        /// </summary>
+        private bool IsNetworkAvailable()
+        {
+            return NetworkManager.Instance != null && Photon.Pun.PhotonNetwork.IsConnected;
+        }
+
+        #endregion
+
+        #region 卡牌网络广播方法
 
         /// <summary>
         /// 广播卡牌使用
@@ -143,7 +290,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播卡牌使用失败: {e.Message}");
+                LogError($"广播卡牌使用失败: {e.Message}");
             }
         }
 
@@ -161,7 +308,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播卡牌效果失败: {e.Message}");
+                LogError($"广播卡牌效果失败: {e.Message}");
             }
         }
 
@@ -179,7 +326,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播卡牌添加失败: {e.Message}");
+                LogError($"广播卡牌添加失败: {e.Message}");
             }
         }
 
@@ -197,7 +344,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播卡牌移除失败: {e.Message}");
+                LogError($"广播卡牌移除失败: {e.Message}");
             }
         }
 
@@ -215,7 +362,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播手牌变化失败: {e.Message}");
+                LogError($"广播手牌变化失败: {e.Message}");
             }
         }
 
@@ -233,7 +380,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播卡牌消息失败: {e.Message}");
+                LogError($"广播卡牌消息失败: {e.Message}");
             }
         }
 
@@ -251,7 +398,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 广播卡牌转移失败: {e.Message}");
+                LogError($"广播卡牌转移失败: {e.Message}");
             }
         }
 
@@ -272,7 +419,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理卡牌使用事件失败: {e.Message}");
+                LogError($"处理卡牌使用事件失败: {e.Message}");
             }
         }
 
@@ -289,7 +436,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理卡牌效果事件失败: {e.Message}");
+                LogError($"处理卡牌效果事件失败: {e.Message}");
             }
         }
 
@@ -306,7 +453,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理卡牌添加事件失败: {e.Message}");
+                LogError($"处理卡牌添加事件失败: {e.Message}");
             }
         }
 
@@ -323,7 +470,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理卡牌移除事件失败: {e.Message}");
+                LogError($"处理卡牌移除事件失败: {e.Message}");
             }
         }
 
@@ -340,7 +487,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理手牌变化事件失败: {e.Message}");
+                LogError($"处理手牌变化事件失败: {e.Message}");
             }
         }
 
@@ -357,7 +504,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理卡牌消息事件失败: {e.Message}");
+                LogError($"处理卡牌消息事件失败: {e.Message}");
             }
         }
 
@@ -374,7 +521,7 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[CardNetworkManager] 处理卡牌转移事件失败: {e.Message}");
+                LogError($"处理卡牌转移事件失败: {e.Message}");
             }
         }
 
@@ -399,18 +546,13 @@ namespace Cards.Network
                 return false;
             }
 
-            return true;
-        }
+            if (!Photon.Pun.PhotonNetwork.InRoom)
+            {
+                LogDebug("不在房间中，无法发送RPC");
+                return false;
+            }
 
-        /// <summary>
-        /// 获取网络管理器状态
-        /// </summary>
-        public string GetNetworkStatus()
-        {
-            return $"CardNetworkManager状态: " +
-                   $"实例存在={Instance != null}, " +
-                   $"可发送RPC={CanSendRPC()}, " +
-                   $"场景={SceneManager.GetActiveScene().name}";
+            return true;
         }
 
         #endregion
@@ -438,9 +580,6 @@ namespace Cards.Network
             return $"卡牌{cardId}";
         }
 
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -449,20 +588,17 @@ namespace Cards.Network
             }
         }
 
-        #endregion
-
-        #region 调试方法
-
-        [ContextMenu("显示卡牌网络状态")]
-        public void ShowNetworkStatus()
+        private void LogWarning(string message)
         {
-            string status = "=== CardNetworkManager状态 ===\n";
-            status += GetNetworkStatus() + "\n";
-            status += $"NetworkManager存在: {NetworkManager.Instance != null}\n";
-            status += $"在房间中: {Photon.Pun.PhotonNetwork.InRoom}\n";
-            status += $"玩家数量: {Photon.Pun.PhotonNetwork.PlayerList?.Length ?? 0}\n";
+            if (enableDebugLogs)
+            {
+                Debug.LogWarning($"[CardNetworkManager] {message}");
+            }
+        }
 
-            Debug.Log(status);
+        private void LogError(string message)
+        {
+            Debug.LogError($"[CardNetworkManager] {message}");
         }
 
         #endregion

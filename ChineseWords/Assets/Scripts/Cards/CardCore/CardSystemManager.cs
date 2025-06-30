@@ -109,38 +109,41 @@ namespace Cards.Core
 
             try
             {
-                // 阶段1：验证配置
+                // 阶段1-8：现有的初始化步骤
                 ValidateConfiguration();
-
-                // 阶段2：创建GameObject结构
                 CreateGameObjectStructure();
-
-                // 阶段3：创建核心系统
                 CreateCoreSystems();
-
-                // 阶段4：创建网络系统
                 CreateNetworkSystems();
-
-                // 阶段5：创建UI系统
                 CreateUISystems();
-
-                // 阶段6：创建集成系统
                 CreateIntegrationSystems();
-
-                // 阶段7：注入依赖
                 InjectDependencies();
-
-                // 阶段8：建立事件连接
                 EstablishEventConnections();
+                InitializeNetworkSystems();
 
-                // 完成初始化
+                // 完成基础初始化
                 FinishInitialization(true);
+
+                // 阶段9：系统完全就绪后，检查现有玩家
+                CheckExistingPlayersAfterSystemReady();
             }
             catch (Exception e)
             {
                 LogError($"系统初始化失败: {e.Message}");
                 FinishInitialization(false);
-                throw; // 严格模式：重新抛出异常
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 系统完全就绪后检查现有玩家
+        /// </summary>
+        private void CheckExistingPlayersAfterSystemReady()
+        {
+            LogDebug("系统完全就绪，检查现有玩家");
+
+            if (cardNetworkManager != null)
+            {
+                cardNetworkManager.CheckExistingPlayersAfterSystemReady();
             }
         }
 
@@ -250,28 +253,56 @@ namespace Cards.Core
         }
 
         /// <summary>
-        /// 创建网络系统
+        /// 创建网络系统（仅创建实例，不初始化）
         /// </summary>
         private void CreateNetworkSystems()
         {
-            LogDebug("创建网络系统");
-
             try
             {
+                LogDebug("创建网络系统实例");
+
+                // 尝试获取现有实例
                 cardNetworkManager = CardNetworkManager.Instance;
-                if (cardNetworkManager != null)
+
+                // 如果不存在，创建新实例
+                if (cardNetworkManager == null)
                 {
-                    LogDebug("网络管理器已存在");
+                    var networkGO = new GameObject("CardNetworkManager");
+                    networkGO.transform.SetParent(networkSystemsParent);
+                    cardNetworkManager = networkGO.AddComponent<CardNetworkManager>();
+                    LogDebug("创建了新的CardNetworkManager实例");
                 }
-                else
-                {
-                    LogDebug("网络管理器不可用，跳过");
-                }
+
+                LogDebug("网络系统实例创建完成");
             }
             catch (Exception e)
             {
                 LogDebug($"网络系统创建警告: {e.Message}");
-                // 网络系统失败不影响核心功能
+            }
+        }
+
+        /// <summary>
+        /// 初始化网络系统（在所有其他系统就绪后调用）
+        /// </summary>
+        private void InitializeNetworkSystems()
+        {
+            try
+            {
+                LogDebug("初始化网络系统");
+
+                if (cardNetworkManager != null)
+                {
+                    cardNetworkManager.Initialize();
+                    LogDebug("网络系统初始化完成");
+                }
+                else
+                {
+                    LogDebug("网络管理器不存在，跳过初始化");
+                }
+            }
+            catch (Exception e)
+            {
+                LogDebug($"网络系统初始化警告: {e.Message}");
             }
         }
 
@@ -406,10 +437,10 @@ namespace Cards.Core
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             configField?.SetValue(cardGameBridge, cardConfig);
 
-            // 注入网络管理器引用
-            var networkManagerField = bridgeType.GetField("networkManager",
+            // 注入卡牌网络管理器引用
+            var cardNetworkManagerField = bridgeType.GetField("cardNetworkManager",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            networkManagerField?.SetValue(cardGameBridge, cardNetworkManager);
+            cardNetworkManagerField?.SetValue(cardGameBridge, cardNetworkManager);
 
             LogDebug("通过反射完成依赖注入");
         }
