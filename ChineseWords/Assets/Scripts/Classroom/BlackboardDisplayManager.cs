@@ -712,39 +712,9 @@ namespace UI.Blackboard
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[BlackboardDisplayManager] {message}");
+                //Debug.Log($"[BlackboardDisplayManager] {message}");
             }
         }
-
-        #region 测试方法
-
-        [ContextMenu("测试 - 清空显示")]
-        public void TestClearDisplay()
-        {
-            ClearDisplay();
-        }
-
-        [ContextMenu("检查黑板状态")]
-        public void CheckBlackboardStatus()
-        {
-            string status = "=== 黑板显示管理器状态 ===\n";
-            status += $"黑板已初始化: {blackboardInitialized}\n";
-            status += $"摄像机设置完成: {cameraSetupCompleted}\n";
-            status += $"正在显示题目: {isDisplaying}\n";
-            status += $"当前题目: {(currentQuestion != null ? currentQuestion.questionText : "null")}\n";
-            status += $"待显示题目: {(pendingQuestion != null ? pendingQuestion.questionText : "null")}\n";
-            status += $"摄像机: {(blackboardCanvas.worldCamera != null ? blackboardCanvas.worldCamera.name : "null")}\n";
-
-            Debug.Log(status);
-        }
-
-        [ContextMenu("强制查找摄像机")]
-        public void ForceSearchCamera()
-        {
-            StartCoroutine(FindAndSetCamera());
-        }
-
-        #endregion
 
         #region 清理资源
 

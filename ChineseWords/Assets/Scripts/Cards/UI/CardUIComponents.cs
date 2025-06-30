@@ -13,8 +13,11 @@ namespace Cards.UI
         [Header("预制体设置")]
         [SerializeField] private GameObject cardUIPrefab; // 卡牌UI预制体
 
+        // 预制体资源路径
+        private const string CARD_UI_PREFAB_PATH = "Prefabs/UI/CardUIPrefab";
+
         [Header("尺寸设置")]
-        [SerializeField] private Vector2 baseCardSize = new Vector2(200f, 279f); // 基础卡牌尺寸 (744:1039比例)
+        [SerializeField] private Vector2 baseCardSize = new Vector2(200f, 279f);
         [SerializeField] private float scaleFactor = 1f; // 全局缩放因子
 
         [Header("字体设置")]
@@ -34,6 +37,9 @@ namespace Cards.UI
             {
                 Instance = this;
                 LogDebug("CardUIComponents实例已创建");
+
+                // 动态加载预制体
+                LoadCardUIPrefab();
             }
             else
             {
@@ -52,11 +58,36 @@ namespace Cards.UI
         }
 
         /// <summary>
+        /// 从Resources文件夹加载卡牌UI预制体
+        /// </summary>
+        private void LoadCardUIPrefab()
+        {
+            if (cardUIPrefab == null)
+            {
+                LogDebug($"开始从Resources加载预制体: {CARD_UI_PREFAB_PATH}");
+
+                cardUIPrefab = Resources.Load<GameObject>(CARD_UI_PREFAB_PATH);
+
+                if (cardUIPrefab != null)
+                {
+                    LogDebug($"预制体加载成功: {cardUIPrefab.name}");
+                }
+                else
+                {
+                    LogError($"预制体加载失败，请确认路径是否正确: Resources/{CARD_UI_PREFAB_PATH}.prefab");
+                }
+            }
+            else
+            {
+                LogDebug("预制体已设置，跳过动态加载");
+            }
+        }
+
+
+
+        /// <summary>
         /// 创建完整的卡牌UI GameObject
         /// </summary>
-        /// <param name="cardData">卡牌显示数据</param>
-        /// <param name="parent">父级Transform（可选）</param>
-        /// <returns>完整的卡牌UI GameObject</returns>
         public GameObject CreateCardUI(CardDisplayData cardData, Transform parent = null)
         {
             if (cardData == null || !cardData.IsValid())
@@ -65,10 +96,17 @@ namespace Cards.UI
                 return null;
             }
 
+            // 确保预制体已加载
             if (cardUIPrefab == null)
             {
-                LogError("卡牌UI预制体未设置，无法创建UI");
-                return null;
+                LogWarning("预制体为空，尝试重新加载");
+                LoadCardUIPrefab();
+
+                if (cardUIPrefab == null)
+                {
+                    LogError("卡牌UI预制体加载失败，无法创建UI");
+                    return null;
+                }
             }
 
             LogDebug($"开始创建卡牌UI: {cardData.cardName}");
@@ -92,8 +130,6 @@ namespace Cards.UI
         /// <summary>
         /// 配置卡牌UI的数据和外观
         /// </summary>
-        /// <param name="cardInstance">卡牌实例</param>
-        /// <param name="cardData">卡牌数据</param>
         private void ConfigureCardUI(GameObject cardInstance, CardDisplayData cardData)
         {
             // 配置卡牌标识组件
@@ -215,8 +251,6 @@ namespace Cards.UI
         /// <summary>
         /// 更新现有卡牌UI的数据（用于动态更新）
         /// </summary>
-        /// <param name="cardInstance">已存在的卡牌实例</param>
-        /// <param name="cardData">新的卡牌数据</param>
         public void UpdateCardUI(GameObject cardInstance, CardDisplayData cardData)
         {
             if (cardInstance == null || cardData == null || !cardData.IsValid())
@@ -232,9 +266,6 @@ namespace Cards.UI
         /// <summary>
         /// 批量创建多张卡牌UI
         /// </summary>
-        /// <param name="cardDataList">卡牌数据列表</param>
-        /// <param name="parent">父级Transform</param>
-        /// <returns>创建的卡牌UI GameObject列表</returns>
         public System.Collections.Generic.List<GameObject> CreateMultipleCardUI(
             System.Collections.Generic.List<CardDisplayData> cardDataList, Transform parent = null)
         {
@@ -264,7 +295,6 @@ namespace Cards.UI
         /// <summary>
         /// 销毁卡牌UI
         /// </summary>
-        /// <param name="cardUI">要销毁的卡牌UI GameObject</param>
         public void DestroyCardUI(GameObject cardUI)
         {
             if (cardUI != null)
@@ -277,7 +307,6 @@ namespace Cards.UI
         /// <summary>
         /// 批量销毁卡牌UI
         /// </summary>
-        /// <param name="cardUIList">要销毁的卡牌UI列表</param>
         public void DestroyMultipleCardUI(System.Collections.Generic.List<GameObject> cardUIList)
         {
             if (cardUIList == null) return;
@@ -295,7 +324,6 @@ namespace Cards.UI
         /// <summary>
         /// 设置全局缩放因子（用于适配不同屏幕分辨率）
         /// </summary>
-        /// <param name="newScaleFactor">新的缩放因子</param>
         public void SetScaleFactor(float newScaleFactor)
         {
             scaleFactor = Mathf.Clamp(newScaleFactor, 0.5f, 2f); // 限制缩放范围
@@ -384,19 +412,6 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 获取预制体信息（调试用）
-        /// </summary>
-        public string GetPrefabInfo()
-        {
-            if (cardUIPrefab == null)
-            {
-                return "预制体未设置";
-            }
-
-            return $"预制体: {cardUIPrefab.name}，子对象数量: {cardUIPrefab.transform.childCount}";
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -431,7 +446,6 @@ namespace Cards.UI
     /// <summary>
     /// 卡牌UI标识组件
     /// 用于标识UI GameObject对应的卡牌数据
-    /// </summary>
     public class CardUIIdentifier : MonoBehaviour
     {
         public int cardId;

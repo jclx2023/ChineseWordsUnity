@@ -14,6 +14,7 @@ namespace Cards.Core
     /// <summary>
     /// 轻量化卡牌系统管理器
     /// 负责统一管理和协调卡牌相关子系统的初始化和引用
+    /// 确保所有子系统按正确顺序初始化，避免重复初始化
     /// </summary>
     public class CardSystemManager : MonoBehaviour
     {
@@ -23,7 +24,7 @@ namespace Cards.Core
         [SerializeField] private bool enableDebugLogs = true;
 
         [Header("初始化设置")]
-        [SerializeField] private float initializationDelay = 0.5f;
+        [SerializeField] private float initializationDelay = 0.1f;
 
         // 单例实例
         public static CardSystemManager Instance { get; private set; }
@@ -145,7 +146,7 @@ namespace Cards.Core
 
             yield return null;
 
-            // 2. 初始化效果系统
+            // 2. 初始化效果系统（包含效果注册）
             success = InitializeEffectSystem(out errorMessage);
             if (!success)
             {
@@ -170,8 +171,9 @@ namespace Cards.Core
 
             yield return null;
 
-            // 5. 初始化游戏桥接器
-            InitializeGameBridge(); // 桥接器初始化失败不影响整体
+            // 5. 初始化游戏桥接器（必须在效果系统之后）
+            success = InitializeGameBridge(out errorMessage);
+            if (!success){LogDebug($"游戏桥接器初始化失败: {errorMessage}");}
 
             yield return null;
 
@@ -244,7 +246,7 @@ namespace Cards.Core
         }
 
         /// <summary>
-        /// 初始化效果系统
+        /// 初始化效果系统（负责创建实例和注册所有效果）
         /// </summary>
         private bool InitializeEffectSystem(out string errorMessage)
         {
@@ -260,6 +262,8 @@ namespace Cards.Core
                     cardEffectSystem = effectSystemGO.AddComponent<CardEffectSystem>();
                 }
 
+                // 统一在这里注册所有效果，避免重复注册
+                LogDebug("注册所有卡牌效果");
                 CardEffectRegistrar.RegisterAllEffects(cardEffectSystem);
 
                 if (!cardEffectSystem.IsSystemReady())
@@ -268,7 +272,7 @@ namespace Cards.Core
                     return false;
                 }
 
-                LogDebug("CardEffectSystem初始化成功");
+                LogDebug("CardEffectSystem初始化并注册效果完成");
                 errorMessage = "";
                 return true;
             }
@@ -344,28 +348,49 @@ namespace Cards.Core
         }
 
         /// <summary>
-        /// 初始化游戏桥接器
+        /// 初始化游戏桥接器（必须在效果系统初始化后调用）
         /// </summary>
-        private void InitializeGameBridge()
+        private bool InitializeGameBridge(out string errorMessage)
         {
             try
             {
                 LogDebug("初始化游戏桥接器");
+
                 cardGameBridge = CardGameBridge.Instance;
+                if (cardGameBridge == null)
+                {
+                    var bridgeGO = new GameObject("CardGameBridge");
+                    bridgeGO.transform.SetParent(transform);
+                    cardGameBridge = bridgeGO.AddComponent<CardGameBridge>();
+                }
 
                 if (cardGameBridge != null)
                 {
+                    // 刷新系统引用，确保桥接器能获取到已初始化的系统
                     cardGameBridge.RefreshSystemReferences();
-                    LogDebug("游戏桥接器初始化成功");
+
+                    if (cardGameBridge.IsReady())
+                    {
+                        LogDebug("游戏桥接器初始化成功");
+                        errorMessage = "";
+                        return true;
+                    }
+                    else
+                    {
+                        errorMessage = "游戏桥接器未就绪";
+                        return false;
+                    }
                 }
                 else
                 {
-                    LogDebug("游戏桥接器将在游戏开始时创建");
+                    errorMessage = "无法创建游戏桥接器实例";
+                    return false;
                 }
             }
             catch (Exception e)
             {
-                LogDebug($"游戏桥接器初始化警告: {e.Message}");
+                errorMessage = $"游戏桥接器初始化失败: {e.Message}";
+                return false;
             }
         }
 
@@ -581,6 +606,11 @@ namespace Cards.Core
                 {
                     playerCardManager.RemovePlayer(playerId);
                 }
+
+                if (cardGameBridge != null)
+                {
+                    cardGameBridge.ClearPlayerEffectStates(playerId);
+                }
             }
             catch (Exception e)
             {
@@ -651,9 +681,41 @@ namespace Cards.Core
             status += $"配置: {(cardConfig != null ? "✓" : "✗")}\n";
             status += $"效果系统: {(cardEffectSystem?.IsSystemReady() == true ? "✓" : "✗")}\n";
             status += $"玩家管理: {(playerCardManager?.IsInitialized == true ? "✓" : "✗")}\n";
-            status += $"游戏桥接: {(cardGameBridge != null ? "✓" : "✗")}\n";
+            status += $"游戏桥接: {(cardGameBridge?.IsReady() == true ? "✓" : "✗")}\n";
             status += $"网络管理: {(cardNetworkManager != null ? "✓" : "✗")}\n";
             return status;
+        }
+
+        /// <summary>
+        /// 获取卡牌配置（供外部访问）
+        /// </summary>
+        public CardConfig GetCardConfig()
+        {
+            return cardConfig;
+        }
+
+        /// <summary>
+        /// 获取效果系统实例（供外部访问）
+        /// </summary>
+        public CardEffectSystem GetEffectSystem()
+        {
+            return cardEffectSystem;
+        }
+
+        /// <summary>
+        /// 获取玩家管理器实例（供外部访问）
+        /// </summary>
+        public PlayerCardManager GetPlayerCardManager()
+        {
+            return playerCardManager;
+        }
+
+        /// <summary>
+        /// 获取游戏桥接器实例（供外部访问）
+        /// </summary>
+        public CardGameBridge GetCardGameBridge()
+        {
+            return cardGameBridge;
         }
 
         #endregion
@@ -682,6 +744,27 @@ namespace Cards.Core
         public void ShowSystemStatus()
         {
             Debug.Log(GetSystemStatus());
+        }
+
+        /// <summary>
+        /// 验证效果系统完整性（调试用）
+        /// </summary>
+        [ContextMenu("验证效果系统")]
+        public void ValidateEffectSystem()
+        {
+            if (cardEffectSystem == null)
+            {
+                LogError("效果系统未初始化");
+                return;
+            }
+
+            if (!cardEffectSystem.IsSystemReady())
+            {
+                LogError("效果系统未就绪");
+                return;
+            }
+
+            LogDebug("效果系统验证通过");
         }
 
         #endregion

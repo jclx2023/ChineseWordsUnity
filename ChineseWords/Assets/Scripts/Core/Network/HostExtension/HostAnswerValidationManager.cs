@@ -519,8 +519,7 @@ namespace Core.Network
         {
             LogDebug($"验证手写题答案: {answer}");
 
-            // 手写题可能需要特殊的识别和验证逻辑
-            // 这里暂时使用通用验证，实际可能需要OCR或图像识别
+            // 手写题需要特殊的识别和验证逻辑
 
             bool isValid = ValidateGenericAnswerInternal(answer, question.correctAnswer);
 
@@ -734,125 +733,7 @@ namespace Core.Network
 
         #endregion
 
-        #region 批量验证
-
-        /// <summary>
-        /// 批量验证答案
-        /// </summary>
-        public List<ValidationResult> ValidateAnswersBatch(List<string> answers, List<NetworkQuestionData> questions)
-        {
-            if (answers == null || questions == null || answers.Count != questions.Count)
-            {
-                LogDebug("批量验证参数无效");
-                return new List<ValidationResult>();
-            }
-
-            LogDebug($"开始批量验证 {answers.Count} 个答案");
-
-            var results = new List<ValidationResult>();
-
-            for (int i = 0; i < answers.Count; i++)
-            {
-                var result = ValidateAnswer(answers[i], questions[i]);
-                results.Add(result);
-            }
-
-            LogDebug($"批量验证完成，正确率: {results.Count(r => r.isCorrect)}/{results.Count}");
-
-            return results;
-        }
-
-        #endregion
-
-        #region 配置管理
-
-        /// <summary>
-        /// 设置缓存大小
-        /// </summary>
-        /// <param name="size">最大缓存条目数</param>
-        public void SetCacheSize(int size)
-        {
-            maxCacheSize = Mathf.Max(0, size);
-
-            if (validationCache != null && validationCache.Count > maxCacheSize)
-            {
-                validationCache.Clear();
-            }
-
-            LogDebug($"验证缓存大小已设置为: {maxCacheSize}");
-        }
-
-        /// <summary>
-        /// 清空验证缓存
-        /// </summary>
-        public void ClearValidationCache()
-        {
-            validationCache?.Clear();
-            LogDebug("验证缓存已清空");
-        }
-
-        /// <summary>
-        /// 设置严格验证模式
-        /// </summary>
-        /// <param name="strict">是否启用严格验证</param>
-        public void SetStrictValidation(bool strict)
-        {
-            strictValidation = strict;
-            LogDebug($"严格验证模式: {(strict ? "启用" : "禁用")}");
-        }
-
-        /// <summary>
-        /// 设置大小写敏感
-        /// </summary>
-        /// <param name="sensitive">是否大小写敏感</param>
-        public void SetCaseSensitive(bool sensitive)
-        {
-            caseSensitive = sensitive;
-            LogDebug($"大小写敏感: {(sensitive ? "启用" : "禁用")}");
-        }
-
-        #endregion
-
-        #region 统计信息
-
-        /// <summary>
-        /// 获取验证统计信息
-        /// </summary>
-        /// <returns>统计信息字符串</returns>
-        public string GetValidationStats()
-        {
-            var stats = "=== AnswerValidationManager统计 ===\n";
-            stats += $"验证模式: {(strictValidation ? "严格" : "宽松")}\n";
-            stats += $"大小写敏感: {(caseSensitive ? "是" : "否")}\n";
-            stats += $"缓存启用: {(validationCache != null ? "是" : "否")}\n";
-
-            if (validationCache != null)
-            {
-                stats += $"缓存条目数: {validationCache.Count}/{maxCacheSize}\n";
-                stats += $"缓存使用率: {(float)validationCache.Count / maxCacheSize:P1}\n";
-            }
-
-            stats += $"成语接龙管理器: {(idiomChainManager != null ? "已缓存" : "未缓存")}\n";
-            stats += $"题目数据服务: {(questionDataService != null ? "已连接" : "未连接")}\n";
-            stats += $"数据库路径: {dbPath}\n";
-            stats += $"数据库可用: {(System.IO.File.Exists(dbPath) ? "是" : "否")}";
-
-            return stats;
-        }
-
-        #endregion
-
         #region 工具方法
-
-        /// <summary>
-        /// 设置调试日志开关
-        /// </summary>
-        /// <param name="enabled">是否启用调试日志</param>
-        public void SetDebugLogs(bool enabled)
-        {
-            enableDebugLogs = enabled;
-            LogDebug($"调试日志已{(enabled ? "启用" : "禁用")}");
-        }
 
         /// <summary>
         /// 调试日志输出
@@ -861,7 +742,7 @@ namespace Core.Network
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[AnswerValidationManager] {message}");
+                //Debug.Log($"[AnswerValidationManager] {message}");
             }
         }
 
@@ -887,31 +768,6 @@ namespace Core.Network
             questionDataService = null;
 
             LogDebug("AnswerValidationManager已销毁");
-        }
-
-        #endregion
-
-        #region 静态验证方法（为SoftFillQuestionManager提供支持）
-
-        /// <summary>
-        /// 静态验证软性填空答案（提供给SoftFillQuestionManager使用）
-        /// </summary>
-        public static bool ValidateSoftFillAnswerStatic(string answer, NetworkQuestionData question)
-        {
-            try
-            {
-                // 创建临时验证器实例
-                var validator = new AnswerValidationManager();
-                validator.Initialize(null, false); // 不启用缓存，用于静态调用
-
-                var result = validator.ValidateSoftFillAnswer(answer, question);
-                return result.isCorrect;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[AnswerValidationManager] 静态验证失败: {e.Message}");
-                return false;
-            }
         }
 
         #endregion

@@ -462,7 +462,7 @@ namespace Core.Network
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[PlayerStateManager] {message}");
+                //Debug.Log($"[PlayerStateManager] {message}");
             }
         }
 

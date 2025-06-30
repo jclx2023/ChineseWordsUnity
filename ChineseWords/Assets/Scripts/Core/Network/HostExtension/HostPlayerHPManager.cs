@@ -52,22 +52,6 @@ namespace Core.Network
                 damageCount = 0;
                 lastDamageTime = 0f;
             }
-
-            public float GetHealthPercentage()
-            {
-                if (maxHealth <= 0) return 0f;
-                return (float)currentHealth / maxHealth;
-            }
-
-            public bool IsLowHealth(float threshold = 0.3f)
-            {
-                return GetHealthPercentage() <= threshold;
-            }
-
-            public bool IsCriticalHealth(float threshold = 0.1f)
-            {
-                return GetHealthPercentage() <= threshold;
-            }
         }
 
         /// <summary>
@@ -264,20 +248,6 @@ namespace Core.Network
             return cachedDamageAmount;
         }
 
-        /// <summary>
-        /// 获取最大可答错次数
-        /// </summary>
-        public int GetMaxWrongAnswers()
-        {
-            int initialHealth = GetEffectiveInitialHealth();
-            int damageAmount = GetEffectiveDamageAmount();
-
-            if (damageAmount <= 0)
-                return 0;
-
-            return Mathf.FloorToInt((float)initialHealth / damageAmount);
-        }
-
         #endregion
 
         #region 玩家HP管理
@@ -285,8 +255,6 @@ namespace Core.Network
         /// <summary>
         /// 初始化玩家HP状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="customInitialHealth">自定义初始血量（可选，-1表示使用配置值）</param>
         public void InitializePlayer(ushort playerId, int customInitialHealth = -1)
         {
             if (!hpConfigInitialized)
@@ -317,7 +285,6 @@ namespace Core.Network
         /// <summary>
         /// 移除玩家HP状态
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
         public void RemovePlayer(ushort playerId)
         {
             if (playerHPStates.ContainsKey(playerId))
@@ -424,20 +391,6 @@ namespace Core.Network
         #endregion
 
         #region 查询方法
-        /// <summary>
-        /// 获取玩家血量信息
-        /// </summary>
-        public (int currentHealth, int maxHealth) GetPlayerHP(ushort playerId)
-        {
-            if (playerHPStates.ContainsKey(playerId))
-            {
-                var hpState = playerHPStates[playerId];
-                return (hpState.currentHealth, hpState.maxHealth);
-            }
-
-            LogDebug($"玩家 {playerId} 的HP状态不存在");
-            return (0, 0);
-        }
 
         /// <summary>
         /// 检查玩家是否存活
@@ -447,32 +400,6 @@ namespace Core.Network
             if (playerHPStates.ContainsKey(playerId))
             {
                 return playerHPStates[playerId].isAlive;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// 获取玩家血量百分比
-        /// </summary>
-        public float GetPlayerHealthPercentage(ushort playerId)
-        {
-            if (playerHPStates.ContainsKey(playerId))
-            {
-                return playerHPStates[playerId].GetHealthPercentage();
-            }
-
-            return 0f;
-        }
-
-        /// <summary>
-        /// 检查玩家是否为低血量状态
-        /// </summary>
-        public bool IsPlayerLowHealth(ushort playerId, float threshold = 0.3f)
-        {
-            if (playerHPStates.ContainsKey(playerId))
-            {
-                return playerHPStates[playerId].IsLowHealth(threshold);
             }
 
             return false;
@@ -504,19 +431,6 @@ namespace Core.Network
                     alivePlayerIds.Add(hpState.playerId);
             }
             return alivePlayerIds;
-        }
-
-        /// <summary>
-        /// 获取玩家受伤次数
-        /// </summary>
-        public int GetPlayerDamageCount(ushort playerId)
-        {
-            if (playerHPStates.ContainsKey(playerId))
-            {
-                return playerHPStates[playerId].damageCount;
-            }
-
-            return 0;
         }
 
         #endregion
@@ -559,22 +473,6 @@ namespace Core.Network
 
         #endregion
 
-        #region 状态信息
-        /// <summary>
-        /// 获取配置摘要信息
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            if (currentHPConfig != null)
-            {
-                return currentHPConfig.GetConfigSummary();
-            }
-
-            return "使用默认HP配置";
-        }
-
-        #endregion
-
         #region 工具方法
 
         /// <summary>
@@ -607,7 +505,7 @@ namespace Core.Network
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[PlayerHPManager] {message}");
+                //Debug.Log($"[PlayerHPManager] {message}");
             }
         }
 

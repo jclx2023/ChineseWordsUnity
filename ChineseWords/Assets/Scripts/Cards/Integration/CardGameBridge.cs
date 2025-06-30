@@ -13,6 +13,7 @@ namespace Cards.Integration
     /// <summary>
     /// 卡牌游戏桥接器
     /// 负责连接卡牌系统与现有游戏系统，实现卡牌效果的具体执行
+    /// 不负责效果注册，只提供效果执行的具体实现
     /// </summary>
     public class CardGameBridge : MonoBehaviour
     {
@@ -68,7 +69,8 @@ namespace Cards.Integration
 
         private void Start()
         {
-            Initialize();
+            // 延迟初始化，等待CardSystemManager完成系统初始化
+            Invoke(nameof(DelayedInitialize), 1.0f);
         }
 
         private void OnDestroy()
@@ -98,6 +100,14 @@ namespace Cards.Integration
         }
 
         /// <summary>
+        /// 延迟初始化桥接器
+        /// </summary>
+        private void DelayedInitialize()
+        {
+            Initialize();
+        }
+
+        /// <summary>
         /// 初始化桥接器
         /// </summary>
         public void Initialize()
@@ -111,8 +121,12 @@ namespace Cards.Integration
                 return;
             }
 
-            // 注册效果到效果系统
-            RegisterEffectsToSystem();
+            // 验证效果系统是否已初始化
+            if (!ValidateEffectSystemReady())
+            {
+                Debug.LogError("[CardGameBridge] 效果系统未就绪，初始化失败");
+                return;
+            }
 
             // 订阅事件
             SubscribeToEvents();
@@ -135,7 +149,7 @@ namespace Cards.Integration
                 allReferencesAcquired = false;
             }
 
-            // 获取CardEffectSystem
+            // 获取CardEffectSystem（应该已经由CardSystemManager初始化）
             effectSystem = CardEffectSystem.Instance;
             if (effectSystem == null)
             {
@@ -177,19 +191,24 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// 注册效果到效果系统
+        /// 验证效果系统是否已准备就绪
         /// </summary>
-        private void RegisterEffectsToSystem()
+        private bool ValidateEffectSystemReady()
         {
             if (effectSystem == null)
             {
-                Debug.LogError("[CardGameBridge] 效果系统未初始化，无法注册效果");
-                return;
+                LogError("效果系统实例不存在");
+                return false;
             }
 
-            // 使用CardEffectRegistrar注册所有效果
-            CardEffectRegistrar.RegisterAllEffects(effectSystem);
-            LogDebug("所有卡牌效果已注册到效果系统");
+            if (!effectSystem.IsSystemReady())
+            {
+                LogError("效果系统未就绪");
+                return false;
+            }
+
+            LogDebug("效果系统验证通过");
+            return true;
         }
 
         /// <summary>
@@ -684,6 +703,25 @@ namespace Cards.Integration
             }
         }
 
+        /// <summary>
+        /// 警告日志
+        /// </summary>
+        private void LogWarning(string message)
+        {
+            if (enableDebugLogs)
+            {
+                Debug.LogWarning($"[CardGameBridge] {message}");
+            }
+        }
+
+        /// <summary>
+        /// 错误日志
+        /// </summary>
+        private void LogError(string message)
+        {
+            Debug.LogError($"[CardGameBridge] {message}");
+        }
+
         #endregion
 
         #region 公共接口
@@ -702,7 +740,10 @@ namespace Cards.Integration
         /// </summary>
         public bool IsReady()
         {
-            return playerCardManager != null && effectSystem != null && cardConfig != null;
+            return playerCardManager != null &&
+                   effectSystem != null &&
+                   effectSystem.IsSystemReady() &&
+                   cardConfig != null;
         }
 
         #endregion

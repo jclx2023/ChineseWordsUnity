@@ -43,8 +43,6 @@ namespace Core.Network
         /// <summary>
         /// 初始化配置管理器
         /// </summary>
-        /// <param name="timerCfg">Timer配置</param>
-        /// <param name="weightCfg">权重配置</param>
         public void Initialize(TimerConfig timerCfg = null, QuestionWeightConfig weightCfg = null)
         {
             LogDebug("初始化GameConfigManager...");
@@ -211,24 +209,6 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 设置Timer配置
-        /// </summary>
-        public void SetTimerConfig(TimerConfig newTimerConfig)
-        {
-            var oldConfig = timerConfig;
-            timerConfig = newTimerConfig;
-
-            // 清空缓存，强制重新计算
-            cachedTimeLimits.Clear();
-
-            LogDebug($"Timer配置已更新: {oldConfig?.ConfigName ?? "null"} -> {newTimerConfig?.ConfigName ?? "null"}");
-
-            // 触发配置变更事件
-            OnTimerConfigChanged?.Invoke(newTimerConfig);
-            OnConfigurationChanged?.Invoke();
-        }
-
-        /// <summary>
         /// 获取Timer配置源信息
         /// </summary>
         public string GetTimerConfigSource()
@@ -274,27 +254,6 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 获取当前权重配置
-        /// </summary>
-        public Dictionary<QuestionType, float> GetCurrentWeights()
-        {
-            try
-            {
-                if (questionWeightConfig != null)
-                {
-                    return questionWeightConfig.GetWeights();
-                }
-
-                return QuestionWeightManager.GetWeights();
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[GameConfigManager] 获取权重配置失败: {e.Message}");
-                return GetDefaultWeights();
-            }
-        }
-
-        /// <summary>
         /// 获取默认权重配置
         /// </summary>
         private Dictionary<QuestionType, float> GetDefaultWeights()
@@ -313,21 +272,6 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 设置权重配置
-        /// </summary>
-        public void SetWeightConfig(QuestionWeightConfig newWeightConfig)
-        {
-            var oldConfig = questionWeightConfig;
-            questionWeightConfig = newWeightConfig;
-
-            LogDebug($"权重配置已更新");
-
-            // 触发配置变更事件
-            OnWeightConfigChanged?.Invoke(newWeightConfig);
-            OnConfigurationChanged?.Invoke();
-        }
-
-        /// <summary>
         /// 获取权重配置源信息
         /// </summary>
         public string GetWeightConfigSource()
@@ -339,51 +283,6 @@ namespace Core.Network
                 return "默认权重";
 
             return $"权重配置";
-        }
-
-        /// <summary>
-        /// 检查题型是否启用
-        /// </summary>
-        public bool IsQuestionTypeEnabled(QuestionType questionType)
-        {
-            try
-            {
-                if (questionWeightConfig != null)
-                {
-                    return questionWeightConfig.IsEnabled(questionType);
-                }
-
-                // 检查全局配置
-                var weights = QuestionWeightManager.GetWeights();
-                return weights.ContainsKey(questionType) && weights[questionType] > 0;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[GameConfigManager] 检查题型启用状态失败: {e.Message}");
-                return true; // 默认启用
-            }
-        }
-
-        /// <summary>
-        /// 获取题型权重
-        /// </summary>
-        public float GetQuestionTypeWeight(QuestionType questionType)
-        {
-            try
-            {
-                if (questionWeightConfig != null)
-                {
-                    return questionWeightConfig.GetWeight(questionType);
-                }
-
-                var weights = QuestionWeightManager.GetWeights();
-                return weights.ContainsKey(questionType) ? weights[questionType] : 1.0f;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[GameConfigManager] 获取题型权重失败: {e.Message}");
-                return 1.0f;
-            }
         }
 
         #endregion
@@ -440,7 +339,7 @@ namespace Core.Network
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[GameConfigManager] {message}");
+                //Debug.Log($"[GameConfigManager] {message}");
             }
         }
 
