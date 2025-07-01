@@ -403,30 +403,22 @@ namespace Cards.UI
         {
             if (cardUICanvas == null)
             {
-                // 创建独立Canvas
-                GameObject canvasObject = new GameObject("CardUICanvas");
-                canvasObject.transform.SetParent(transform, false);
-
-                cardUICanvas = canvasObject.AddComponent<Canvas>();
-                cardUICanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                cardUICanvas.sortingOrder = canvasSortingOrder;
-
-                // 添加CanvasScaler用于适配
-                CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
-                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                scaler.matchWidthOrHeight = 0.5f;
-
-                // 添加GraphicRaycaster用于UI交互
-                canvasObject.AddComponent<GraphicRaycaster>();
-
-                LogDebug("创建了独立的CardUICanvas");
+                Canvas[] canvases = FindObjectsOfType<Canvas>();
+                foreach (Canvas canvas in canvases)
+                {
+                    if (canvas.name == "CardCanvas")
+                    {
+                        cardUICanvas = canvas;
+                        break;
+                    }
+                }
             }
-            else
+
+            // 确保Canvas配置正确
+            if (cardUICanvas != null)
             {
                 cardUICanvas.sortingOrder = canvasSortingOrder;
-                LogDebug("使用现有的CardUICanvas");
+                LogDebug($"Canvas设置完成: {cardUICanvas.name}, SortingOrder: {cardUICanvas.sortingOrder}");
             }
         }
 
@@ -438,19 +430,36 @@ namespace Cards.UI
             cardDisplayUI = GetComponentInChildren<CardDisplayUI>();
             if (cardDisplayUI == null)
             {
-                GameObject displayObject = new GameObject("CardDisplayUI");
-                // 确保CardDisplayUI挂载到CardUICanvas下
-                displayObject.transform.SetParent(cardUICanvas.transform, false);
+                // 在场景中查找已有的CardDisplayUI
+                cardDisplayUI = FindObjectOfType<CardDisplayUI>();
 
-                // 添加RectTransform组件确保正确的UI布局
-                RectTransform rectTransform = displayObject.AddComponent<RectTransform>();
-                rectTransform.anchorMin = Vector2.zero;
-                rectTransform.anchorMax = Vector2.one;
-                rectTransform.sizeDelta = Vector2.zero;
-                rectTransform.anchoredPosition = Vector2.zero;
+                if (cardDisplayUI == null)
+                {
+                    // 创建新的CardDisplayUI
+                    GameObject displayObject = new GameObject("CardDisplayUI");
+                    displayObject.transform.SetParent(cardUICanvas.transform, false);
 
-                cardDisplayUI = displayObject.AddComponent<CardDisplayUI>();
-                LogDebug("创建了新的CardDisplayUI实例，已正确挂载到CardUICanvas下");
+                    // 添加RectTransform组件确保正确的UI布局
+                    RectTransform rectTransform = displayObject.AddComponent<RectTransform>();
+                    rectTransform.anchorMin = Vector2.zero;
+                    rectTransform.anchorMax = Vector2.one;
+                    rectTransform.sizeDelta = Vector2.zero;
+                    rectTransform.anchoredPosition = Vector2.zero;
+
+                    cardDisplayUI = displayObject.AddComponent<CardDisplayUI>();
+                    LogDebug("创建了新的CardDisplayUI实例，已正确挂载到Canvas下");
+                }
+                else
+                {
+                    LogDebug("找到了场景中现有的CardDisplayUI实例");
+
+                    // 确保现有的CardDisplayUI也在正确的父对象下
+                    if (cardDisplayUI.transform.parent != cardUICanvas.transform)
+                    {
+                        LogDebug($"将现有CardDisplayUI从 {cardDisplayUI.transform.parent?.name} 移动到 {cardUICanvas.name} 下");
+                        cardDisplayUI.transform.SetParent(cardUICanvas.transform, false);
+                    }
+                }
             }
             else
             {
@@ -459,10 +468,12 @@ namespace Cards.UI
                 // 确保现有的CardDisplayUI也在正确的父对象下
                 if (cardDisplayUI.transform.parent != cardUICanvas.transform)
                 {
-                    LogDebug("将现有CardDisplayUI移动到CardUICanvas下");
+                    LogDebug($"将现有CardDisplayUI从 {cardDisplayUI.transform.parent?.name} 移动到 {cardUICanvas.name} 下");
                     cardDisplayUI.transform.SetParent(cardUICanvas.transform, false);
                 }
             }
+
+            LogDebug($"CardDisplayUI设置完成，父对象: {cardDisplayUI.transform.parent?.name}");
         }
 
         /// <summary>

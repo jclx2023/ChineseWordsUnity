@@ -16,7 +16,8 @@ namespace Cards.UI
     {
         [Header("缩略图设置")]
         [SerializeField] private Transform thumbnailContainer; // 缩略图容器
-        [SerializeField] private Vector2 thumbnailPosition = new Vector2(-400f, -300f); // 左下角位置
+        [SerializeField] private Vector2 thumbnailPosition = new Vector2(90f, 0f); // 调整到合适的位置
+        [SerializeField] private float thumbnailRotation = -10f; // 缩略图容器旋转角度
         [SerializeField] private float thumbnailScale = 0.4f; // 缩略图缩放
         [SerializeField] private float thumbnailFanRadius = 80f; // 缩略图扇形半径
         [SerializeField] private float thumbnailFanAngle = 30f; // 缩略图扇形角度
@@ -107,28 +108,106 @@ namespace Cards.UI
         /// </summary>
         private void InitializeUIComponents()
         {
-            // 确保扇形展示容器存在
+            // 确保CardDisplayUI本身有RectTransform
+            RectTransform selfRect = GetComponent<RectTransform>();
+            if (selfRect == null)
+            {
+                selfRect = gameObject.AddComponent<RectTransform>();
+                selfRect.anchorMin = Vector2.zero;
+                selfRect.anchorMax = Vector2.one;
+                selfRect.sizeDelta = Vector2.zero;
+                selfRect.anchoredPosition = Vector2.zero;
+            }
+
+            // 确保扇形展示容器存在且正确配置
             if (fanDisplayContainer == null)
             {
                 GameObject container = new GameObject("FanDisplayContainer");
                 container.transform.SetParent(transform, false);
+
+                // 添加RectTransform组件
+                RectTransform containerRect = container.AddComponent<RectTransform>();
+                containerRect.anchorMin = Vector2.zero;
+                containerRect.anchorMax = Vector2.one;
+                containerRect.sizeDelta = Vector2.zero;
+                containerRect.anchoredPosition = Vector2.zero;
+
                 fanDisplayContainer = container.transform;
+                LogDebug($"创建扇形展示容器，父对象: {container.transform.parent?.name}");
             }
 
-            // 确保缩略图容器存在
+            // 确保缩略图容器存在且正确配置
             if (thumbnailContainer == null)
             {
                 GameObject thumbContainer = new GameObject("ThumbnailContainer");
                 thumbContainer.transform.SetParent(transform, false);
-                thumbnailContainer = thumbContainer.transform;
 
-                // 设置缩略图容器位置
+                // 设置缩略图容器的RectTransform
                 RectTransform thumbRect = thumbContainer.AddComponent<RectTransform>();
                 thumbRect.anchoredPosition = thumbnailPosition;
                 thumbRect.localScale = Vector3.one * thumbnailScale;
+                thumbRect.localEulerAngles = new Vector3(0, 0, thumbnailRotation); // 应用旋转
+                // 设置锚点和尺寸
+                thumbRect.anchorMin = Vector2.zero;
+                thumbRect.anchorMax = Vector2.zero;
+                thumbRect.sizeDelta = new Vector2(400, 300); // 给一个合理的尺寸
+
+                thumbnailContainer = thumbContainer.transform;
+                LogDebug($"创建缩略图容器，父对象: {thumbContainer.transform.parent?.name}, 位置: {thumbRect.anchoredPosition}, 旋转: {thumbRect.localEulerAngles.z}°");
             }
 
+            // 验证容器层级
+            ValidateContainerHierarchy();
+
             LogDebug("UI组件初始化完成");
+        }
+
+        /// <summary>
+        /// 验证容器层级是否正确
+        /// </summary>
+        private void ValidateContainerHierarchy()
+        {
+            // 检查CardDisplayUI的父对象
+            Transform parent = transform.parent;
+            Canvas parentCanvas = null;
+
+            // 向上查找Canvas
+            Transform current = parent;
+            while (current != null && parentCanvas == null)
+            {
+                parentCanvas = current.GetComponent<Canvas>();
+                current = current.parent;
+            }
+
+            if (parentCanvas != null)
+            {
+                LogDebug($"CardDisplayUI层级验证通过，Canvas: {parentCanvas.name}");
+            }
+            else
+            {
+                LogWarning("CardDisplayUI未找到父Canvas，可能会导致UI显示问题");
+            }
+
+            // 输出完整的层级路径
+            string hierarchyPath = GetHierarchyPath(transform);
+            LogDebug($"CardDisplayUI层级路径: {hierarchyPath}");
+        }
+
+        /// <summary>
+        /// 获取对象的层级路径
+        /// </summary>
+        private string GetHierarchyPath(Transform target)
+        {
+            string path = target.name;
+            Transform current = target.parent;
+
+            while (current != null)
+            {
+                path = current.name + "/" + path;
+                current = current.parent;
+            }
+
+            return path;
         }
 
         #endregion
