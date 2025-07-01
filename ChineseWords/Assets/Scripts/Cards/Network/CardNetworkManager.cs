@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.SceneManagement;
 using System;
 using System.Collections;
@@ -11,50 +11,50 @@ using Cards.Network;
 namespace Cards.Network
 {
     /// <summary>
-    /// ¿¨ÅÆÍøÂç¹ÜÀíÆ÷ - ÇáÁ¿»¯ĞŞ¸´°æ
-    /// ×¨ÃÅ´¦Àí¿¨ÅÆÏà¹ØµÄÍøÂçÍ¬²½£¬ÅäºÏCardSystemManager¹ÜÀí
-    /// ÒÆ³ıÑ­»·ÒÀÀµ£¬²ÉÓÃ±»¶¯³õÊ¼»¯Ä£Ê½
+    /// å¡ç‰Œç½‘ç»œç®¡ç†å™¨ - è½»é‡åŒ–ä¿®å¤ç‰ˆ
+    /// ä¸“é—¨å¤„ç†å¡ç‰Œç›¸å…³çš„ç½‘ç»œåŒæ­¥ï¼Œé…åˆCardSystemManagerç®¡ç†
+    /// ç§»é™¤å¾ªç¯ä¾èµ–ï¼Œé‡‡ç”¨è¢«åŠ¨åˆå§‹åŒ–æ¨¡å¼
     /// </summary>
     public class CardNetworkManager : MonoBehaviour
     {
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
         public static CardNetworkManager Instance { get; private set; }
 
-        // ³õÊ¼»¯×´Ì¬
+        // åˆå§‹åŒ–çŠ¶æ€
         private bool isInitialized = false;
 
-        #region ¿¨ÅÆÍøÂçÊÂ¼ş
+        #region å¡ç‰Œç½‘ç»œäº‹ä»¶
 
-        // ¿¨ÅÆÊ¹ÓÃÊÂ¼ş
-        public static event Action<ushort, int, ushort, string> OnCardUsed; // Ê¹ÓÃÕßID, ¿¨ÅÆID, Ä¿±êID, ¿¨ÅÆÃû³Æ
-        public static event Action<ushort, string> OnCardEffectTriggered; // Íæ¼ÒID, Ğ§¹ûÃèÊö
+        // å¡ç‰Œä½¿ç”¨äº‹ä»¶
+        public static event Action<ushort, int, ushort, string> OnCardUsed; // ä½¿ç”¨è€…ID, å¡ç‰ŒID, ç›®æ ‡ID, å¡ç‰Œåç§°
+        public static event Action<ushort, string> OnCardEffectTriggered; // ç©å®¶ID, æ•ˆæœæè¿°
 
-        // ¿¨ÅÆ×´Ì¬±ä¸üÊÂ¼ş
-        public static event Action<ushort, int> OnCardAdded; // Íæ¼ÒID, ¿¨ÅÆID
-        public static event Action<ushort, int> OnCardRemoved; // Íæ¼ÒID, ¿¨ÅÆID
-        public static event Action<ushort, int> OnHandSizeChanged; // Íæ¼ÒID, ĞÂÊÖÅÆÊıÁ¿
+        // å¡ç‰ŒçŠ¶æ€å˜æ›´äº‹ä»¶
+        public static event Action<ushort, int> OnCardAdded; // ç©å®¶ID, å¡ç‰ŒID
+        public static event Action<ushort, int> OnCardRemoved; // ç©å®¶ID, å¡ç‰ŒID
+        public static event Action<ushort, int> OnHandSizeChanged; // ç©å®¶ID, æ–°æ‰‹ç‰Œæ•°é‡
 
-        // ¿¨ÅÆÏûÏ¢ÊÂ¼ş
-        public static event Action<string, ushort> OnCardMessage; // ÏûÏ¢ÄÚÈİ, À´Ô´Íæ¼ÒID
-        public static event Action<ushort, int, ushort> OnCardTransferred; // ´ÓÍæ¼ÒID, ¿¨ÅÆID, µ½Íæ¼ÒID
+        // å¡ç‰Œæ¶ˆæ¯äº‹ä»¶
+        public static event Action<string, ushort> OnCardMessage; // æ¶ˆæ¯å†…å®¹, æ¥æºç©å®¶ID
+        public static event Action<ushort, int, ushort> OnCardTransferred; // ä»ç©å®¶ID, å¡ç‰ŒID, åˆ°ç©å®¶ID
 
         #endregion
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
-            // µ¥ÀıÉèÖÃ - Ö§³Ö³¡¾°Ô¤ÖÃºÍ³ÌĞò´´½¨Á½ÖÖ·½Ê½
+            // å•ä¾‹è®¾ç½® - æ”¯æŒåœºæ™¯é¢„ç½®å’Œç¨‹åºåˆ›å»ºä¸¤ç§æ–¹å¼
             if (Instance == null)
             {
                 Instance = this;
-                LogDebug("CardNetworkManagerÊµÀıÒÑ´´½¨");
+                LogDebug("CardNetworkManagerå®ä¾‹å·²åˆ›å»º");
             }
             else if (Instance != this)
             {
-                LogDebug("·¢ÏÖÖØ¸´µÄCardNetworkManagerÊµÀı£¬Ïú»Ùµ±Ç°ÊµÀı");
+                LogDebug("å‘ç°é‡å¤çš„CardNetworkManagerå®ä¾‹ï¼Œé”€æ¯å½“å‰å®ä¾‹");
                 Destroy(gameObject);
                 return;
             }
@@ -62,7 +62,7 @@ namespace Cards.Network
 
         private void OnDestroy()
         {
-            // ÇåÀíµ¥ÀıºÍÊÂ¼ş¶©ÔÄ
+            // æ¸…ç†å•ä¾‹å’Œäº‹ä»¶è®¢é˜…
             UnsubscribeFromNetworkEvents();
 
             if (Instance == this)
@@ -70,85 +70,85 @@ namespace Cards.Network
                 Instance = null;
             }
 
-            LogDebug("CardNetworkManagerÒÑÏú»Ù");
+            LogDebug("CardNetworkManagerå·²é”€æ¯");
         }
 
         #endregion
 
-        #region ³õÊ¼»¯½Ó¿Ú - ¹©CardSystemManagerµ÷ÓÃ
+        #region åˆå§‹åŒ–æ¥å£ - ä¾›CardSystemManagerè°ƒç”¨
 
         /// <summary>
-        /// ³õÊ¼»¯ÍøÂç¹ÜÀíÆ÷
-        /// ÓÉCardSystemManagerÔÚÊÊµ±Ê±»úµ÷ÓÃ
+        /// åˆå§‹åŒ–ç½‘ç»œç®¡ç†å™¨
+        /// ç”±CardSystemManageråœ¨é€‚å½“æ—¶æœºè°ƒç”¨
         /// </summary>
         public void Initialize()
         {
             if (isInitialized)
             {
-                LogDebug("CardNetworkManagerÒÑ¾­³õÊ¼»¯£¬Ìø¹ıÖØ¸´³õÊ¼»¯");
+                LogDebug("CardNetworkManagerå·²ç»åˆå§‹åŒ–ï¼Œè·³è¿‡é‡å¤åˆå§‹åŒ–");
                 return;
             }
 
-            LogDebug("¿ªÊ¼³õÊ¼»¯CardNetworkManager");
+            LogDebug("å¼€å§‹åˆå§‹åŒ–CardNetworkManager");
 
             try
             {
-                // ¶©ÔÄÍøÂçÊÂ¼ş
+                // è®¢é˜…ç½‘ç»œäº‹ä»¶
                 SubscribeToNetworkEvents();
 
                 isInitialized = true;
-                LogDebug("CardNetworkManager³õÊ¼»¯Íê³É");
+                LogDebug("CardNetworkManageråˆå§‹åŒ–å®Œæˆ");
             }
             catch (System.Exception e)
             {
-                LogError($"CardNetworkManager³õÊ¼»¯Ê§°Ü: {e.Message}");
+                LogError($"CardNetworkManageråˆå§‹åŒ–å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ÏµÍ³¾ÍĞ÷ºó¼ì²éÏÖÓĞÍæ¼Ò
-        /// ÓÉCardSystemManagerÔÚÍêÈ«³õÊ¼»¯ºóµ÷ÓÃ
+        /// ç³»ç»Ÿå°±ç»ªåæ£€æŸ¥ç°æœ‰ç©å®¶
+        /// ç”±CardSystemManageråœ¨å®Œå…¨åˆå§‹åŒ–åè°ƒç”¨
         /// </summary>
         public void CheckExistingPlayersAfterSystemReady()
         {
             if (!isInitialized)
             {
-                LogWarning("CardNetworkManagerÉĞÎ´³õÊ¼»¯£¬ÎŞ·¨¼ì²éÏÖÓĞÍæ¼Ò");
+                LogWarning("CardNetworkManagerå°šæœªåˆå§‹åŒ–ï¼Œæ— æ³•æ£€æŸ¥ç°æœ‰ç©å®¶");
                 return;
             }
 
-            LogDebug("ÏµÍ³¾ÍĞ÷ºó¼ì²éÏÖÓĞÍæ¼Ò");
+            LogDebug("ç³»ç»Ÿå°±ç»ªåæ£€æŸ¥ç°æœ‰ç©å®¶");
 
             try
             {
-                // Èç¹ûÒÑ¾­ÔÚ·¿¼äÖĞ£¬³õÊ¼»¯ÏÖÓĞÍæ¼Ò
+                // å¦‚æœå·²ç»åœ¨æˆ¿é—´ä¸­ï¼Œåˆå§‹åŒ–ç°æœ‰ç©å®¶
                 if (IsNetworkAvailable() && Photon.Pun.PhotonNetwork.InRoom)
                 {
-                    LogDebug("ÒÑÔÚ·¿¼äÖĞ£¬Í¨ÖªCardSystemManager³õÊ¼»¯Íæ¼Ò");
+                    LogDebug("å·²åœ¨æˆ¿é—´ä¸­ï¼Œé€šçŸ¥CardSystemManageråˆå§‹åŒ–ç©å®¶");
                     InitializeExistingPlayers();
                 }
                 else
                 {
-                    LogDebug("²»ÔÚ·¿¼äÖĞ»òÍøÂç²»¿ÉÓÃ");
+                    LogDebug("ä¸åœ¨æˆ¿é—´ä¸­æˆ–ç½‘ç»œä¸å¯ç”¨");
                 }
             }
             catch (System.Exception e)
             {
-                LogError($"¼ì²éÏÖÓĞÍæ¼ÒÊ§°Ü: {e.Message}");
+                LogError($"æ£€æŸ¥ç°æœ‰ç©å®¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñÒÑ³õÊ¼»¯
+        /// æ£€æŸ¥æ˜¯å¦å·²åˆå§‹åŒ–
         /// </summary>
         public bool IsInitialized => isInitialized;
 
         #endregion
 
-        #region ÍøÂçÊÂ¼ş¶©ÔÄ
+        #region ç½‘ç»œäº‹ä»¶è®¢é˜…
 
         /// <summary>
-        /// ¶©ÔÄÍøÂçÊÂ¼ş
+        /// è®¢é˜…ç½‘ç»œäº‹ä»¶
         /// </summary>
         private void SubscribeToNetworkEvents()
         {
@@ -156,25 +156,25 @@ namespace Cards.Network
             {
                 if (NetworkManager.Instance != null)
                 {
-                    // ¶©ÔÄÍæ¼Ò¼ÓÈë/Àë¿ªÊÂ¼ş
+                    // è®¢é˜…ç©å®¶åŠ å…¥/ç¦»å¼€äº‹ä»¶
                     NetworkManager.OnPlayerJoined += OnNetworkPlayerJoined;
                     NetworkManager.OnPlayerLeft += OnNetworkPlayerLeft;
 
-                    LogDebug("ÒÑ¶©ÔÄNetworkManagerÊÂ¼ş");
+                    LogDebug("å·²è®¢é˜…NetworkManageräº‹ä»¶");
                 }
                 else
                 {
-                    LogWarning("NetworkManager²»´æÔÚ£¬ÎŞ·¨¶©ÔÄÍøÂçÊÂ¼ş");
+                    LogWarning("NetworkManagerä¸å­˜åœ¨ï¼Œæ— æ³•è®¢é˜…ç½‘ç»œäº‹ä»¶");
                 }
             }
             catch (System.Exception e)
             {
-                LogError($"¶©ÔÄÍøÂçÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"è®¢é˜…ç½‘ç»œäº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄÍøÂçÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…ç½‘ç»œäº‹ä»¶
         /// </summary>
         private void UnsubscribeFromNetworkEvents()
         {
@@ -185,25 +185,25 @@ namespace Cards.Network
                     NetworkManager.OnPlayerJoined -= OnNetworkPlayerJoined;
                     NetworkManager.OnPlayerLeft -= OnNetworkPlayerLeft;
 
-                    LogDebug("ÒÑÈ¡Ïû¶©ÔÄNetworkManagerÊÂ¼ş");
+                    LogDebug("å·²å–æ¶ˆè®¢é˜…NetworkManageräº‹ä»¶");
                 }
             }
             catch (System.Exception e)
             {
-                LogError($"È¡Ïû¶©ÔÄÍøÂçÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å–æ¶ˆè®¢é˜…ç½‘ç»œäº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         #endregion
 
-        #region ÍøÂçÊÂ¼ş´¦Àí
+        #region ç½‘ç»œäº‹ä»¶å¤„ç†
 
         /// <summary>
-        /// ÍøÂçÍæ¼Ò¼ÓÈëÊÂ¼ş
+        /// ç½‘ç»œç©å®¶åŠ å…¥äº‹ä»¶
         /// </summary>
         private void OnNetworkPlayerJoined(ushort playerId)
         {
-            LogDebug($"Íæ¼Ò{playerId}¼ÓÈë£¬Í¨ÖªCardSystemManager");
+            LogDebug($"ç©å®¶{playerId}åŠ å…¥ï¼Œé€šçŸ¥CardSystemManager");
 
             if (CardSystemManager.Instance != null)
             {
@@ -211,16 +211,16 @@ namespace Cards.Network
             }
             else
             {
-                LogWarning("CardSystemManager²»¿ÉÓÃ£¬ÎŞ·¨´¦ÀíÍæ¼Ò¼ÓÈë");
+                LogWarning("CardSystemManagerä¸å¯ç”¨ï¼Œæ— æ³•å¤„ç†ç©å®¶åŠ å…¥");
             }
         }
 
         /// <summary>
-        /// ÍøÂçÍæ¼ÒÀë¿ªÊÂ¼ş
+        /// ç½‘ç»œç©å®¶ç¦»å¼€äº‹ä»¶
         /// </summary>
         private void OnNetworkPlayerLeft(ushort playerId)
         {
-            LogDebug($"Íæ¼Ò{playerId}Àë¿ª£¬Í¨ÖªCardSystemManager");
+            LogDebug($"ç©å®¶{playerId}ç¦»å¼€ï¼Œé€šçŸ¥CardSystemManager");
 
             if (CardSystemManager.Instance != null)
             {
@@ -228,12 +228,12 @@ namespace Cards.Network
             }
             else
             {
-                LogWarning("CardSystemManager²»¿ÉÓÃ£¬ÎŞ·¨´¦ÀíÍæ¼ÒÀë¿ª");
+                LogWarning("CardSystemManagerä¸å¯ç”¨ï¼Œæ— æ³•å¤„ç†ç©å®¶ç¦»å¼€");
             }
         }
 
         /// <summary>
-        /// ³õÊ¼»¯ÏÖÓĞÍæ¼Ò
+        /// åˆå§‹åŒ–ç°æœ‰ç©å®¶
         /// </summary>
         private void InitializeExistingPlayers()
         {
@@ -250,19 +250,19 @@ namespace Cards.Network
 
                     if (playerIds.Count > 0)
                     {
-                        LogDebug($"Í¨ÖªCardSystemManager³õÊ¼»¯{playerIds.Count}ÃûÏÖÓĞÍæ¼Ò");
+                        LogDebug($"é€šçŸ¥CardSystemManageråˆå§‹åŒ–{playerIds.Count}åç°æœ‰ç©å®¶");
                         CardSystemManager.Instance.OnGameStarted(playerIds);
                     }
                 }
             }
             catch (System.Exception e)
             {
-                LogError($"³õÊ¼»¯ÏÖÓĞÍæ¼ÒÊ§°Ü: {e.Message}");
+                LogError($"åˆå§‹åŒ–ç°æœ‰ç©å®¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¼ì²éÍøÂçÊÇ·ñ¿ÉÓÃ
+        /// æ£€æŸ¥ç½‘ç»œæ˜¯å¦å¯ç”¨
         /// </summary>
         private bool IsNetworkAvailable()
         {
@@ -271,31 +271,31 @@ namespace Cards.Network
 
         #endregion
 
-        #region ¿¨ÅÆÍøÂç¹ã²¥·½·¨
+        #region å¡ç‰Œç½‘ç»œå¹¿æ’­æ–¹æ³•
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆÊ¹ÓÃ
+        /// å¹¿æ’­å¡ç‰Œä½¿ç”¨
         /// </summary>
         public void BroadcastCardUsed(ushort playerId, int cardId, ushort targetPlayerId)
         {
             if (!CanSendRPC()) return;
 
-            // »ñÈ¡¿¨ÅÆÃû³Æ
+            // è·å–å¡ç‰Œåç§°
             string cardName = GetCardName(cardId);
 
             try
             {
                 NetworkManager.Instance.BroadcastCardUsed(playerId, cardId, targetPlayerId, cardName);
-                LogDebug($"¹ã²¥¿¨ÅÆÊ¹ÓÃ: Íæ¼Ò{playerId}Ê¹ÓÃ{cardName}(ID:{cardId}), Ä¿±ê:{targetPlayerId}");
+                LogDebug($"å¹¿æ’­å¡ç‰Œä½¿ç”¨: ç©å®¶{playerId}ä½¿ç”¨{cardName}(ID:{cardId}), ç›®æ ‡:{targetPlayerId}");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥¿¨ÅÆÊ¹ÓÃÊ§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­å¡ç‰Œä½¿ç”¨å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆĞ§¹û´¥·¢
+        /// å¹¿æ’­å¡ç‰Œæ•ˆæœè§¦å‘
         /// </summary>
         public void BroadcastCardEffectTriggered(ushort playerId, string effectDescription)
         {
@@ -304,16 +304,16 @@ namespace Cards.Network
             try
             {
                 NetworkManager.Instance.BroadcastCardEffectTriggered(playerId, effectDescription);
-                LogDebug($"¹ã²¥¿¨ÅÆĞ§¹û: Íæ¼Ò{playerId} - {effectDescription}");
+                LogDebug($"å¹¿æ’­å¡ç‰Œæ•ˆæœ: ç©å®¶{playerId} - {effectDescription}");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥¿¨ÅÆĞ§¹ûÊ§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­å¡ç‰Œæ•ˆæœå¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆÌí¼Ó
+        /// å¹¿æ’­å¡ç‰Œæ·»åŠ 
         /// </summary>
         public void BroadcastCardAdded(ushort playerId, int cardId)
         {
@@ -322,16 +322,16 @@ namespace Cards.Network
             try
             {
                 NetworkManager.Instance.BroadcastCardAdded(playerId, cardId);
-                LogDebug($"¹ã²¥¿¨ÅÆÌí¼Ó: Íæ¼Ò{playerId}»ñµÃ¿¨ÅÆ{cardId}");
+                LogDebug($"å¹¿æ’­å¡ç‰Œæ·»åŠ : ç©å®¶{playerId}è·å¾—å¡ç‰Œ{cardId}");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥¿¨ÅÆÌí¼ÓÊ§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­å¡ç‰Œæ·»åŠ å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆÒÆ³ı
+        /// å¹¿æ’­å¡ç‰Œç§»é™¤
         /// </summary>
         public void BroadcastCardRemoved(ushort playerId, int cardId)
         {
@@ -340,16 +340,16 @@ namespace Cards.Network
             try
             {
                 NetworkManager.Instance.BroadcastCardRemoved(playerId, cardId);
-                LogDebug($"¹ã²¥¿¨ÅÆÒÆ³ı: Íæ¼Ò{playerId}Ê§È¥¿¨ÅÆ{cardId}");
+                LogDebug($"å¹¿æ’­å¡ç‰Œç§»é™¤: ç©å®¶{playerId}å¤±å»å¡ç‰Œ{cardId}");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥¿¨ÅÆÒÆ³ıÊ§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­å¡ç‰Œç§»é™¤å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥ÊÖÅÆÊıÁ¿±ä»¯
+        /// å¹¿æ’­æ‰‹ç‰Œæ•°é‡å˜åŒ–
         /// </summary>
         public void BroadcastHandSizeChanged(ushort playerId, int newHandSize)
         {
@@ -358,16 +358,16 @@ namespace Cards.Network
             try
             {
                 NetworkManager.Instance.BroadcastHandSizeChanged(playerId, newHandSize);
-                LogDebug($"¹ã²¥ÊÖÅÆ±ä»¯: Íæ¼Ò{playerId}ÊÖÅÆÊıÁ¿:{newHandSize}");
+                LogDebug($"å¹¿æ’­æ‰‹ç‰Œå˜åŒ–: ç©å®¶{playerId}æ‰‹ç‰Œæ•°é‡:{newHandSize}");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥ÊÖÅÆ±ä»¯Ê§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­æ‰‹ç‰Œå˜åŒ–å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆÏûÏ¢
+        /// å¹¿æ’­å¡ç‰Œæ¶ˆæ¯
         /// </summary>
         public void BroadcastCardMessage(string message, ushort fromPlayerId)
         {
@@ -376,16 +376,16 @@ namespace Cards.Network
             try
             {
                 NetworkManager.Instance.BroadcastCardMessage(message, fromPlayerId);
-                LogDebug($"¹ã²¥¿¨ÅÆÏûÏ¢: {message} (À´×ÔÍæ¼Ò{fromPlayerId})");
+                LogDebug($"å¹¿æ’­å¡ç‰Œæ¶ˆæ¯: {message} (æ¥è‡ªç©å®¶{fromPlayerId})");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥¿¨ÅÆÏûÏ¢Ê§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­å¡ç‰Œæ¶ˆæ¯å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆ×ªÒÆ
+        /// å¹¿æ’­å¡ç‰Œè½¬ç§»
         /// </summary>
         public void BroadcastCardTransferred(ushort fromPlayerId, int cardId, ushort toPlayerId)
         {
@@ -394,24 +394,24 @@ namespace Cards.Network
             try
             {
                 NetworkManager.Instance.BroadcastCardTransferred(fromPlayerId, cardId, toPlayerId);
-                LogDebug($"¹ã²¥¿¨ÅÆ×ªÒÆ: ¿¨ÅÆ{cardId}´ÓÍæ¼Ò{fromPlayerId}×ªÒÆµ½Íæ¼Ò{toPlayerId}");
+                LogDebug($"å¹¿æ’­å¡ç‰Œè½¬ç§»: å¡ç‰Œ{cardId}ä»ç©å®¶{fromPlayerId}è½¬ç§»åˆ°ç©å®¶{toPlayerId}");
             }
             catch (System.Exception e)
             {
-                LogError($"¹ã²¥¿¨ÅÆ×ªÒÆÊ§°Ü: {e.Message}");
+                LogError($"å¹¿æ’­å¡ç‰Œè½¬ç§»å¤±è´¥: {e.Message}");
             }
         }
 
         #endregion
 
-        #region RPC½ÓÊÕ·½·¨ - ¹©NetworkManagerµ÷ÓÃ
+        #region RPCæ¥æ”¶æ–¹æ³• - ä¾›NetworkManagerè°ƒç”¨
 
         /// <summary>
-        /// ½ÓÊÕ¿¨ÅÆÊ¹ÓÃÊÂ¼ş
+        /// æ¥æ”¶å¡ç‰Œä½¿ç”¨äº‹ä»¶
         /// </summary>
         public void OnCardUsedReceived(ushort playerId, int cardId, ushort targetPlayerId, string cardName)
         {
-            LogDebug($"½ÓÊÕ¿¨ÅÆÊ¹ÓÃ: Íæ¼Ò{playerId}Ê¹ÓÃ{cardName}, Ä¿±ê:{targetPlayerId}");
+            LogDebug($"æ¥æ”¶å¡ç‰Œä½¿ç”¨: ç©å®¶{playerId}ä½¿ç”¨{cardName}, ç›®æ ‡:{targetPlayerId}");
 
             try
             {
@@ -419,16 +419,16 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦Àí¿¨ÅÆÊ¹ÓÃÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†å¡ç‰Œä½¿ç”¨äº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕ¿¨ÅÆĞ§¹û´¥·¢ÊÂ¼ş
+        /// æ¥æ”¶å¡ç‰Œæ•ˆæœè§¦å‘äº‹ä»¶
         /// </summary>
         public void OnCardEffectTriggeredReceived(ushort playerId, string effectDescription)
         {
-            LogDebug($"½ÓÊÕ¿¨ÅÆĞ§¹û: Íæ¼Ò{playerId} - {effectDescription}");
+            LogDebug($"æ¥æ”¶å¡ç‰Œæ•ˆæœ: ç©å®¶{playerId} - {effectDescription}");
 
             try
             {
@@ -436,16 +436,16 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦Àí¿¨ÅÆĞ§¹ûÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†å¡ç‰Œæ•ˆæœäº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕ¿¨ÅÆÌí¼ÓÊÂ¼ş
+        /// æ¥æ”¶å¡ç‰Œæ·»åŠ äº‹ä»¶
         /// </summary>
         public void OnCardAddedReceived(ushort playerId, int cardId)
         {
-            LogDebug($"½ÓÊÕ¿¨ÅÆÌí¼Ó: Íæ¼Ò{playerId}»ñµÃ¿¨ÅÆ{cardId}");
+            LogDebug($"æ¥æ”¶å¡ç‰Œæ·»åŠ : ç©å®¶{playerId}è·å¾—å¡ç‰Œ{cardId}");
 
             try
             {
@@ -453,16 +453,16 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦Àí¿¨ÅÆÌí¼ÓÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†å¡ç‰Œæ·»åŠ äº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕ¿¨ÅÆÒÆ³ıÊÂ¼ş
+        /// æ¥æ”¶å¡ç‰Œç§»é™¤äº‹ä»¶
         /// </summary>
         public void OnCardRemovedReceived(ushort playerId, int cardId)
         {
-            LogDebug($"½ÓÊÕ¿¨ÅÆÒÆ³ı: Íæ¼Ò{playerId}Ê§È¥¿¨ÅÆ{cardId}");
+            LogDebug($"æ¥æ”¶å¡ç‰Œç§»é™¤: ç©å®¶{playerId}å¤±å»å¡ç‰Œ{cardId}");
 
             try
             {
@@ -470,16 +470,16 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦Àí¿¨ÅÆÒÆ³ıÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†å¡ç‰Œç§»é™¤äº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕÊÖÅÆÊıÁ¿±ä»¯ÊÂ¼ş
+        /// æ¥æ”¶æ‰‹ç‰Œæ•°é‡å˜åŒ–äº‹ä»¶
         /// </summary>
         public void OnHandSizeChangedReceived(ushort playerId, int newHandSize)
         {
-            LogDebug($"½ÓÊÕÊÖÅÆ±ä»¯: Íæ¼Ò{playerId}ÊÖÅÆÊıÁ¿:{newHandSize}");
+            LogDebug($"æ¥æ”¶æ‰‹ç‰Œå˜åŒ–: ç©å®¶{playerId}æ‰‹ç‰Œæ•°é‡:{newHandSize}");
 
             try
             {
@@ -487,16 +487,16 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦ÀíÊÖÅÆ±ä»¯ÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†æ‰‹ç‰Œå˜åŒ–äº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕ¿¨ÅÆÏûÏ¢ÊÂ¼ş
+        /// æ¥æ”¶å¡ç‰Œæ¶ˆæ¯äº‹ä»¶
         /// </summary>
         public void OnCardMessageReceived(string message, ushort fromPlayerId)
         {
-            LogDebug($"½ÓÊÕ¿¨ÅÆÏûÏ¢: {message} (À´×ÔÍæ¼Ò{fromPlayerId})");
+            LogDebug($"æ¥æ”¶å¡ç‰Œæ¶ˆæ¯: {message} (æ¥è‡ªç©å®¶{fromPlayerId})");
 
             try
             {
@@ -504,16 +504,16 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦Àí¿¨ÅÆÏûÏ¢ÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†å¡ç‰Œæ¶ˆæ¯äº‹ä»¶å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ½ÓÊÕ¿¨ÅÆ×ªÒÆÊÂ¼ş
+        /// æ¥æ”¶å¡ç‰Œè½¬ç§»äº‹ä»¶
         /// </summary>
         public void OnCardTransferredReceived(ushort fromPlayerId, int cardId, ushort toPlayerId)
         {
-            LogDebug($"½ÓÊÕ¿¨ÅÆ×ªÒÆ: ¿¨ÅÆ{cardId}´ÓÍæ¼Ò{fromPlayerId}×ªÒÆµ½Íæ¼Ò{toPlayerId}");
+            LogDebug($"æ¥æ”¶å¡ç‰Œè½¬ç§»: å¡ç‰Œ{cardId}ä»ç©å®¶{fromPlayerId}è½¬ç§»åˆ°ç©å®¶{toPlayerId}");
 
             try
             {
@@ -521,34 +521,68 @@ namespace Cards.Network
             }
             catch (System.Exception e)
             {
-                LogError($"´¦Àí¿¨ÅÆ×ªÒÆÊÂ¼şÊ§°Ü: {e.Message}");
+                LogError($"å¤„ç†å¡ç‰Œè½¬ç§»äº‹ä»¶å¤±è´¥: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// å¤„ç†ä»NetworkManagerè½¬å‘çš„æ‰‹ç‰Œåˆ†å‘æ•°æ®
+        /// </summary>
+        public void OnHandCardsDistributionReceived(ushort playerId, List<int> cardIds)
+        {
+            LogDebug($"å¤„ç†ç©å®¶{playerId}çš„æ‰‹ç‰Œåˆ†å‘: {cardIds.Count}å¼ å¡ç‰Œ");
+
+            // éªŒè¯æ˜¯å¦ä¸ºæœ¬åœ°ç©å®¶
+            if (playerId != NetworkManager.Instance.ClientId)
+            {
+                LogDebug($"å¿½ç•¥å…¶ä»–ç©å®¶{playerId}çš„æ‰‹ç‰Œæ•°æ®ï¼ˆæœ¬åœ°ç©å®¶: {NetworkManager.Instance.ClientId}ï¼‰");
+                return;
+            }
+
+            // è½¬å‘ç»™PlayerCardManagerå¤„ç†
+            if (PlayerCardManager.Instance != null)
+            {
+                bool success = PlayerCardManager.Instance.ReceiveHostDistributedCards((int)playerId, cardIds);
+
+                if (success)
+                {
+                    LogDebug($"âœ“ ç©å®¶{playerId}æˆåŠŸæ¥æ”¶{cardIds.Count}å¼ æ‰‹ç‰Œ");
+                }
+                else
+                {
+                    LogDebug($"âœ— ç©å®¶{playerId}æ‰‹ç‰Œæ¥æ”¶å¤±è´¥");
+                }
+            }
+            else
+            {
+                Debug.LogError("[CardNetworkManager] PlayerCardManagerå®ä¾‹ä¸å­˜åœ¨");
             }
         }
 
         #endregion
 
-        #region ¹«¹²½Ó¿Ú·½·¨
+        #region å…¬å…±æ¥å£æ–¹æ³•
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñ¿ÉÒÔ·¢ËÍRPC
+        /// æ£€æŸ¥æ˜¯å¦å¯ä»¥å‘é€RPC
         /// </summary>
         public bool CanSendRPC()
         {
             if (NetworkManager.Instance == null)
             {
-                LogDebug("NetworkManager²»´æÔÚ£¬ÎŞ·¨·¢ËÍRPC");
+                LogDebug("NetworkManagerä¸å­˜åœ¨ï¼Œæ— æ³•å‘é€RPC");
                 return false;
             }
 
             if (!NetworkManager.Instance.IsHost)
             {
-                //LogDebug("²»ÊÇHost£¬ÎŞ·¨·¢ËÍRPC");
+                //LogDebug("ä¸æ˜¯Hostï¼Œæ— æ³•å‘é€RPC");
                 return false;
             }
 
             if (!Photon.Pun.PhotonNetwork.InRoom)
             {
-                LogDebug("²»ÔÚ·¿¼äÖĞ£¬ÎŞ·¨·¢ËÍRPC");
+                LogDebug("ä¸åœ¨æˆ¿é—´ä¸­ï¼Œæ— æ³•å‘é€RPC");
                 return false;
             }
 
@@ -557,10 +591,10 @@ namespace Cards.Network
 
         #endregion
 
-        #region ¸¨Öú·½·¨
+        #region è¾…åŠ©æ–¹æ³•
 
         /// <summary>
-        /// »ñÈ¡¿¨ÅÆÃû³Æ
+        /// è·å–å¡ç‰Œåç§°
         /// </summary>
         private string GetCardName(int cardId)
         {
@@ -569,15 +603,15 @@ namespace Cards.Network
                 if (Cards.Integration.CardGameBridge.Instance != null)
                 {
                     var cardData = Cards.Integration.CardGameBridge.GetCardDataById(cardId);
-                    return cardData?.cardName ?? $"¿¨ÅÆ{cardId}";
+                    return cardData?.cardName ?? $"å¡ç‰Œ{cardId}";
                 }
             }
             catch (System.Exception e)
             {
-                LogDebug($"»ñÈ¡¿¨ÅÆÃû³ÆÊ§°Ü: {e.Message}");
+                LogDebug($"è·å–å¡ç‰Œåç§°å¤±è´¥: {e.Message}");
             }
 
-            return $"¿¨ÅÆ{cardId}";
+            return $"å¡ç‰Œ{cardId}";
         }
 
         private void LogDebug(string message)

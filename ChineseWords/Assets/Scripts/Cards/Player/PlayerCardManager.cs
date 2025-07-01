@@ -10,10 +10,11 @@ using System;
 namespace Cards.Player
 {
     /// <summary>
-    /// 玩家卡牌管理器（更新版）
+    /// 玩家卡牌管理器（修改版 - 支持Host分发手牌）
     /// 负责管理每个玩家的卡牌状态、使用权限、手牌操作等
     /// 与现有游戏系统集成，实现个人回合制的卡牌机制
     /// 支持新的12张卡牌系统
+    /// 移除本地手牌生成，改为接收Host分发的手牌
     /// </summary>
     public class PlayerCardManager : MonoBehaviour
     {
@@ -183,7 +184,7 @@ namespace Cards.Player
         #region 玩家管理
 
         /// <summary>
-        /// 初始化玩家卡牌状态
+        /// 初始化玩家卡牌状态（修改版 - 不再分发初始手牌）
         /// </summary>
         public void InitializePlayer(int playerId, string playerName = "")
         {
@@ -199,7 +200,7 @@ namespace Cards.Player
                 return;
             }
 
-            // 创建增强的玩家卡牌状态
+            // 创建增强的玩家卡牌状态，但不分发初始手牌
             var cardState = new EnhancedPlayerCardState(maxHandSize, cardConfig.DrawSettings)
             {
                 playerId = playerId,
@@ -208,30 +209,79 @@ namespace Cards.Player
             };
 
             // 建立手牌变化事件连接
-            cardState.OnHandSizeChanged += (pId, newSize) => {
+            cardState.OnHandSizeChanged += (pId, newSize) =>
+            {
                 LogDebug($"玩家 {pId} 手牌数量变化: {newSize}");
                 OnHandSizeChanged?.Invoke(pId, newSize);
             };
 
-            // 给玩家初始卡牌
-            for (int i = 0; i < initialCardCount; i++)
+            playerCardStates[playerId] = cardState;
+
+            LogDebug($"玩家 {playerId} 卡牌状态初始化完成 - 等待Host分发手牌");
+        }
+
+        /// <summary>
+        /// 接收Host分发的手牌（新增方法）
+        /// </summary>
+        public bool ReceiveHostDistributedCards(int playerId, List<int> cardIds)
+        {
+            if (!isInitialized)
             {
-                var randomCard = DrawRandomCard();
-                if (randomCard != null && cardState.CanAddSpecificCard(randomCard.cardId))
+                Debug.LogWarning("[PlayerCardManager] 管理器未初始化，无法接收手牌");
+                return false;
+            }
+
+            if (!playerCardStates.ContainsKey(playerId))
+            {
+                Debug.LogWarning($"[PlayerCardManager] 玩家 {playerId} 的卡牌状态不存在");
+                return false;
+            }
+
+            if (cardIds == null || cardIds.Count == 0)
+            {
+                Debug.LogWarning($"[PlayerCardManager] 玩家 {playerId} 收到空的手牌数据");
+                return false;
+            }
+
+            var cardState = playerCardStates[playerId];
+
+            // 验证手牌数据的有效性
+            foreach (var cardId in cardIds)
+            {
+                var cardData = cardConfig.GetCardById(cardId);
+                if (cardData == null)
                 {
-                    cardState.AddCard(randomCard.cardId);
-
-                    LogDebug($"为玩家 {playerId} 添加初始卡牌: {randomCard.cardName}");
-
-                    // 触发卡牌获得事件
-                    OnCardAcquired?.Invoke(playerId, randomCard.cardId, randomCard.cardName);
-                    CardEvents.OnCardAddedToHand?.Invoke(playerId, randomCard.cardId);
+                    Debug.LogError($"[PlayerCardManager] 无效的卡牌ID: {cardId}");
+                    return false;
                 }
             }
 
-            playerCardStates[playerId] = cardState;
+            // 清空现有手牌（如果有的话）
+            cardState.ClearHand();
 
-            LogDebug($"玩家 {playerId} 卡牌状态初始化完成 - 初始卡牌数: {cardState.HandCount}");
+            // 添加Host分发的手牌
+            int successCount = 0;
+            foreach (var cardId in cardIds)
+            {
+                if (cardState.AddCard(cardId))
+                {
+                    var cardData = cardConfig.GetCardById(cardId);
+                    successCount++;
+
+                    LogDebug($"玩家 {playerId} 收到手牌: {cardData?.cardName} (ID: {cardId})");
+
+                    // 触发卡牌获得事件
+                    OnCardAcquired?.Invoke(playerId, cardId, cardData?.cardName ?? "未知卡牌");
+                    CardEvents.OnCardAddedToHand?.Invoke(playerId, cardId);
+                }
+                else
+                {
+                    Debug.LogWarning($"[PlayerCardManager] 玩家 {playerId} 无法添加卡牌 {cardId}");
+                }
+            }
+
+            LogDebug($"玩家 {playerId} 成功接收 {successCount}/{cardIds.Count} 张手牌");
+            return successCount == cardIds.Count;
         }
 
         /// <summary>
@@ -396,10 +446,6 @@ namespace Cards.Player
         /// <summary>
         /// 给玩家添加卡牌（更新版 - 支持多张卡牌）
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
-        /// <param name="cardId">卡牌ID（0表示随机获得）</param>
-        /// <param name="count">获得数量（默认1张）</param>
-        /// <returns>是否成功添加</returns>
         public bool GiveCardToPlayer(int playerId, int cardId = 0, int count = 1)
         {
             if (!playerCardStates.ContainsKey(playerId))
@@ -528,18 +574,14 @@ namespace Cards.Player
         /// <summary>
         /// 设置当前回合玩家
         /// </summary>
-        /// <param name="playerId">当前回合玩家ID</param>
         public void SetCurrentTurnPlayer(int playerId)
         {
             currentTurnPlayerId = playerId;
-            LogDebug($"当前回合玩家设置为: {playerId}");
         }
 
         /// <summary>
         /// 重置玩家的卡牌使用机会（个人回合制）
-        /// 应在玩家答题完成后调用
         /// </summary>
-        /// <param name="playerId">玩家ID</param>
         public void ResetPlayerUsageOpportunity(int playerId)
         {
             if (!playerCardStates.ContainsKey(playerId))
@@ -558,17 +600,6 @@ namespace Cards.Player
             CardEvents.OnPlayerCardUsageReset?.Invoke(playerId);
         }
 
-        /// <summary>
-        /// 重置所有玩家的卡牌使用机会
-        /// </summary>
-        public void ResetAllPlayersUsageOpportunity()
-        {
-            foreach (var playerId in playerCardStates.Keys.ToList())
-            {
-                ResetPlayerUsageOpportunity(playerId);
-            }
-            LogDebug("所有玩家的卡牌使用机会已重置");
-        }
 
         #endregion
 
@@ -586,25 +617,6 @@ namespace Cards.Player
             return new List<int>();
         }
 
-        /// <summary>
-        /// 获取玩家手牌的CardData列表
-        /// </summary>
-        public List<CardData> GetPlayerHandCards(int playerId)
-        {
-            var handCardIds = GetPlayerHand(playerId);
-            var handCards = new List<CardData>();
-
-            foreach (var cardId in handCardIds)
-            {
-                var cardData = cardConfig.GetCardById(cardId);
-                if (cardData != null)
-                {
-                    handCards.Add(cardData);
-                }
-            }
-
-            return handCards;
-        }
 
         /// <summary>
         /// 检查玩家是否可以使用卡牌
@@ -664,7 +676,6 @@ namespace Cards.Player
                 return Cards.Integration.CardGameBridge.IsPlayerAlive(playerId);
             }
 
-            // 兜底：假设玩家存活（在没有CardGameBridge的情况下）
             return true;
         }
 
@@ -689,7 +700,6 @@ namespace Cards.Player
 
         /// <summary>
         /// 答题完成后的回调（集成点）
-        /// 应该在HostGameManager.HandlePlayerAnswer中调用
         /// </summary>
         public void OnPlayerAnswerCompleted(int playerId)
         {
@@ -714,45 +724,6 @@ namespace Cards.Player
                 summaries[playerId] = GetPlayerCardSummary(playerId);
             }
             return summaries;
-        }
-
-        /// <summary>
-        /// 强制给玩家添加指定卡牌（调试用）
-        /// </summary>
-        public bool ForceGiveCard(int playerId, int cardId)
-        {
-            LogDebug($"[调试] 强制给玩家 {playerId} 添加卡牌: {cardId}");
-            return GiveCardToPlayer(playerId, cardId);
-        }
-
-        /// <summary>
-        /// 获取系统状态信息（调试用）
-        /// </summary>
-        public string GetSystemStatus()
-        {
-            var status = "=== PlayerCardManager状态 ===\n";
-            status += $"初始化状态: {isInitialized}\n";
-            status += $"玩家数量: {playerCardStates.Count}\n";
-            status += $"当前回合玩家: {currentTurnPlayerId}\n";
-            status += $"最大手牌数: {maxHandSize}\n";
-            status += $"初始卡牌数: {initialCardCount}\n";
-            status += $"网络同步: {enableNetworkSync}\n";
-
-            if (cardConfig != null)
-            {
-                status += $"卡牌配置: {cardConfig.AllCards.Count}张卡牌\n";
-            }
-
-            if (Cards.Integration.CardGameBridge.Instance != null)
-            {
-                status += "CardGameBridge: 已连接\n";
-            }
-            else
-            {
-                status += "CardGameBridge: 未连接\n";
-            }
-
-            return status;
         }
 
         /// <summary>
@@ -895,6 +866,22 @@ namespace Cards.Player
         }
 
         /// <summary>
+        /// 清空手牌（新增方法 - 用于接收Host分发的手牌前清理）
+        /// </summary>
+        public void ClearHand()
+        {
+            int oldHandSize = handCards.Count;
+            handCards.Clear();
+            int newHandSize = handCards.Count;
+
+            // 触发手牌数量变化事件
+            if (newHandSize != oldHandSize)
+            {
+                OnHandSizeChanged?.Invoke(playerId, newHandSize);
+            }
+        }
+
+        /// <summary>
         /// 检查是否拥有指定卡牌
         /// </summary>
         public bool HasCard(int cardId)
@@ -918,6 +905,6 @@ namespace Cards.Player
             return handCards.Count(id => id == cardId);
         }
     }
+}
 
     #endregion
-}

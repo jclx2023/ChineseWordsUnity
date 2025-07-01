@@ -27,7 +27,8 @@ namespace Cards.UI
         [SerializeField] private Transform fanDisplayContainer; // 扇形展示容器
         [SerializeField] private float fanRadius = 400f; // 扇形半径
         [SerializeField] private float fanAngleSpread = 60f; // 扇形角度范围
-        [SerializeField] private Vector2 fanCenter = new Vector2(0f, -200f); // 扇形中心点
+        [SerializeField] private float bottomMargin = 150f; // 距离屏幕底部的边距
+        [SerializeField] private float cardHeight = 200f; // 卡牌高度（用于计算位置）
 
         [Header("悬停交互设置")]
         [SerializeField] private float hoverScale = 1.2f; // 悬停时的放大倍数
@@ -61,6 +62,9 @@ namespace Cards.UI
         private GameObject hoveredCard = null;
         private Coroutine transitionCoroutine = null;
         private Coroutine hoverCoroutine = null;
+
+        // 动态计算的扇形中心点
+        private Vector2 dynamicFanCenter;
 
         // 初始化状态
         private bool isInitialized = false;
@@ -119,7 +123,6 @@ namespace Cards.UI
                 selfRect.anchoredPosition = Vector2.zero;
             }
 
-            // 确保扇形展示容器存在且正确配置
             if (fanDisplayContainer == null)
             {
                 GameObject container = new GameObject("FanDisplayContainer");
@@ -133,10 +136,8 @@ namespace Cards.UI
                 containerRect.anchoredPosition = Vector2.zero;
 
                 fanDisplayContainer = container.transform;
-                LogDebug($"创建扇形展示容器，父对象: {container.transform.parent?.name}");
             }
 
-            // 确保缩略图容器存在且正确配置
             if (thumbnailContainer == null)
             {
                 GameObject thumbContainer = new GameObject("ThumbnailContainer");
@@ -153,7 +154,6 @@ namespace Cards.UI
                 thumbRect.sizeDelta = new Vector2(400, 300); // 给一个合理的尺寸
 
                 thumbnailContainer = thumbContainer.transform;
-                LogDebug($"创建缩略图容器，父对象: {thumbContainer.transform.parent?.name}, 位置: {thumbRect.anchoredPosition}, 旋转: {thumbRect.localEulerAngles.z}°");
             }
 
             // 验证容器层级
@@ -167,7 +167,6 @@ namespace Cards.UI
         /// </summary>
         private void ValidateContainerHierarchy()
         {
-            // 检查CardDisplayUI的父对象
             Transform parent = transform.parent;
             Canvas parentCanvas = null;
 
@@ -178,7 +177,6 @@ namespace Cards.UI
                 parentCanvas = current.GetComponent<Canvas>();
                 current = current.parent;
             }
-
             if (parentCanvas != null)
             {
                 LogDebug($"CardDisplayUI层级验证通过，Canvas: {parentCanvas.name}");
@@ -187,29 +185,7 @@ namespace Cards.UI
             {
                 LogWarning("CardDisplayUI未找到父Canvas，可能会导致UI显示问题");
             }
-
-            // 输出完整的层级路径
-            string hierarchyPath = GetHierarchyPath(transform);
-            LogDebug($"CardDisplayUI层级路径: {hierarchyPath}");
         }
-
-        /// <summary>
-        /// 获取对象的层级路径
-        /// </summary>
-        private string GetHierarchyPath(Transform target)
-        {
-            string path = target.name;
-            Transform current = target.parent;
-
-            while (current != null)
-            {
-                path = current.name + "/" + path;
-                current = current.parent;
-            }
-
-            return path;
-        }
-
         #endregion
 
         #region 状态管理
@@ -310,6 +286,9 @@ namespace Cards.UI
             }
 
             LogDebug($"开始显示扇形展示，卡牌数量: {cardDataList.Count}");
+
+            // 计算动态扇形中心（自适应屏幕底部）
+            CalculateDynamicFanCenter();
 
             // 创建卡牌UI
             CreateCardUIs(cardDataList);
@@ -413,7 +392,7 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 隐藏卡牌显示（兼容接口，实际上是强制回到缩略图状态）
+        /// 隐藏卡牌显示
         /// </summary>
         public void HideCardDisplay()
         {
@@ -422,7 +401,7 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 显示卡牌显示（兼容接口，实际上是刷新缩略图）
+        /// 显示卡牌显示
         /// </summary>
         public void ShowCardDisplay(List<CardDisplayData> cardDataList)
         {
@@ -454,6 +433,61 @@ namespace Cards.UI
 
             // 恢复摄像机控制
             SetCameraControl(true);
+        }
+
+        #endregion
+
+        #region 动态位置计算
+
+        /// <summary>
+        /// 计算动态扇形中心点（自适应屏幕底部）
+        /// </summary>
+        private void CalculateDynamicFanCenter()
+        {
+            // 获取Canvas的RectTransform
+            RectTransform canvasRect = GetCanvasRectTransform();
+            if (canvasRect == null)
+            {
+                LogWarning("无法获取Canvas RectTransform，使用默认位置");
+                dynamicFanCenter = new Vector2(0f, -200f);
+                return;
+            }
+
+            // 获取屏幕尺寸（在Canvas坐标系中）
+            Rect canvasSize = canvasRect.rect;
+            float screenWidth = canvasSize.width;
+            float screenHeight = canvasSize.height;
+
+            // 计算扇形中心位置
+            // X轴：屏幕中央
+            float centerX = 0f;
+
+            // Y轴：从屏幕底部向上偏移（底部边距 + 卡牌高度的一半 + 扇形半径的部分）
+            // 注意：Canvas坐标系中，屏幕底部是负值
+            float centerY = -screenHeight / 2f + bottomMargin + cardHeight / 2f;
+
+            dynamicFanCenter = new Vector2(centerX, centerY);
+
+            LogDebug($"动态计算扇形中心: {dynamicFanCenter}, 屏幕尺寸: {screenWidth}x{screenHeight}");
+        }
+
+        /// <summary>
+        /// 获取Canvas的RectTransform
+        /// </summary>
+        private RectTransform GetCanvasRectTransform()
+        {
+            // 向上查找Canvas
+            Transform current = transform;
+            while (current != null)
+            {
+                Canvas canvas = current.GetComponent<Canvas>();
+                if (canvas != null)
+                {
+                    return canvas.GetComponent<RectTransform>();
+                }
+                current = current.parent;
+            }
+            return null;
         }
 
         #endregion
@@ -635,10 +669,10 @@ namespace Cards.UI
                 float angle = startAngle + (angleStep * i);
                 float radians = angle * Mathf.Deg2Rad;
 
-                // 计算位置
+                // 使用动态计算的扇形中心
                 Vector3 position = new Vector3(
-                    fanCenter.x + Mathf.Sin(radians) * fanRadius,
-                    fanCenter.y + Mathf.Cos(radians) * fanRadius,
+                    dynamicFanCenter.x + Mathf.Sin(radians) * fanRadius,
+                    dynamicFanCenter.y + Mathf.Cos(radians) * fanRadius,
                     0f
                 );
 
@@ -649,7 +683,7 @@ namespace Cards.UI
                 fanRotations.Add(rotation);
             }
 
-            LogDebug($"计算了 {cardCount} 张卡牌的扇形位置");
+            LogDebug($"计算了 {cardCount} 张卡牌的扇形位置，中心点: {dynamicFanCenter}");
         }
 
         /// <summary>
@@ -1007,8 +1041,6 @@ namespace Cards.UI
         /// </summary>
         private void DisableAllInteractions()
         {
-            // 可以在这里添加禁用交互的逻辑
-            // 例如设置CanvasGroup的interactable = false
             LogDebug("禁用所有交互");
         }
 

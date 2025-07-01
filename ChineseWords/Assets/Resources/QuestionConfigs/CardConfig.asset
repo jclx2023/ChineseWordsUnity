@@ -50,7 +50,7 @@ MonoBehaviour:
     drawWeight: 8
     effectValue: 2
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 1
   - cardId: 4
     cardName: "\u518D\u60F3\u60F3"
@@ -76,7 +76,7 @@ MonoBehaviour:
     drawWeight: 5
     effectValue: 1
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 0, g: 1, b: 1, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 0
   - cardId: 6
     cardName: "\u5224\u65AD\u9898"
@@ -102,7 +102,7 @@ MonoBehaviour:
     drawWeight: 6
     effectValue: 1
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 0, g: 1, b: 0, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 1
   - cardId: 8
     cardName: "\u8BFE\u5916\u8865\u4E60"
@@ -115,7 +115,7 @@ MonoBehaviour:
     drawWeight: 4
     effectValue: 2
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 0, g: 1, b: 1, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 1
   - cardId: 9
     cardName: "\u4E22\u7EB8\u56E2"
@@ -128,7 +128,7 @@ MonoBehaviour:
     drawWeight: 3
     effectValue: 0.5
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 1, g: 0, b: 0, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 0
   - cardId: 10
     cardName: "\u51CF\u65F6\u5361"
@@ -154,7 +154,7 @@ MonoBehaviour:
     drawWeight: 6
     effectValue: -1
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 0
   - cardId: 12
     cardName: "\u4E00\u76D2\u7C89\u7B14"
@@ -167,7 +167,7 @@ MonoBehaviour:
     drawWeight: 2
     effectValue: 3
     canUseWhenNotMyTurn: 1
-    cardBackgroundColor: {r: 1, g: 0, b: 1, a: 1}
+    cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 0
   systemSettings:
     maxHandSize: 5

@@ -19,9 +19,6 @@ namespace Cards.Core
         /// <summary>
         /// 根据卡牌权重随机抽取卡牌
         /// </summary>
-        /// <param name="allCards">所有可用卡牌</param>
-        /// <param name="excludeIds">排除的卡牌ID</param>
-        /// <returns>抽中的卡牌数据</returns>
         public static CardData DrawRandomCard(List<CardData> allCards, HashSet<int> excludeIds = null)
         {
             if (allCards == null || allCards.Count == 0)
@@ -75,10 +72,6 @@ namespace Cards.Core
         /// <summary>
         /// 批量抽卡
         /// </summary>
-        /// <param name="allCards">所有可用卡牌</param>
-        /// <param name="count">抽卡数量</param>
-        /// <param name="allowDuplicates">是否允许重复</param>
-        /// <returns>抽中的卡牌ID列表</returns>
         public static List<int> DrawMultipleCards(List<CardData> allCards, int count, bool allowDuplicates = true)
         {
             var result = new List<int>();
@@ -124,8 +117,6 @@ namespace Cards.Core
         /// <summary>
         /// 概率计算工具
         /// </summary>
-        /// <param name="chance">概率值 (0.0 - 1.0)</param>
-        /// <returns>是否命中</returns>
         public static bool RollProbability(float chance)
         {
             return UnityEngine.Random.Range(0f, 1f) <= chance;

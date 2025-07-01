@@ -7,6 +7,7 @@ using UI;
 using GameLogic.FillBlank;
 using Photon.Realtime;
 using Cards.Player;
+using Cards.Core;
 
 namespace Core.Network
 {
@@ -21,6 +22,7 @@ namespace Core.Network
         [SerializeField] private QuestionWeightConfig questionWeightConfig;
         [SerializeField] private TimerConfig timerConfig;
         [SerializeField] private HPConfig hpConfig;
+        [SerializeField] private CardConfig cardConfig;
         [SerializeField] private bool useCustomHPConfig = false;
 
         [Header("成语接龙设置")]
@@ -354,12 +356,15 @@ namespace Core.Network
             // 重置状态
             ResetGameState();
 
-            // 选择第一个存活玩家开始
+            // 选择第一个存活玩家
             var alivePlayerIds = playerStateManager.GetAlivePlayerIds();
             if (alivePlayerIds.Count > 0)
             {
                 currentTurnPlayerId = alivePlayerIds[0];
                 LogDebug($"选择玩家 {currentTurnPlayerId} 开始游戏");
+
+                // 分发手牌
+                DistributeInitialHandCards();
 
                 // 启动NQMC
                 StartNetworkQuestionController();
@@ -433,7 +438,7 @@ namespace Core.Network
                 LogDebug($"获胜者: {winnerState?.playerName} (ID: {winnerId})");
             }
 
-            // **新增：清理卡牌效果状态**
+            // 清理卡牌效果状态
             CleanupCardEffects();
 
             // 广播游戏结束
@@ -502,7 +507,7 @@ namespace Core.Network
                 return;
             }
 
-            // **新增：检查卡牌效果 - 跳过和代理**
+            // 检查卡牌效果 - 跳过和代理
             if (!CheckCardEffectsBeforeQuestion())
             {
                 return; // 如果被跳过，直接切换到下一个玩家
@@ -512,7 +517,7 @@ namespace Core.Network
 
             NetworkQuestionData question = null;
 
-            // **修改：检查卡牌指定的题目类型**
+            // 检查卡牌指定的题目类型
             var specifiedQuestionType = GetCardSpecifiedQuestionType();
 
             if (!string.IsNullOrEmpty(specifiedQuestionType))
@@ -533,7 +538,7 @@ namespace Core.Network
 
             if (question != null)
             {
-                // **新增：应用时间调整效果**
+                // 应用时间调整效果
                 ApplyTimeAdjustmentToQuestion(question);
 
                 currentQuestionNumber++;
@@ -566,17 +571,6 @@ namespace Core.Network
                         LogDebug($"玩家{currentTurnPlayerId}被跳过，切换到下一个玩家");
                         Invoke(nameof(NextPlayerTurn), turnChangeDelay);
                         return false;
-                    }
-
-                    if (actualAnswerPlayerId != currentTurnPlayerId)
-                    {
-                        LogDebug($"玩家{currentTurnPlayerId}的答题将由玩家{actualAnswerPlayerId}代替");
-                        // 这里可以设置代理状态，在答案处理时使用
-                        // 暂时记录代理关系
-                        if (!playerAnswerCache.ContainsKey((ushort)currentTurnPlayerId))
-                        {
-                            playerAnswerCache[(ushort)currentTurnPlayerId] = $"DELEGATE:{actualAnswerPlayerId}";
-                        }
                     }
                 }
             }
@@ -726,7 +720,7 @@ namespace Core.Network
             if (questionDataService == null)
             {
                 Debug.LogError("[HostGameManager] QuestionDataService未初始化");
-                return CreateFallbackQuestion(questionType);
+                return null;
             }
 
             try
@@ -744,26 +738,7 @@ namespace Core.Network
                 Debug.LogError($"[HostGameManager] 获取题目失败: {e.Message}");
             }
 
-            return CreateFallbackQuestion(questionType);
-        }
-
-        /// <summary>
-        /// 创建备用题目
-        /// </summary>
-        private NetworkQuestionData CreateFallbackQuestion(QuestionType questionType)
-        {
-            float timeLimit = gameConfigManager.GetTimeLimitForQuestionType(questionType);
-
-            return NetworkQuestionDataExtensions.CreateFromLocalData(
-                questionType,
-                $"这是一个{questionType}类型的备用题目",
-                "备用答案",
-                questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
-                    ? new string[] { "选项A", "备用答案", "选项C", "选项D" }
-                    : null,
-                timeLimit,
-                "{\"source\": \"host_fallback\", \"isDefault\": true}"
-            );
+            return null;
         }
 
         /// <summary>
@@ -776,6 +751,131 @@ namespace Core.Network
             LogDebug($"题目已发送 - 第{currentQuestionNumber}题");
         }
 
+        #endregion
+
+        #region 手牌处理
+        private void DistributeInitialHandCards()
+        {
+            if (cardConfig == null)
+            {
+                Debug.LogError("[HostGameManager] CardConfig未配置，无法分发手牌");
+                return;
+            }
+
+            var alivePlayerIds = playerStateManager.GetAlivePlayerIds();
+            if (alivePlayerIds.Count == 0)
+            {
+                Debug.LogError("[HostGameManager] 没有存活玩家，无法分发手牌");
+                return;
+            }
+
+            LogDebug($"开始为 {alivePlayerIds.Count} 名玩家分发手牌");
+
+            // 为每个玩家生成并发送手牌
+            foreach (var playerId in alivePlayerIds)
+            {
+                var handCards = GeneratePlayerHandCards(playerId);
+                if (handCards != null && handCards.Count > 0)
+                {
+                    // 通过NetworkManager发送手牌数据
+                    NetworkManager.Instance.SendPlayerHandCards(playerId, handCards);
+                    LogDebug($"已发送手牌给玩家 {playerId}: {handCards.Count} 张卡牌");
+                }
+                else
+                {
+                    Debug.LogError($"[HostGameManager] 为玩家 {playerId} 生成手牌失败");
+                }
+            }
+
+            LogDebug("手牌分发完成");
+        }
+
+        /// <summary>
+        /// 为指定玩家生成初始手牌
+        /// </summary>
+        private List<int> GeneratePlayerHandCards(ushort playerId)
+        {
+            var handCards = new List<int>();
+
+            if (cardConfig == null)
+            {
+                Debug.LogError("[HostGameManager] CardConfig未配置");
+                return handCards;
+            }
+
+            int initialCardCount = cardConfig.SystemSettings.startingCardCount;
+
+            LogDebug($"为玩家 {playerId} 生成 {initialCardCount} 张初始手牌");
+
+            // 生成指定数量的随机卡牌
+            for (int i = 0; i < initialCardCount; i++)
+            {
+                var randomCard = DrawRandomCardForPlayer(playerId);
+                if (randomCard != null)
+                {
+                    handCards.Add(randomCard.cardId);
+                    LogDebug($"为玩家 {playerId} 生成卡牌: {randomCard.cardName} (ID: {randomCard.cardId})");
+                }
+                else
+                {
+                    Debug.LogWarning($"[HostGameManager] 为玩家 {playerId} 生成第 {i + 1} 张卡牌失败");
+                }
+            }
+
+            LogDebug($"玩家 {playerId} 手牌生成完成: {handCards.Count}/{initialCardCount} 张");
+            return handCards;
+        }
+
+        /// <summary>
+        /// 为玩家抽取随机卡牌（Host端权威抽卡）
+        /// </summary>
+        private CardData DrawRandomCardForPlayer(ushort playerId)
+        {
+            if (cardConfig?.AllCards == null || cardConfig.AllCards.Count == 0)
+            {
+                Debug.LogError("[HostGameManager] 卡牌配置为空");
+                return null;
+            }
+
+            // 获取可用卡牌列表（排除禁用卡牌）
+            var availableCards = cardConfig.AllCards.Where(card =>
+                !cardConfig.DrawSettings.bannedCardIds.Contains(card.cardId)).ToList();
+
+            if (availableCards.Count == 0)
+            {
+                Debug.LogError("[HostGameManager] 没有可用的卡牌");
+                return null;
+            }
+
+            // 使用CardConfig中配置的权重进行抽取
+            var selectedCard = CardUtilities.DrawRandomCard(availableCards);
+
+            if (selectedCard != null)
+            {
+                LogDebug($"为玩家 {playerId} 抽取卡牌: {selectedCard.cardName} (权重: {selectedCard.drawWeight})");
+            }
+
+            return selectedCard;
+        }
+
+        /// <summary>
+        /// 为游戏进行中新加入的玩家分发手牌
+        /// </summary>
+        private IEnumerator DistributeHandCardsToNewPlayer(ushort playerId)
+        {
+            yield return new WaitForSeconds(0.5f); // 等待玩家完全加入
+
+            var handCards = GeneratePlayerHandCards(playerId);
+            if (handCards != null && handCards.Count > 0)
+            {
+                NetworkManager.Instance.SendPlayerHandCards(playerId, handCards);
+                LogDebug($"已为新玩家 {playerId} 分发手牌: {handCards.Count} 张");
+            }
+            else
+            {
+                Debug.LogError($"[HostGameManager] 为新玩家 {playerId} 生成手牌失败");
+            }
+        }
         #endregion
 
         #region 答案处理
@@ -895,7 +995,7 @@ namespace Core.Network
         {
             LogDebug($"玩家{playerId}答错了");
 
-            // **修改：应用卡牌伤害倍数效果**
+            // 应用卡牌伤害倍数效果
             if (hpManager != null && hpManager.IsPlayerAlive(playerId))
             {
                 // 获取基础伤害值
@@ -1016,7 +1116,6 @@ namespace Core.Network
                 var winnerState = playerStateManager.GetPlayerState(alivePlayerIds[0]);
                 LogDebug($"游戏胜利: {winnerState.playerName}");
 
-                // **新增：触发胜利结束**
                 EndGameWithWinner(winnerState.playerId, winnerState.playerName, "最后的幸存者！");
             }
             // 没有存活玩家
@@ -1068,10 +1167,17 @@ namespace Core.Network
         private void OnPlayerAdded(ushort playerId, string playerName, bool isHost)
         {
             LogDebug($"玩家加入: {playerName} (ID: {playerId}, Host: {isHost})");
+
             if (hpManager != null)
             {
                 int initialHealth = hpManager.GetEffectiveInitialHealth();
                 hpManager.InitializePlayer(playerId, initialHealth);
+            }
+
+            if (gameInProgress && PlayerCardManager.Instance != null)
+            {
+                LogDebug($"游戏进行中，为新加入的玩家 {playerId} 分发手牌");
+                StartCoroutine(DistributeHandCardsToNewPlayer(playerId));
             }
         }
 
@@ -1542,15 +1648,6 @@ namespace Core.Network
         {
             LogDebug($"强制结束游戏: {reason}");
             EndGame(reason);
-        }
-
-        /// <summary>
-        /// 清理服务缓存
-        /// </summary>
-        public void ClearServiceCache()
-        {
-            questionDataService?.ClearCache();
-            LogDebug("已清理题目服务缓存");
         }
 
         #endregion

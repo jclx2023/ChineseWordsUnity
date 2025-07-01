@@ -39,16 +39,8 @@ namespace Cards.UI
 
         private void Start()
         {
-            // 验证预制体设置
-            if (!ValidateResources())
-            {
-                LogError("CardUIComponents资源验证失败，请检查预制体设置");
-            }
         }
 
-        /// <summary>
-        /// 从Resources文件夹加载卡牌UI预制体
-        /// </summary>
         private void LoadCardUIPrefab()
         {
             cardUIPrefab = Resources.Load<GameObject>(CARD_UI_PREFAB_PATH);
@@ -103,19 +95,14 @@ namespace Cards.UI
         /// </summary>
         private void ConfigureCardUI(GameObject cardInstance, CardDisplayData cardData)
         {
-            // 配置卡牌标识组件
             ConfigureCardIdentifier(cardInstance, cardData);
 
-            // 配置卡牌牌面
             ConfigureCardFace(cardInstance, cardData);
 
-            // 配置卡牌标题
             ConfigureCardTitle(cardInstance, cardData);
 
-            // 配置卡牌描述
             ConfigureCardDescription(cardInstance, cardData);
 
-            //LogDebug($"卡牌UI配置完成: {cardData.cardName}");
         }
 
         /// <summary>
@@ -140,22 +127,8 @@ namespace Cards.UI
         {
             // 查找卡牌牌面Image组件
             Image faceImage = FindComponentInChildren<Image>(cardInstance, "CardFace");
-
-            if (faceImage != null)
-            {
-                faceImage.sprite = cardData.cardFaceSprite;
-                faceImage.color = cardData.backgroundColor;
-
-                // 如果没有牌面图，显示背景色
-                if (cardData.cardFaceSprite == null)
-                {
-                    LogWarning($"卡牌 {cardData.cardName} 没有牌面图，将显示纯色背景");
-                }
-            }
-            else
-            {
-                LogWarning($"未找到CardFace组件，卡牌: {cardData.cardName}");
-            }
+            faceImage.sprite = cardData.cardFaceSprite;
+            faceImage.color = cardData.backgroundColor;
         }
 
         /// <summary>
@@ -168,16 +141,10 @@ namespace Cards.UI
             if (titleText != null)
             {
                 titleText.text = cardData.cardName;
-
-                // 应用响应式字体大小
                 if (enableResponsiveFonts)
                 {
                     titleText.fontSize = baseTitleFontSize * scaleFactor;
                 }
-            }
-            else
-            {
-                LogWarning($"未找到CardTitle组件，卡牌: {cardData.cardName}");
             }
         }
 
@@ -197,10 +164,6 @@ namespace Cards.UI
                 {
                     descriptionText.fontSize = baseDescriptionFontSize * scaleFactor;
                 }
-            }
-            else
-            {
-                LogWarning($"未找到CardDescription组件，卡牌: {cardData.cardName}");
             }
         }
 
@@ -334,57 +297,10 @@ namespace Cards.UI
                 return child.GetComponent<T>();
             }
 
-            // 如果直接查找失败，尝试递归查找
             T component = parent.GetComponentInChildren<T>();
             return component;
         }
 
-        /// <summary>
-        /// 验证必要资源
-        /// </summary>
-        public bool ValidateResources()
-        {
-            if (cardUIPrefab == null)
-            {
-                LogError("卡牌UI预制体未设置");
-                return false;
-            }
-
-            // 验证预制体结构
-            return ValidatePrefabStructure();
-        }
-
-        /// <summary>
-        /// 验证预制体结构
-        /// </summary>
-        private bool ValidatePrefabStructure()
-        {
-            if (cardUIPrefab == null) return false;
-
-            bool isValid = true;
-            string[] requiredComponents = { "CardFace", "CardTitle", "CardDescription" };
-
-            foreach (string componentName in requiredComponents)
-            {
-                Transform child = cardUIPrefab.transform.Find(componentName);
-                if (child == null)
-                {
-                    LogWarning($"预制体中缺少组件: {componentName}");
-                    isValid = false;
-                }
-            }
-
-            if (isValid)
-            {
-                LogDebug("预制体结构验证通过");
-            }
-
-            return isValid;
-        }
-
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -392,10 +308,6 @@ namespace Cards.UI
                 Debug.Log($"[CardUIComponents] {message}");
             }
         }
-
-        /// <summary>
-        /// 警告日志
-        /// </summary>
         private void LogWarning(string message)
         {
             if (enableDebugLogs)
@@ -403,10 +315,6 @@ namespace Cards.UI
                 Debug.LogWarning($"[CardUIComponents] {message}");
             }
         }
-
-        /// <summary>
-        /// 错误日志
-        /// </summary>
         private void LogError(string message)
         {
             Debug.LogError($"[CardUIComponents] {message}");

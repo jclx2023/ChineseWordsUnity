@@ -3341,6 +3341,7 @@ MonoBehaviour:
   questionWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
   timerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
   hpConfig: {fileID: 11400000, guid: de39ea7926d9eca49b5176a39e01425f, type: 2}
+  cardConfig: {fileID: 11400000, guid: 859471ccba7fd574781e9bba0300ae51, type: 2}
   useCustomHPConfig: 0
   enableIdiomChain: 1
   maxIdiomChain: 200

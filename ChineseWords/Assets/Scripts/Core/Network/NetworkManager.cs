@@ -5,6 +5,8 @@ using System;
 using UI;
 using UnityEngine.SceneManagement;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
+using System.Collections.Generic;
+using Cards.Player;
 
 namespace Core.Network
 {
@@ -426,7 +428,6 @@ namespace Core.Network
             // 触发静态事件
             OnCardUsed?.Invoke(playerIdUShort, cardId, targetPlayerIdUShort, cardName);
 
-            // 转发给CardNetworkManager（如果存在）
             if (Cards.Network.CardNetworkManager.Instance != null)
             {
                 Cards.Network.CardNetworkManager.Instance.OnCardUsedReceived(playerIdUShort, cardId, targetPlayerIdUShort, cardName);
@@ -443,7 +444,6 @@ namespace Core.Network
             // 触发静态事件
             OnCardEffectTriggered?.Invoke(playerIdUShort, effectDescription);
 
-            // 转发给CardNetworkManager（如果存在）
             if (Cards.Network.CardNetworkManager.Instance != null)
             {
                 Cards.Network.CardNetworkManager.Instance.OnCardEffectTriggeredReceived(playerIdUShort, effectDescription);
@@ -460,7 +460,6 @@ namespace Core.Network
             // 触发静态事件
             OnCardAdded?.Invoke(playerIdUShort, cardId);
 
-            // 转发给CardNetworkManager（如果存在）
             if (Cards.Network.CardNetworkManager.Instance != null)
             {
                 Cards.Network.CardNetworkManager.Instance.OnCardAddedReceived(playerIdUShort, cardId);
@@ -477,7 +476,6 @@ namespace Core.Network
             // 触发静态事件
             OnCardRemoved?.Invoke(playerIdUShort, cardId);
 
-            // 转发给CardNetworkManager（如果存在）
             if (Cards.Network.CardNetworkManager.Instance != null)
             {
                 Cards.Network.CardNetworkManager.Instance.OnCardRemovedReceived(playerIdUShort, cardId);
@@ -494,7 +492,6 @@ namespace Core.Network
             // 触发静态事件
             OnHandSizeChanged?.Invoke(playerIdUShort, newHandSize);
 
-            // 转发给CardNetworkManager（如果存在）
             if (Cards.Network.CardNetworkManager.Instance != null)
             {
                 Cards.Network.CardNetworkManager.Instance.OnHandSizeChangedReceived(playerIdUShort, newHandSize);
@@ -511,7 +508,6 @@ namespace Core.Network
             // 触发静态事件
             OnCardMessage?.Invoke(message, fromPlayerIdUShort);
 
-            // 转发给CardNetworkManager（如果存在）
             if (Cards.Network.CardNetworkManager.Instance != null)
             {
                 Cards.Network.CardNetworkManager.Instance.OnCardMessageReceived(message, fromPlayerIdUShort);
@@ -573,6 +569,32 @@ namespace Core.Network
             }
         }
 
+        [PunRPC]
+        void OnPlayerHandCardsReceived_RPC(int playerId, int[] cardIds)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+
+            LogDebug($"收到手牌分发RPC: 玩家{playerIdUShort}, {cardIds?.Length ?? 0}张卡牌");
+
+            if (cardIds == null || cardIds.Length == 0)
+            {
+                Debug.LogWarning("[NetworkManager] 收到空的手牌数据");
+                return;
+            }
+
+            // 转发给CardNetworkManager处理
+            if (Cards.Network.CardNetworkManager.Instance != null)
+            {
+                List<int> cardIdsList = new List<int>(cardIds);
+                Cards.Network.CardNetworkManager.Instance.OnHandCardsDistributionReceived(playerIdUShort, cardIdsList);
+                LogDebug($"✓ 已转发手牌数据给CardNetworkManager");
+            }
+            else
+            {
+                Debug.LogError("[NetworkManager] CardNetworkManager实例不存在，无法处理手牌分发");
+            }
+        }
+
         #endregion
 
         #region Host专用RPC发送方法 - 修复版：统一使用 RpcTarget.All
@@ -587,10 +609,8 @@ namespace Core.Network
             var persistentManager = PersistentNetworkManager.Instance;
             LogDebug($"准备广播题目 - PhotonView可用: {persistentManager?.photonView != null}");
             LogDebug($"PhotonView ID: {persistentManager?.photonView?.ViewID}");
-            LogDebug($"房间中玩家数: {PhotonNetwork.PlayerList?.Length}");
 
             byte[] questionData = question.Serialize();
-            LogDebug($"题目序列化数据长度: {questionData?.Length ?? -1}");
 
             if (questionData != null && questionData.Length > 0)
             {
@@ -832,6 +852,47 @@ namespace Core.Network
         }
 
         /// <summary>
+        /// 发送手牌数据给指定玩家（Host → Specific Client）
+        /// </summary>
+        public void SendPlayerHandCards(ushort playerId, List<int> cardIds)
+        {
+            if (!IsHost)
+            {
+                Debug.LogWarning("[NetworkManager] 只有Host可以分发手牌");
+                return;
+            }
+
+            if (cardIds == null || cardIds.Count == 0)
+            {
+                Debug.LogWarning($"[NetworkManager] 玩家{playerId}的手牌数据为空");
+                return;
+            }
+
+            // 转换为int数组以兼容RPC
+            int[] cardIdsArray = cardIds.ToArray();
+
+            // 获取目标玩家
+            var targetPlayer = GetPlayerById(playerId);
+            if (targetPlayer == null)
+            {
+                Debug.LogError($"[NetworkManager] 找不到玩家{playerId}");
+                return;
+            }
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                // 发送给特定玩家
+                persistentManager.photonView.RPC("OnPlayerHandCardsReceived_RPC", targetPlayer, (int)playerId, cardIdsArray);
+                LogDebug($"✓ 已发送手牌给玩家{playerId}: {cardIds.Count}张卡牌");
+            }
+            else
+            {
+                Debug.LogError("[NetworkManager] 无法发送RPC，PersistentNetworkManager不可用");
+            }
+        }
+
+        /// <summary>
         /// 广播卡牌移除（Host → All）
         /// </summary>
         public void BroadcastCardRemoved(ushort playerId, int cardId)
@@ -895,7 +956,6 @@ namespace Core.Network
             }
         }
 
-        //玩家生成相关
         /// <summary>
         /// 广播座位和角色数据（Host → All）
         /// </summary>
@@ -965,26 +1025,21 @@ namespace Core.Network
 
             // 等待1秒让UI显示完成
             yield return new WaitForSeconds(1f);
-
             try
             {
                 // 检查当前场景
                 string currentScene = SceneManager.GetActiveScene().name;
                 LogDebug($"当前场景: {currentScene}");
-
-                // 如果在GameScene，返回RoomScene
                 if (currentScene.Contains("Game") || currentScene.Contains("Network"))
                 {
                     LogDebug("从游戏场景返回房间场景");
                     SceneManager.LoadScene("RoomScene");
                 }
-                // 如果已经在RoomScene，重新加载以重置状态
                 else if (currentScene.Contains("Room"))
                 {
                     LogDebug("重新加载房间场景以重置状态");
                     SceneManager.LoadScene(currentScene);
                 }
-                // 其他情况，尝试加载主菜单
                 else
                 {
                     LogDebug("返回主菜单场景");

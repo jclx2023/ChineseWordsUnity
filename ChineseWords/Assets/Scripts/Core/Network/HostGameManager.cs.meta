@@ -3,7 +3,11 @@ guid: 906b73de48141a24aa6d2b510ceacd02
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - questionWeightConfig: {fileID: 11400000, guid: 9867196a827da4c47aca53b4778cce37, type: 2}
+  - timerConfig: {fileID: 11400000, guid: 45b6cbf9f73a28744a7ea52cdb139851, type: 2}
+  - hpConfig: {fileID: 11400000, guid: de39ea7926d9eca49b5176a39e01425f, type: 2}
+  - cardConfig: {fileID: 11400000, guid: 859471ccba7fd574781e9bba0300ae51, type: 2}
   executionOrder: -50
   icon: {fileID: 1206586993520771344, guid: 0000000000000000d000000000000000, type: 0}
   userData: 

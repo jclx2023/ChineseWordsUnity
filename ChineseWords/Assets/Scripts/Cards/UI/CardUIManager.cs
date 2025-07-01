@@ -1083,7 +1083,6 @@ namespace Cards.UI
             if (cardData == null) return;
 
             string tooltip = $"{cardData.cardName}\n{cardData.description}";
-            LogDebug($"卡牌提示: {tooltip}");
         }
 
         /// <summary>
