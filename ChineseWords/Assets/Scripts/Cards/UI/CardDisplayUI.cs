@@ -8,8 +8,9 @@ using Classroom.Player;
 namespace Cards.UI
 {
     /// <summary>
-    /// 卡牌展示UI控制器
-    /// 负责管理卡牌的视觉展示状态：缩略图 -> 扇形展示 -> 悬停交互
+    /// 卡牌展示UI控制器 - 重构版
+    /// 负责管理卡牌的视觉展示状态：缩略图 <-> 扇形展示
+    /// 移除Hidden状态，改为被CardUIManager完全控制的子组件
     /// </summary>
     public class CardDisplayUI : MonoBehaviour
     {
@@ -38,19 +39,18 @@ namespace Cards.UI
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private bool showDebugGizmos = false;
 
-        // 展示状态枚举
+        // 展示状态枚举 - 移除Hidden状态
         public enum DisplayState
         {
-            Hidden,        // 隐藏状态
-            Thumbnail,     // 缩略图状态
+            Thumbnail,     // 缩略图状态（默认状态）
             FanDisplay,    // 扇形展示状态
-            Transitioning  // 转换中
+            Transitioning, // 转换中
+            Disabled       // 禁用状态（答题期间）
         }
 
         // 当前状态
-        private DisplayState currentState = DisplayState.Hidden;
+        private DisplayState currentState = DisplayState.Thumbnail;
         private List<GameObject> currentCardUIs = new List<GameObject>();
         private List<GameObject> thumbnailCardUIs = new List<GameObject>(); // 缩略图卡牌UI列表
         private List<Vector3> fanPositions = new List<Vector3>();
@@ -61,172 +61,51 @@ namespace Cards.UI
         private Coroutine transitionCoroutine = null;
         private Coroutine hoverCoroutine = null;
 
-        // 摄像机控制
+        // 初始化状态
+        private bool isInitialized = false;
+
+        // 依赖引用 - 通过CardUIManager传递
         private PlayerCameraController playerCameraController;
-        private bool cameraControllerReady = false;
+        private CardUIComponents cardUIComponents;
 
         // 事件
         public System.Action<GameObject> OnCardHoverEnter;
         public System.Action<GameObject> OnCardHoverExit;
-        public System.Action<GameObject> OnCardSelected; // 为后续拖拽准备
+        public System.Action<GameObject> OnCardSelected;
 
         // 属性
         public DisplayState CurrentState => currentState;
         public bool IsInFanDisplay => currentState == DisplayState.FanDisplay;
-        public bool CanShowFanDisplay => currentState == DisplayState.Thumbnail && cameraControllerReady;
-
-        private void Awake()
-        {
-            InitializeComponents();
-        }
-
-        private void Start()
-        {
-            // 等待摄像机控制器就绪
-            StartCoroutine(WaitForCameraController());
-        }
-
-        private void OnEnable()
-        {
-            SubscribeToClassroomManagerEvents();
-        }
-
-        private void OnDisable()
-        {
-            UnsubscribeFromClassroomManagerEvents();
-        }
-
-        #region 摄像机控制器等待逻辑
-
-        /// <summary>
-        /// 订阅ClassroomManager事件
-        /// </summary>
-        private void SubscribeToClassroomManagerEvents()
-        {
-            Classroom.ClassroomManager.OnCameraSetupCompleted += OnCameraSetupCompleted;
-            Classroom.ClassroomManager.OnClassroomInitialized += OnClassroomInitialized;
-        }
-
-        /// <summary>
-        /// 取消订阅ClassroomManager事件
-        /// </summary>
-        private void UnsubscribeFromClassroomManagerEvents()
-        {
-            Classroom.ClassroomManager.OnCameraSetupCompleted -= OnCameraSetupCompleted;
-            Classroom.ClassroomManager.OnClassroomInitialized -= OnClassroomInitialized;
-        }
-
-        /// <summary>
-        /// 响应摄像机设置完成事件
-        /// </summary>
-        private void OnCameraSetupCompleted()
-        {
-            LogDebug("收到摄像机设置完成事件，开始查找摄像机控制器");
-            StartCoroutine(FindPlayerCameraControllerCoroutine());
-        }
-
-        /// <summary>
-        /// 响应教室初始化完成事件（备用方案）
-        /// </summary>
-        private void OnClassroomInitialized()
-        {
-            if (!cameraControllerReady)
-            {
-                LogDebug("教室初始化完成，尝试查找摄像机控制器（备用方案）");
-                StartCoroutine(FindPlayerCameraControllerCoroutine());
-            }
-        }
-
-        /// <summary>
-        /// 等待摄像机控制器就绪
-        /// </summary>
-        private IEnumerator WaitForCameraController()
-        {
-            float timeout = 10f; // 10秒超时
-            float elapsed = 0f;
-
-            while (elapsed < timeout && !cameraControllerReady)
-            {
-                elapsed += Time.deltaTime;
-                yield return null;
-            }
-
-            if (!cameraControllerReady)
-            {
-                LogWarning("摄像机控制器等待超时，将使用备用方案");
-            }
-        }
-
-        /// <summary>
-        /// 协程方式查找玩家摄像机控制器
-        /// </summary>
-        private IEnumerator FindPlayerCameraControllerCoroutine()
-        {
-            LogDebug("开始查找玩家摄像机控制器");
-
-            float timeout = 5f; // 5秒超时
-            float elapsed = 0f;
-
-            while (elapsed < timeout && playerCameraController == null)
-            {
-                playerCameraController = FindPlayerCameraController();
-
-                if (playerCameraController != null)
-                {
-                    cameraControllerReady = true;
-                    LogDebug($"成功找到摄像机控制器: {playerCameraController.name}");
-                    break;
-                }
-
-                elapsed += 0.1f;
-                yield return new WaitForSeconds(0.1f);
-            }
-
-            if (playerCameraController == null)
-            {
-                LogWarning("未能找到摄像机控制器，摄像机控制功能将不可用");
-            }
-        }
-
-        /// <summary>
-        /// 查找玩家摄像机控制器
-        /// </summary>
-        private PlayerCameraController FindPlayerCameraController()
-        {
-            // 方式1: 通过ClassroomManager获取（推荐方式）
-            var classroomManager = FindObjectOfType<Classroom.ClassroomManager>();
-            if (classroomManager != null && classroomManager.IsInitialized)
-            {
-                var cameraController = classroomManager.GetLocalPlayerCameraController();
-                if (cameraController != null)
-                {
-                    LogDebug($"通过ClassroomManager找到摄像机控制器: {cameraController.name}");
-                    return cameraController;
-                }
-            }
-
-            // 方式2: 遍历所有PlayerCameraController找到本地玩家的
-            var controllers = FindObjectsOfType<PlayerCameraController>();
-            foreach (var controller in controllers)
-            {
-                if (controller.IsLocalPlayer)
-                {
-                    LogDebug($"通过遍历找到本地玩家摄像机控制器: {controller.name}");
-                    return controller;
-                }
-            }
-
-            return null;
-        }
-
-        #endregion
+        public bool IsEnabled => currentState != DisplayState.Disabled;
+        public bool CanShowFanDisplay => currentState == DisplayState.Thumbnail && IsEnabled && isInitialized;
 
         #region 初始化
 
         /// <summary>
-        /// 初始化组件
+        /// 由CardUIManager调用的初始化方法
         /// </summary>
-        private void InitializeComponents()
+        public void Initialize(CardUIComponents uiComponents, PlayerCameraController cameraController = null)
+        {
+            LogDebug("开始初始化CardDisplayUI");
+
+            // 保存依赖引用
+            cardUIComponents = uiComponents;
+            playerCameraController = cameraController;
+
+            // 初始化UI组件
+            InitializeUIComponents();
+
+            // 设置初始状态为缩略图
+            SetState(DisplayState.Thumbnail);
+
+            isInitialized = true;
+            LogDebug("CardDisplayUI初始化完成");
+        }
+
+        /// <summary>
+        /// 初始化UI组件
+        /// </summary>
+        private void InitializeUIComponents()
         {
             // 确保扇形展示容器存在
             if (fanDisplayContainer == null)
@@ -249,10 +128,7 @@ namespace Cards.UI
                 thumbRect.localScale = Vector3.one * thumbnailScale;
             }
 
-            // 设置初始状态
-            SetState(DisplayState.Hidden);
-
-            LogDebug("CardDisplayUI组件初始化完成");
+            LogDebug("UI组件初始化完成");
         }
 
         #endregion
@@ -282,16 +158,19 @@ namespace Cards.UI
         {
             switch (newState)
             {
-                case DisplayState.Hidden:
-                    HideAllCards();
-                    break;
-
                 case DisplayState.Thumbnail:
-                    ShowThumbnail();
+                    // 显示缩略图，隐藏扇形
+                    ShowThumbnailMode();
                     break;
 
                 case DisplayState.FanDisplay:
-                    ShowFanDisplay();
+                    // 显示扇形，隐藏缩略图
+                    ShowFanDisplayMode();
+                    break;
+
+                case DisplayState.Disabled:
+                    // 禁用所有交互，但保持当前显示状态
+                    DisableAllInteractions();
                     break;
 
                 case DisplayState.Transitioning:
@@ -305,52 +184,43 @@ namespace Cards.UI
         #region 公共接口
 
         /// <summary>
-        /// 显示卡牌展示UI（从隐藏状态到缩略图状态）
+        /// 刷新缩略图显示
         /// </summary>
-        /// <param name="cardDataList">手牌数据</param>
-        public void ShowCardDisplay(List<CardDisplayData> cardDataList)
+        public void RefreshThumbnailDisplay(List<CardDisplayData> cardDataList)
         {
-            if (currentState != DisplayState.Hidden)
+            if (!isInitialized)
             {
-                LogWarning("当前状态不是Hidden，无法显示卡牌展示UI");
+                LogWarning("CardDisplayUI未初始化，无法刷新缩略图");
                 return;
             }
 
             if (cardDataList == null || cardDataList.Count == 0)
             {
-                LogWarning("手牌数据为空，无法显示缩略图");
+                LogDebug("手牌数据为空，清理缩略图显示");
+                ClearThumbnailCards();
                 return;
             }
 
-            LogDebug($"显示卡牌展示UI，手牌数量: {cardDataList.Count}");
+            LogDebug($"刷新缩略图显示，手牌数量: {cardDataList.Count}");
 
-            // 创建缩略图卡牌
+            // 重新创建缩略图卡牌
             CreateThumbnailCards(cardDataList);
 
-            SetState(DisplayState.Thumbnail);
+            // 如果当前在缩略图状态，确保显示
+            if (currentState == DisplayState.Thumbnail)
+            {
+                ShowThumbnailMode();
+            }
         }
 
         /// <summary>
-        /// 隐藏卡牌展示UI
-        /// </summary>
-        public void HideCardDisplay()
-        {
-            LogDebug("隐藏卡牌展示UI");
-
-            // 恢复摄像机控制
-            SetCameraControl(true);
-
-            SetState(DisplayState.Hidden);
-        }
-
-        /// <summary>
-        /// 切换到扇形展示
+        /// 显示扇形展示
         /// </summary>
         public bool ShowFanDisplayWithCards(List<CardDisplayData> cardDataList)
         {
             if (!CanShowFanDisplay)
             {
-                LogWarning($"无法显示扇形展示 - 当前状态: {currentState}, 摄像机就绪: {cameraControllerReady}");
+                LogWarning($"无法显示扇形展示 - 当前状态: {currentState}, 已初始化: {isInitialized}");
                 return false;
             }
 
@@ -385,7 +255,7 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 从扇形展示返回缩略图
+        /// 返回缩略图状态
         /// </summary>
         public void ReturnToThumbnail()
         {
@@ -410,6 +280,103 @@ namespace Cards.UI
             SetCameraControl(true);
         }
 
+        /// <summary>
+        /// 设置启用/禁用状态
+        /// </summary>
+        public void SetEnabled(bool enabled)
+        {
+            if (enabled)
+            {
+                if (currentState == DisplayState.Disabled)
+                {
+                    SetState(DisplayState.Thumbnail);
+                    LogDebug("启用CardDisplayUI");
+                }
+            }
+            else
+            {
+                if (currentState != DisplayState.Disabled)
+                {
+                    SetState(DisplayState.Disabled);
+                    LogDebug("禁用CardDisplayUI");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 强制切换到缩略图状态（供CardUIManager调用）
+        /// </summary>
+        public void ForceToThumbnailState()
+        {
+            LogDebug("强制切换到缩略图状态");
+
+            // 停止所有动画
+            if (transitionCoroutine != null)
+            {
+                StopCoroutine(transitionCoroutine);
+                transitionCoroutine = null;
+            }
+
+            if (hoverCoroutine != null)
+            {
+                StopCoroutine(hoverCoroutine);
+                hoverCoroutine = null;
+            }
+
+            // 清理扇形卡牌
+            ClearFanDisplayCards();
+
+            // 恢复摄像机控制
+            SetCameraControl(true);
+
+            // 切换到缩略图状态
+            SetState(DisplayState.Thumbnail);
+        }
+
+        /// <summary>
+        /// 隐藏卡牌显示（兼容接口，实际上是强制回到缩略图状态）
+        /// </summary>
+        public void HideCardDisplay()
+        {
+            LogDebug("隐藏卡牌显示（强制回到缩略图状态）");
+            ForceToThumbnailState();
+        }
+
+        /// <summary>
+        /// 显示卡牌显示（兼容接口，实际上是刷新缩略图）
+        /// </summary>
+        public void ShowCardDisplay(List<CardDisplayData> cardDataList)
+        {
+            LogDebug("显示卡牌显示（刷新缩略图）");
+            RefreshThumbnailDisplay(cardDataList);
+        }
+
+        /// <summary>
+        /// 完全清理显示（组件销毁时调用）
+        /// </summary>
+        public void ClearAllDisplays()
+        {
+            LogDebug("清理所有显示");
+
+            // 停止所有协程
+            if (transitionCoroutine != null)
+            {
+                StopCoroutine(transitionCoroutine);
+            }
+
+            if (hoverCoroutine != null)
+            {
+                StopCoroutine(hoverCoroutine);
+            }
+
+            // 清理所有UI
+            ClearThumbnailCards();
+            ClearFanDisplayCards();
+
+            // 恢复摄像机控制
+            SetCameraControl(true);
+        }
+
         #endregion
 
         #region 缩略图显示
@@ -419,6 +386,12 @@ namespace Cards.UI
         /// </summary>
         private void CreateThumbnailCards(List<CardDisplayData> cardDataList)
         {
+            if (cardUIComponents == null)
+            {
+                LogError("CardUIComponents未设置，无法创建缩略图");
+                return;
+            }
+
             // 清理现有缩略图
             ClearThumbnailCards();
 
@@ -431,7 +404,7 @@ namespace Cards.UI
             // 创建缩略图UI
             for (int i = 0; i < thumbnailCount; i++)
             {
-                GameObject thumbnailCard = CardUIComponents.Instance.CreateCardUI(cardDataList[i], thumbnailContainer);
+                GameObject thumbnailCard = cardUIComponents.CreateCardUI(cardDataList[i], thumbnailContainer);
                 if (thumbnailCard != null)
                 {
                     // 设置缩略图位置和旋转
@@ -487,19 +460,30 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 显示缩略图
+        /// 显示缩略图模式
         /// </summary>
-        private void ShowThumbnail()
+        private void ShowThumbnailMode()
         {
+            // 显示缩略图容器
             if (thumbnailContainer != null)
             {
                 thumbnailContainer.gameObject.SetActive(true);
-                LogDebug("缩略图显示完成");
+
+                // 确保透明度正常
+                CanvasGroup thumbnailCanvasGroup = thumbnailContainer.GetComponent<CanvasGroup>();
+                if (thumbnailCanvasGroup != null)
+                {
+                    thumbnailCanvasGroup.alpha = 1f;
+                }
             }
-            else
+
+            // 隐藏扇形展示
+            if (fanDisplayContainer != null)
             {
-                LogWarning("缩略图容器不存在");
+                fanDisplayContainer.gameObject.SetActive(false);
             }
+
+            LogDebug("缩略图模式显示完成");
         }
 
         /// <summary>
@@ -511,9 +495,9 @@ namespace Cards.UI
             {
                 foreach (var thumbnailCard in thumbnailCardUIs)
                 {
-                    if (thumbnailCard != null)
+                    if (thumbnailCard != null && cardUIComponents != null)
                     {
-                        CardUIComponents.Instance.DestroyCardUI(thumbnailCard);
+                        cardUIComponents.DestroyCardUI(thumbnailCard);
                     }
                 }
                 thumbnailCardUIs.Clear();
@@ -532,11 +516,17 @@ namespace Cards.UI
         /// </summary>
         private void CreateCardUIs(List<CardDisplayData> cardDataList)
         {
+            if (cardUIComponents == null)
+            {
+                LogError("CardUIComponents未设置，无法创建扇形卡牌");
+                return;
+            }
+
             // 清理现有卡牌
-            ClearCurrentCardUIs();
+            ClearFanDisplayCards();
 
             // 创建新卡牌
-            currentCardUIs = CardUIComponents.Instance.CreateMultipleCardUI(cardDataList, fanDisplayContainer);
+            currentCardUIs = cardUIComponents.CreateMultipleCardUI(cardDataList, fanDisplayContainer);
 
             // 为每张卡牌添加悬停检测
             foreach (var cardUI in currentCardUIs)
@@ -544,7 +534,7 @@ namespace Cards.UI
                 AddHoverDetection(cardUI);
             }
 
-            LogDebug($"创建了 {currentCardUIs.Count} 张卡牌UI");
+            LogDebug($"创建了 {currentCardUIs.Count} 张扇形卡牌UI");
         }
 
         /// <summary>
@@ -584,9 +574,9 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 显示扇形展示
+        /// 显示扇形展示模式
         /// </summary>
-        private void ShowFanDisplay()
+        private void ShowFanDisplayMode()
         {
             // 隐藏缩略图
             if (thumbnailContainer != null)
@@ -595,6 +585,12 @@ namespace Cards.UI
             }
 
             // 显示扇形卡牌
+            if (fanDisplayContainer != null)
+            {
+                fanDisplayContainer.gameObject.SetActive(true);
+            }
+
+            // 设置扇形卡牌位置
             for (int i = 0; i < currentCardUIs.Count && i < fanPositions.Count; i++)
             {
                 GameObject cardUI = currentCardUIs[i];
@@ -610,7 +606,23 @@ namespace Cards.UI
                 cardUI.SetActive(true);
             }
 
-            LogDebug("扇形展示完成");
+            LogDebug("扇形展示模式显示完成");
+        }
+
+        /// <summary>
+        /// 清理扇形展示卡牌
+        /// </summary>
+        private void ClearFanDisplayCards()
+        {
+            if (currentCardUIs.Count > 0 && cardUIComponents != null)
+            {
+                cardUIComponents.DestroyMultipleCardUI(currentCardUIs);
+                currentCardUIs.Clear();
+            }
+
+            fanPositions.Clear();
+            fanRotations.Clear();
+            hoveredCard = null;
         }
 
         #endregion
@@ -623,10 +635,6 @@ namespace Cards.UI
         private IEnumerator TransitionToFanDisplay()
         {
             float elapsed = 0f;
-
-            // 获取缩略图的起始位置（需要考虑容器的缩放和位置）
-            Vector3 containerWorldPos = thumbnailContainer.position;
-            Vector3 containerScale = thumbnailContainer.localScale;
 
             while (elapsed < transitionDuration)
             {
@@ -773,7 +781,7 @@ namespace Cards.UI
             }
 
             // 清理扇形卡牌UI
-            ClearCurrentCardUIs();
+            ClearFanDisplayCards();
 
             // 重新显示缩略图
             if (thumbnailContainer != null)
@@ -820,7 +828,7 @@ namespace Cards.UI
             pointerExit.callback.AddListener((eventData) => OnCardPointerExit(cardUI));
             eventTrigger.triggers.Add(pointerExit);
 
-            // 鼠标点击事件（为后续拖拽准备）
+            // 鼠标点击事件
             EventTrigger.Entry pointerClick = new EventTrigger.Entry();
             pointerClick.eventID = EventTriggerType.PointerClick;
             pointerClick.callback.AddListener((eventData) => OnCardPointerClick(cardUI));
@@ -875,7 +883,7 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 卡牌点击事件（为后续拖拽准备）
+        /// 卡牌点击事件
         /// </summary>
         private void OnCardPointerClick(GameObject cardUI)
         {
@@ -915,6 +923,16 @@ namespace Cards.UI
             rectTransform.localScale = endScale;
         }
 
+        /// <summary>
+        /// 禁用所有交互
+        /// </summary>
+        private void DisableAllInteractions()
+        {
+            // 可以在这里添加禁用交互的逻辑
+            // 例如设置CanvasGroup的interactable = false
+            LogDebug("禁用所有交互");
+        }
+
         #endregion
 
         #region 摄像机控制
@@ -939,43 +957,6 @@ namespace Cards.UI
 
         #region 工具方法
 
-        /// <summary>
-        /// 隐藏所有卡牌
-        /// </summary>
-        private void HideAllCards()
-        {
-            // 隐藏缩略图
-            if (thumbnailContainer != null)
-            {
-                thumbnailContainer.gameObject.SetActive(false);
-            }
-
-            // 清理扇形卡牌
-            ClearCurrentCardUIs();
-
-            // 清理缩略图卡牌
-            ClearThumbnailCards();
-        }
-
-        /// <summary>
-        /// 清理当前卡牌UI
-        /// </summary>
-        private void ClearCurrentCardUIs()
-        {
-            if (currentCardUIs.Count > 0)
-            {
-                CardUIComponents.Instance.DestroyMultipleCardUI(currentCardUIs);
-                currentCardUIs.Clear();
-            }
-
-            fanPositions.Clear();
-            fanRotations.Clear();
-            hoveredCard = null;
-        }
-
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -984,9 +965,6 @@ namespace Cards.UI
             }
         }
 
-        /// <summary>
-        /// 警告日志
-        /// </summary>
         private void LogWarning(string message)
         {
             if (enableDebugLogs)
@@ -995,28 +973,19 @@ namespace Cards.UI
             }
         }
 
+        private void LogError(string message)
+        {
+            Debug.LogError($"[CardDisplayUI] {message}");
+        }
+
         #endregion
 
-        #region 清理资源
+        #region Unity生命周期
 
         private void OnDestroy()
         {
-            // 停止所有协程
-            if (transitionCoroutine != null)
-            {
-                StopCoroutine(transitionCoroutine);
-            }
-
-            if (hoverCoroutine != null)
-            {
-                StopCoroutine(hoverCoroutine);
-            }
-
-            // 清理UI
-            ClearCurrentCardUIs();
-
-            // 取消事件订阅
-            UnsubscribeFromClassroomManagerEvents();
+            // 清理所有资源
+            ClearAllDisplays();
 
             LogDebug("CardDisplayUI已销毁，资源已清理");
         }

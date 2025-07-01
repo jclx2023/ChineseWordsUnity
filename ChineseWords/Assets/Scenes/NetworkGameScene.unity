@@ -2893,9 +2893,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cardConfig: {fileID: 11400000, guid: 859471ccba7fd574781e9bba0300ae51, type: 2}
-  autoInitializeOnStart: 1
   enableDebugLogs: 1
-  initializationDelay: 0.1
 --- !u!4 &1376928480
 Transform:
   m_ObjectHideFlags: 0
@@ -3320,7 +3318,7 @@ MonoBehaviour:
   clockFace: {fileID: 1403044436}
   clockPointer: {fileID: 526611241}
   enableClock: 1
-  rotationMode: 0
+  rotationMode: 1
   enableColorFeedback: 0
   normalColor: {r: 0.18867922, g: 0.18867922, b: 0.18867922, a: 1}
   warningColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}

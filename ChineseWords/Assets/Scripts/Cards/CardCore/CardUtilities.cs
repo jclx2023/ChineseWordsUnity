@@ -63,7 +63,7 @@ namespace Cards.Core
                 currentWeight += card.drawWeight;
                 if (randomValue <= currentWeight)
                 {
-                    LogDebug($"抽中卡牌: {card.cardName} (权重: {card.drawWeight})");
+                    //LogDebug($"抽中卡牌: {card.cardName} (权重: {card.drawWeight})");
                     return card;
                 }
             }

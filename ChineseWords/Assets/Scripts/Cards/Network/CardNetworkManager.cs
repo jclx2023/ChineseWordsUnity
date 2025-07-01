@@ -542,7 +542,7 @@ namespace Cards.Network
 
             if (!NetworkManager.Instance.IsHost)
             {
-                LogDebug("不是Host，无法发送RPC");
+                //LogDebug("不是Host，无法发送RPC");
                 return false;
             }
 

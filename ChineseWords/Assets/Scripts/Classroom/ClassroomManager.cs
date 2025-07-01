@@ -20,7 +20,7 @@ namespace Classroom
         [SerializeField] private SeatingPlayerBinder seatBinder;
 
         [Header("初始化配置")]
-        [SerializeField] private float initializationDelay = 1f; // 初始化延迟
+        [SerializeField] private float initializationDelay = 0.3f; // 初始化延迟
         [SerializeField] private float sceneLoadTimeout = 15f; // 场景加载超时
         [SerializeField] private bool waitForNetworkReady = true; // 等待网络准备就绪
 
@@ -575,90 +575,6 @@ namespace Classroom
         #region 公共接口
 
         /// <summary>
-        /// 手动重新初始化
-        /// </summary>
-        [ContextMenu("重新初始化教室")]
-        public void ReinitializeClassroom()
-        {
-            if (initializationInProgress)
-            {
-                LogDebug("初始化正在进行中，取消重新初始化");
-                return;
-            }
-
-            LogDebug("手动重新初始化教室");
-
-            isInitialized = false;
-            currentStep = 0;
-
-            StartCoroutine(InitializeClassroomAsync());
-        }
-
-        /// <summary>
-        /// 强制停止初始化
-        /// </summary>
-        public void StopInitialization()
-        {
-            StopAllCoroutines();
-            initializationInProgress = false;
-            LogDebug("强制停止初始化流程");
-        }
-
-        /// <summary>
-        /// 获取初始化进度
-        /// </summary>
-        public float GetInitializationProgress()
-        {
-            if (isInitialized) return 1f;
-            if (!initializationInProgress) return 0f;
-
-            return (float)currentStep / initializationSteps.Length;
-        }
-
-        /// <summary>
-        /// 获取当前初始化步骤
-        /// </summary>
-        public string GetCurrentInitializationStep()
-        {
-            if (isInitialized) return "初始化完成";
-            if (!initializationInProgress) return "未开始";
-
-            if (currentStep < initializationSteps.Length)
-                return initializationSteps[currentStep];
-
-            return "未知步骤";
-        }
-
-        /// <summary>
-        /// 获取教室状态信息
-        /// </summary>
-        public string GetClassroomStatus()
-        {
-            string status = "=== 教室状态 ===\n";
-            status += $"已初始化: {isInitialized}\n";
-            status += $"初始化进行中: {initializationInProgress}\n";
-            status += $"当前步骤: {GetCurrentInitializationStep()}\n";
-            status += $"进度: {GetInitializationProgress() * 100:F1}%\n\n";
-
-            if (seatingSystem != null)
-            {
-                status += $"座位系统: 已生成 {seatingSystem.SeatCount} 个座位\n";
-            }
-
-            if (playerSpawner != null)
-            {
-                status += $"玩家生成器: 已生成 {playerSpawner.SpawnedCharacterCount} 个角色\n";
-            }
-
-            if (seatBinder != null)
-            {
-                status += $"座位绑定器: {seatBinder.ActivePlayers} 名活跃玩家\n";
-            }
-
-            return status;
-        }
-
-        /// <summary>
         /// 获取本地玩家的摄像机控制器（供其他组件调用）
         /// </summary>
         public PlayerCameraController GetLocalPlayerCameraController()
@@ -702,53 +618,6 @@ namespace Classroom
             }
         }
 
-        [ContextMenu("显示教室状态")]
-        public void ShowClassroomStatus()
-        {
-            Debug.Log(GetClassroomStatus());
-        }
-
-        [ContextMenu("显示组件状态")]
-        public void ShowComponentStatus()
-        {
-            string status = "=== 组件状态 ===\n";
-
-            status += $"CircularSeatingSystem: {(seatingSystem != null ? "✓" : "✗")}\n";
-            if (seatingSystem != null)
-                status += $"  - 已初始化: {seatingSystem.IsInitialized}\n";
-
-            status += $"NetworkPlayerSpawner: {(playerSpawner != null ? "✓" : "✗")}\n";
-            if (playerSpawner != null)
-                status += $"  - 已初始化: {playerSpawner.IsInitialized}\n";
-
-            status += $"SeatingPlayerBinder: {(seatBinder != null ? "✓" : "✗")}\n";
-            if (seatBinder != null)
-                status += $"  - 已初始化: {seatBinder.IsInitialized}\n";
-
-            status += $"NetworkManager: {(NetworkManager.Instance != null ? "✓" : "✗")}\n";
-            if (NetworkManager.Instance != null)
-                status += $"  - 已连接: {NetworkManager.Instance.IsConnected}\n";
-
-            Debug.Log(status);
-        }
-
-        [ContextMenu("测试模式切换")]
-        public void ToggleTestMode()
-        {
-            enableTestMode = !enableTestMode;
-            LogDebug($"测试模式: {enableTestMode}");
-        }
-
-        [ContextMenu("模拟网络玩家加入")]
-        public void SimulatePlayerJoin()
-        {
-            if (enableTestMode && isInitialized)
-            {
-                // 模拟玩家加入（仅测试用）
-                LogDebug("模拟玩家加入（测试模式）");
-            }
-        }
-
         #endregion
 
         #region 生命周期管理
@@ -769,67 +638,6 @@ namespace Classroom
                 LogDebug("应用暂停，暂停初始化流程");
                 // 可以在这里保存状态
             }
-        }
-
-        #endregion
-
-        #region 配置验证
-
-        /// <summary>
-        /// 验证配置
-        /// </summary>
-        [ContextMenu("验证配置")]
-        public void ValidateConfiguration()
-        {
-            bool isValid = true;
-            string issues = "=== 配置验证结果 ===\n";
-
-            // 检查必需组件
-            if (seatingSystem == null)
-            {
-                issues += "✗ 缺少CircularSeatingSystem组件\n";
-                isValid = false;
-            }
-            else
-            {
-                issues += "✓ CircularSeatingSystem组件存在\n";
-            }
-
-            if (playerSpawner == null)
-            {
-                issues += "✗ 缺少NetworkPlayerSpawner组件\n";
-                isValid = false;
-            }
-            else
-            {
-                issues += "✓ NetworkPlayerSpawner组件存在\n";
-            }
-
-            if (seatBinder == null)
-            {
-                issues += "✗ 缺少SeatingPlayerBinder组件\n";
-                isValid = false;
-            }
-            else
-            {
-                issues += "✓ SeatingPlayerBinder组件存在\n";
-            }
-
-            // 检查配置参数
-            if (initializationDelay < 0)
-            {
-                issues += "✗ 初始化延迟不能为负数\n";
-                isValid = false;
-            }
-
-            if (sceneLoadTimeout <= 0)
-            {
-                issues += "✗ 场景加载超时时间必须大于0\n";
-                isValid = false;
-            }
-
-            issues += $"\n配置验证: {(isValid ? "通过" : "失败")}";
-            Debug.Log(issues);
         }
 
         #endregion

@@ -613,7 +613,7 @@ namespace Cards.Core
 
         private void HandlePlayerHandChanged(int playerId, int newHandSize)
         {
-            LogDebug($"玩家{playerId}手牌数量变化: {newHandSize}");
+            //LogDebug($"玩家{playerId}手牌数量变化: {newHandSize}");
 
             // 通知UI更新
             RequestUIUpdate(playerId);

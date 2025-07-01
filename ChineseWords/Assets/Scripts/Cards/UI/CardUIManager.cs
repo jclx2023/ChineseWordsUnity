@@ -7,12 +7,13 @@ using Cards.Player;
 using Core.Network;
 using Cards.Effects;
 using Cards.Network;
+using Classroom.Player;
 
 namespace Cards.UI
 {
     /// <summary>
-    /// 卡牌UI管理器 - 重构版
-    /// 移除事件驱动初始化，改为被动初始化，由CardSystemManager完全控制
+    /// 卡牌UI管理器 - Bug修复版
+    /// 修复：1.摄像机查找时机问题 2.Canvas挂载问题 3.频繁刷新问题
     /// </summary>
     public class CardUIManager : MonoBehaviour, IUISystemDependencyInjection
     {
@@ -35,6 +36,9 @@ namespace Cards.UI
         [SerializeField] private KeyCode targetPlayer3Key = KeyCode.Alpha3;   // 目标玩家3
         [SerializeField] private KeyCode targetPlayer4Key = KeyCode.Alpha4;   // 目标玩家4
         [SerializeField] private KeyCode targetAllKey = KeyCode.Alpha0;       // 目标所有玩家
+
+        [Header("防抖设置")]
+        [SerializeField] private float refreshCooldown = 0.1f; // 刷新冷却时间
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -76,6 +80,14 @@ namespace Cards.UI
         private bool isDragging = false;
         private Vector3 dragStartPosition;
 
+        // 防抖相关
+        private float lastRefreshTime = 0f;
+        private bool hasPendingRefresh = false;
+
+        // 摄像机等待相关
+        private bool waitingForCamera = false;
+        private Coroutine cameraWaitCoroutine = null;
+
         // 事件
         public System.Action<int, int> OnCardUseRequested; // cardId, targetPlayerId
         public System.Action OnCardUIOpened;
@@ -112,6 +124,19 @@ namespace Cards.UI
 
             HandleInput();
             HandleDragging();
+            HandlePendingRefresh();
+        }
+
+        private void OnEnable()
+        {
+            // 订阅ClassroomManager的摄像机设置完成事件
+            Classroom.ClassroomManager.OnCameraSetupCompleted += OnCameraSetupCompleted;
+        }
+
+        private void OnDisable()
+        {
+            // 取消订阅ClassroomManager事件
+            Classroom.ClassroomManager.OnCameraSetupCompleted -= OnCameraSetupCompleted;
         }
 
         private void OnDestroy()
@@ -121,6 +146,37 @@ namespace Cards.UI
             if (Instance == this)
             {
                 Instance = null;
+            }
+        }
+
+        #endregion
+
+        #region 摄像机事件处理
+
+        /// <summary>
+        /// 响应ClassroomManager的摄像机设置完成事件
+        /// </summary>
+        private void OnCameraSetupCompleted()
+        {
+            LogDebug("收到摄像机设置完成事件");
+
+            if (waitingForCamera && cardDisplayUI != null)
+            {
+                // 尝试重新初始化CardDisplayUI，这次应该能找到摄像机了
+                PlayerCameraController cameraController = FindPlayerCameraController();
+                if (cameraController != null)
+                {
+                    LogDebug("摄像机设置完成后成功找到摄像机控制器，重新初始化CardDisplayUI");
+                    cardDisplayUI.Initialize(cardUIComponents, cameraController);
+                    waitingForCamera = false;
+
+                    // 停止等待协程
+                    if (cameraWaitCoroutine != null)
+                    {
+                        StopCoroutine(cameraWaitCoroutine);
+                        cameraWaitCoroutine = null;
+                    }
+                }
             }
         }
 
@@ -206,6 +262,9 @@ namespace Cards.UI
             // 创建或查找CardDisplayUI
             SetupCardDisplayUI();
 
+            // 初始化CardDisplayUI（可能没有摄像机）
+            InitializeCardDisplayUI();
+
             // 获取我的玩家ID
             GetMyPlayerId();
 
@@ -217,7 +276,96 @@ namespace Cards.UI
             LogDebug("CardUIManager初始化完成");
 
             // 直接显示缩略图
-            RefreshAndShowThumbnail();
+            RefreshAndShowThumbnailWithDebounce();
+        }
+
+        /// <summary>
+        /// 初始化CardDisplayUI
+        /// </summary>
+        private void InitializeCardDisplayUI()
+        {
+            if (cardDisplayUI == null)
+            {
+                LogError("CardDisplayUI为空，无法初始化");
+                return;
+            }
+
+            if (cardUIComponents == null)
+            {
+                LogError("CardUIComponents为空，无法初始化CardDisplayUI");
+                return;
+            }
+
+            // 查找摄像机控制器
+            PlayerCameraController cameraController = FindPlayerCameraController();
+
+            if (cameraController == null)
+            {
+                LogDebug("暂时未找到摄像机控制器，将等待ClassroomManager完成初始化");
+                waitingForCamera = true;
+
+                // 启动等待协程，避免无限等待
+                cameraWaitCoroutine = StartCoroutine(WaitForCameraWithTimeout());
+            }
+
+            // 即使没有摄像机也先初始化CardDisplayUI
+            cardDisplayUI.Initialize(cardUIComponents, cameraController);
+
+            LogDebug("CardDisplayUI初始化完成（摄像机可能为空）");
+        }
+
+        /// <summary>
+        /// 等待摄像机设置，带超时机制
+        /// </summary>
+        private IEnumerator WaitForCameraWithTimeout()
+        {
+            float timeout = 10f; // 10秒超时
+            float elapsed = 0f;
+
+            while (waitingForCamera && elapsed < timeout)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            if (waitingForCamera)
+            {
+                LogWarning("等待摄像机设置超时，继续运行（摄像机功能可能不可用）");
+                waitingForCamera = false;
+            }
+
+            cameraWaitCoroutine = null;
+        }
+
+        /// <summary>
+        /// 查找玩家摄像机控制器
+        /// </summary>
+        private PlayerCameraController FindPlayerCameraController()
+        {
+            // 方式1: 通过ClassroomManager获取
+            var classroomManager = FindObjectOfType<Classroom.ClassroomManager>();
+            if (classroomManager != null && classroomManager.IsInitialized)
+            {
+                var cameraController = classroomManager.GetLocalPlayerCameraController();
+                if (cameraController != null)
+                {
+                    LogDebug($"通过ClassroomManager找到摄像机控制器: {cameraController.name}");
+                    return cameraController;
+                }
+            }
+
+            // 方式2: 遍历所有PlayerCameraController找到本地玩家的
+            var controllers = FindObjectsOfType<PlayerCameraController>();
+            foreach (var controller in controllers)
+            {
+                if (controller.IsLocalPlayer)
+                {
+                    LogDebug($"通过遍历找到本地玩家摄像机控制器: {controller.name}");
+                    return controller;
+                }
+            }
+
+            return null; // 没有警告日志，避免频繁打印
         }
 
         /// <summary>
@@ -278,6 +426,7 @@ namespace Cards.UI
             else
             {
                 cardUICanvas.sortingOrder = canvasSortingOrder;
+                LogDebug("使用现有的CardUICanvas");
             }
         }
 
@@ -290,13 +439,29 @@ namespace Cards.UI
             if (cardDisplayUI == null)
             {
                 GameObject displayObject = new GameObject("CardDisplayUI");
+                // 确保CardDisplayUI挂载到CardUICanvas下
                 displayObject.transform.SetParent(cardUICanvas.transform, false);
+
+                // 添加RectTransform组件确保正确的UI布局
+                RectTransform rectTransform = displayObject.AddComponent<RectTransform>();
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+                rectTransform.sizeDelta = Vector2.zero;
+                rectTransform.anchoredPosition = Vector2.zero;
+
                 cardDisplayUI = displayObject.AddComponent<CardDisplayUI>();
-                LogDebug("创建了新的CardDisplayUI实例");
+                LogDebug("创建了新的CardDisplayUI实例，已正确挂载到CardUICanvas下");
             }
             else
             {
                 LogDebug("找到了子对象中的CardDisplayUI实例");
+
+                // 确保现有的CardDisplayUI也在正确的父对象下
+                if (cardDisplayUI.transform.parent != cardUICanvas.transform)
+                {
+                    LogDebug("将现有CardDisplayUI移动到CardUICanvas下");
+                    cardDisplayUI.transform.SetParent(cardUICanvas.transform, false);
+                }
             }
         }
 
@@ -315,6 +480,47 @@ namespace Cards.UI
                 LogWarning("NetworkManager不可用，无法确定玩家ID");
                 myPlayerId = 1; // 默认值
             }
+        }
+
+        #endregion
+
+        #region 防抖机制
+
+        /// <summary>
+        /// 处理等待中的刷新请求
+        /// </summary>
+        private void HandlePendingRefresh()
+        {
+            if (hasPendingRefresh && Time.time - lastRefreshTime >= refreshCooldown)
+            {
+                hasPendingRefresh = false;
+                ExecuteRefreshAndShowThumbnail();
+            }
+        }
+
+        /// <summary>
+        /// 带防抖的刷新并显示缩略图
+        /// </summary>
+        private void RefreshAndShowThumbnailWithDebounce()
+        {
+            if (Time.time - lastRefreshTime < refreshCooldown)
+            {
+                // 在冷却期内，标记等待刷新
+                hasPendingRefresh = true;
+                return;
+            }
+
+            lastRefreshTime = Time.time;
+            ExecuteRefreshAndShowThumbnail();
+        }
+
+        /// <summary>
+        /// 执行实际的刷新操作
+        /// </summary>
+        private void ExecuteRefreshAndShowThumbnail()
+        {
+            RefreshHandCards();
+            ShowThumbnail();
         }
 
         #endregion
@@ -387,7 +593,7 @@ namespace Cards.UI
                 if (cardDisplayUI != null)
                 {
                     cardDisplayUI.HideCardDisplay();
-                    RefreshAndShowThumbnail();
+                    RefreshAndShowThumbnailWithDebounce();
                 }
             }
 
@@ -497,7 +703,7 @@ namespace Cards.UI
                     if (cardDisplayUI != null)
                     {
                         cardDisplayUI.HideCardDisplay();
-                        RefreshAndShowThumbnail();
+                        RefreshAndShowThumbnailWithDebounce();
                     }
                     break;
 
@@ -930,7 +1136,7 @@ namespace Cards.UI
 
             // 设置回缩略图状态
             SetUIState(UIState.Thumbnail);
-            RefreshAndShowThumbnail();
+            RefreshAndShowThumbnailWithDebounce();
 
             // 触发事件
             OnCardUIClosed?.Invoke();
@@ -948,15 +1154,14 @@ namespace Cards.UI
             // 只有在显示状态时才刷新
             if (IsCardUIVisible)
             {
-                RefreshHandCards();
-
                 // 根据当前状态刷新对应的显示
                 switch (currentUIState)
                 {
                     case UIState.Thumbnail:
-                        ShowThumbnail();
+                        RefreshAndShowThumbnailWithDebounce();
                         break;
                     case UIState.FanDisplay:
+                        RefreshHandCards();
                         if (cardDisplayUI != null)
                         {
                             cardDisplayUI.ShowFanDisplayWithCards(currentHandCards);
@@ -1017,7 +1222,7 @@ namespace Cards.UI
             if (currentUIState == UIState.Disabled)
             {
                 SetUIState(UIState.Thumbnail);
-                RefreshAndShowThumbnail();
+                RefreshAndShowThumbnailWithDebounce();
                 UpdateUIAvailability();
             }
         }
@@ -1070,15 +1275,6 @@ namespace Cards.UI
             {
                 LogWarning($"无法刷新手牌 - PlayerCardManager: {playerCardManager != null}, MyPlayerId: {myPlayerId}");
             }
-        }
-
-        /// <summary>
-        /// 刷新并显示缩略图
-        /// </summary>
-        private void RefreshAndShowThumbnail()
-        {
-            RefreshHandCards();
-            ShowThumbnail();
         }
 
         /// <summary>
@@ -1142,6 +1338,13 @@ namespace Cards.UI
         private void CleanupUI()
         {
             LogDebug("清理UI资源");
+
+            // 停止等待摄像机的协程
+            if (cameraWaitCoroutine != null)
+            {
+                StopCoroutine(cameraWaitCoroutine);
+                cameraWaitCoroutine = null;
+            }
 
             // 取消事件订阅
             UnsubscribeFromEvents();

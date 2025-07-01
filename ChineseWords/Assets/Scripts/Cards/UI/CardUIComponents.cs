@@ -115,7 +115,7 @@ namespace Cards.UI
             // ≈‰÷√ø®≈∆√Ë ˆ
             ConfigureCardDescription(cardInstance, cardData);
 
-            LogDebug($"ø®≈∆UI≈‰÷√ÕÍ≥…: {cardData.cardName}");
+            //LogDebug($"ø®≈∆UI≈‰÷√ÕÍ≥…: {cardData.cardName}");
         }
 
         /// <summary>
