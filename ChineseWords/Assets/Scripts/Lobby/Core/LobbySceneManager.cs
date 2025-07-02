@@ -625,7 +625,7 @@ namespace Lobby.Core
         /// </summary>
         private string GenerateRandomPlayerName()
         {
-            string[] prefixes = { "玩家", "用户", "访客", "新手" };
+            string[] prefixes = { "学生", "玩家"};
             string prefix = prefixes[Random.Range(0, prefixes.Length)];
             int number = Random.Range(1000, 9999);
             return $"{prefix}{number}";

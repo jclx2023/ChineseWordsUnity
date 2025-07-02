@@ -24,7 +24,7 @@ namespace Core
 
         [Header("自动查找设置")]
         [SerializeField] private bool autoFindComponents = true;
-        [SerializeField] private float initializationDelay = 0.5f;
+        [SerializeField] private float initializationDelay = 0.3f;
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;

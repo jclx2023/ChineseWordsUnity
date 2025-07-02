@@ -10,11 +10,15 @@ namespace Core.Network
     /// <summary>
     /// 玩家游戏状态数据结构
     /// </summary>
+    /// <summary>
+    /// 玩家游戏状态数据结构
+    /// </summary>
     [System.Serializable]
     public class PlayerGameState
     {
         public ushort playerId;
-        public string playerName;
+        public string playerName;      // 保持原始玩家名称，不添加前缀
+        public bool isHost;           // 新增：标识是否为房主
         public int health;
         public int maxHealth;
         public bool isAlive;
@@ -26,6 +30,7 @@ namespace Core.Network
             lastActiveTime = Time.time;
             health = 100;      // 默认值，实际会在初始化时设置
             maxHealth = 100;   // 默认值，实际会在初始化时设置
+            isHost = false;    // 默认不是房主
         }
 
         public float GetHealthPercentage()
@@ -47,6 +52,18 @@ namespace Core.Network
         public bool IsCriticalHealth()
         {
             return GetHealthPercentage() < 0.1f;
+        }
+
+        /// <summary>
+        /// 获取显示用的玩家名称（根据需要添加房主标识）
+        /// </summary>
+        public string GetDisplayName(bool showHostPrefix = false)
+        {
+            if (showHostPrefix && isHost)
+            {
+                return $"房主{playerName}";
+            }
+            return playerName;
         }
     }
 
@@ -124,11 +141,12 @@ namespace Core.Network
             // 使用Photon判断是否为Host玩家
             bool isHostPlayer = IsHostPlayerPhoton(playerId);
 
-            // 创建玩家状态
+            // 创建玩家状态 - 保持原始玩家名称，使用isHost字段标识房主
             var playerState = new PlayerGameState
             {
                 playerId = playerId,
-                playerName = isHostPlayer ? $"房主{playerName}" : playerName, // 标记房主
+                playerName = playerName,           // 移除这里：isHostPlayer ? $"房主{playerName}" : playerName
+                isHost = isHostPlayer,
                 health = initialHealth,
                 maxHealth = maxHealth,
                 isAlive = true,
@@ -333,29 +351,6 @@ namespace Core.Network
         public int GetAlivePlayerCount()
         {
             return playerStates.Values.Count(p => p.isAlive);
-        }
-
-        public int GetReadyPlayerCount()
-        {
-            return playerStates.Values.Count(p => p.isReady);
-        }
-
-        public bool AreAllPlayersReady()
-        {
-            return playerStates.Count > 0 && playerStates.Values.All(p => p.isReady);
-        }
-
-        public ushort GetHostPlayerId()
-        {
-            // 优先使用Photon的MasterClient
-            ushort photonMasterClientId = GetPhotonMasterClientId();
-            if (photonMasterClientId != 0)
-            {
-                return photonMasterClientId;
-            }
-
-            var hostPlayer = playerStates.Values.FirstOrDefault(p => p.playerName.Contains("房主"));
-            return hostPlayer?.playerId ?? 0;
         }
 
         #endregion
