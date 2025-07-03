@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using System.Linq;
 using Cards.Core;
 using UI;
 
@@ -60,7 +61,7 @@ namespace Cards.UI
         private NetworkUI networkUI;
         private Camera uiCamera;
 
-        // BeChoosen效果管理
+        // BeChoosen效果管理 - 简化版
         private Dictionary<GameObject, CanvasGroup> beChoosenCanvasGroups = new Dictionary<GameObject, CanvasGroup>();
 
         // 事件
@@ -112,6 +113,12 @@ namespace Cards.UI
                 return;
             }
 
+            // 验证Canvas层级
+            if (parentCanvas.name != "CardCanvas")
+            {
+                LogWarning($"当前Canvas名称为: {parentCanvas.name}，建议使用CardCanvas");
+            }
+
             // 获取UI摄像机
             uiCamera = parentCanvas.worldCamera;
 
@@ -122,7 +129,7 @@ namespace Cards.UI
                 LogWarning("未找到NetworkUI组件，玩家目标检测可能无法正常工作");
             }
 
-            LogDebug("ArrowManager初始化完成");
+            LogDebug($"ArrowManager初始化完成 - Canvas: {parentCanvas.name}");
         }
 
         /// <summary>
@@ -249,23 +256,31 @@ namespace Cards.UI
                 DestroyArrowInstance();
             }
 
-            // 实例化箭头预制体
-            currentArrowInstance = Instantiate(arrowPrefab, transform);
+            // 实例化箭头预制体，直接在Canvas下而不是在ArrowManager下
+            currentArrowInstance = Instantiate(arrowPrefab, parentCanvas.transform);
             currentArrowInstance.name = "ActiveArrow";
 
             // 获取BezierArrowRenderer组件
             currentArrowRenderer = currentArrowInstance.GetComponent<BezierArrowRenderer>();
-            if (currentArrowRenderer == null)
+
+            // 确保箭头在Canvas下有正确的RectTransform设置
+            RectTransform arrowRect = currentArrowInstance.GetComponent<RectTransform>();
+            if (arrowRect == null)
             {
-                LogError("箭头预制体缺少BezierArrowRenderer组件！");
-                DestroyArrowInstance();
-                return false;
+                arrowRect = currentArrowInstance.AddComponent<RectTransform>();
             }
 
-            // 禁用BezierArrowRenderer的Update（我们手动控制）
-            currentArrowRenderer.enabled = false;
+            // 设置RectTransform属性，确保箭头能正确显示在Canvas中
+            arrowRect.anchorMin = Vector2.zero;
+            arrowRect.anchorMax = Vector2.zero;
+            arrowRect.pivot = Vector2.zero;
+            arrowRect.sizeDelta = Vector2.zero;
+            arrowRect.anchoredPosition = Vector2.zero;
 
-            LogDebug("箭头实例创建成功");
+            // 启用外部控制模式
+            currentArrowRenderer.EnableExternalControl(arrowStartPosition, arrowStartPosition);
+
+            LogDebug($"箭头实例创建成功，父对象: {currentArrowInstance.transform.parent.name}");
             return true;
         }
 
@@ -288,13 +303,13 @@ namespace Cards.UI
         /// </summary>
         private void SetArrowStartPosition(Vector2 position)
         {
-            if (currentArrowInstance != null)
+            arrowStartPosition = position;
+
+            if (currentArrowRenderer != null)
             {
-                RectTransform arrowRect = currentArrowInstance.GetComponent<RectTransform>();
-                if (arrowRect != null)
-                {
-                    arrowRect.anchoredPosition = position;
-                }
+                // 使用BezierArrowRenderer的新接口设置起点
+                currentArrowRenderer.SetStartPosition(position);
+                LogDebug($"箭头起点位置已设置: {position}");
             }
         }
 
@@ -332,6 +347,9 @@ namespace Cards.UI
             // 获取鼠标位置
             Vector2 mouseScreenPos = Input.mousePosition;
 
+            // 更新箭头终点位置
+            UpdateArrowEndPosition(mouseScreenPos);
+
             // 先检测PlayerConsole
             TargetDetectionResult newTargetType = TargetDetectionResult.None;
             ushort newTargetPlayerId = 0;
@@ -357,6 +375,26 @@ namespace Cards.UI
 
             // 更新目标状态
             UpdateTargetState(newTargetType, newTargetPlayerId, newTargetConsole);
+        }
+
+        /// <summary>
+        /// 更新箭头终点位置
+        /// </summary>
+        private void UpdateArrowEndPosition(Vector2 mouseScreenPos)
+        {
+            if (currentArrowRenderer == null) return;
+
+            // 转换鼠标位置为Canvas坐标
+            Vector2 mouseCanvasPos;
+            RectTransform canvasRect = parentCanvas.GetComponent<RectTransform>();
+            bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect, mouseScreenPos, parentCanvas.worldCamera, out mouseCanvasPos);
+
+            if (success)
+            {
+                // 使用BezierArrowRenderer的新接口设置终点
+                currentArrowRenderer.SetEndPosition(mouseCanvasPos);
+            }
         }
 
         /// <summary>
@@ -490,6 +528,7 @@ namespace Cards.UI
         {
             public ushort playerId;
             public GameObject console;
+            public UnityEngine.UI.Image beChoosenImage; // 直接保存BeChoosen的Image引用
         }
 
         /// <summary>
@@ -517,15 +556,20 @@ namespace Cards.UI
 
                         // 获取itemObject
                         var itemObjectField = components.GetType().GetField("itemObject");
-                        if (itemObjectField != null)
+                        var beChoosenImageField = components.GetType().GetField("beChoosenImage");
+
+                        if (itemObjectField != null && beChoosenImageField != null)
                         {
                             var itemObject = itemObjectField.GetValue(components) as GameObject;
+                            var beChoosenImage = beChoosenImageField.GetValue(components) as UnityEngine.UI.Image;
+
                             if (itemObject != null)
                             {
                                 consoles.Add(new PlayerConsoleData
                                 {
                                     playerId = playerId,
-                                    console = itemObject
+                                    console = itemObject,
+                                    beChoosenImage = beChoosenImage // 直接获取Image引用
                                 });
                             }
                         }
@@ -561,56 +605,113 @@ namespace Cards.UI
         #region BeChoosen效果管理
 
         /// <summary>
+        /// 当前高亮的PlayerConsole数据
+        /// </summary>
+        private PlayerConsoleData? currentHighlightedConsole = null;
+
+        /// <summary>
         /// 更新BeChoosen效果
         /// </summary>
         private void UpdateBeChoosenEffects()
         {
-            // 清理之前的效果
-            ClearAllBeChoosenEffects();
-
             // 如果当前指向PlayerConsole，显示BeChoosen效果
             if (currentTargetType == TargetDetectionResult.PlayerConsole && currentTargetConsole != null)
             {
-                ShowBeChoosenEffect(currentTargetConsole);
+                // 查找对应的PlayerConsoleData
+                var consoles = GetAllPlayerConsoles();
+                var targetConsoleData = consoles.FirstOrDefault(c => c.console == currentTargetConsole);
+
+                if (targetConsoleData.console != null)
+                {
+                    ShowBeChoosenEffectDirect(targetConsoleData);
+                }
+            }
+            else
+            {
+                // 清理高亮效果
+                ClearBeChoosenEffect();
             }
         }
 
         /// <summary>
-        /// 显示BeChoosen效果
+        /// 直接显示BeChoosen效果（使用现有的Image引用）
         /// </summary>
-        private void ShowBeChoosenEffect(GameObject console)
+        private void ShowBeChoosenEffectDirect(PlayerConsoleData consoleData)
         {
-            // 查找BeChoosen图像
-            Transform beChoosenTransform = FindChildRecursive(console.transform, "BeChoosen");
-            if (beChoosenTransform == null) return;
-
-            GameObject beChoosenObject = beChoosenTransform.gameObject;
-            beChoosenObject.SetActive(true);
-
-            // 设置渐变效果
-            CanvasGroup canvasGroup = beChoosenObject.GetComponent<CanvasGroup>();
-            if (canvasGroup == null)
+            // 先清理之前的高亮
+            if (currentHighlightedConsole.HasValue &&
+                currentHighlightedConsole.Value.playerId != consoleData.playerId)
             {
-                canvasGroup = beChoosenObject.AddComponent<CanvasGroup>();
+                ClearBeChoosenEffect();
             }
 
-            // 记录CanvasGroup用于后续管理
-            if (!beChoosenCanvasGroups.ContainsKey(beChoosenObject))
+            // 显示新的高亮
+            if (consoleData.beChoosenImage != null)
             {
-                beChoosenCanvasGroups[beChoosenObject] = canvasGroup;
-            }
+                consoleData.beChoosenImage.gameObject.SetActive(true);
 
-            // 渐变到可见
-            StartCoroutine(FadeBeChoosen(canvasGroup, 1f));
+                // 设置渐变效果
+                CanvasGroup canvasGroup = consoleData.beChoosenImage.GetComponent<CanvasGroup>();
+                if (canvasGroup == null)
+                {
+                    canvasGroup = consoleData.beChoosenImage.gameObject.AddComponent<CanvasGroup>();
+                }
+
+                // 渐变到可见
+                StartCoroutine(FadeBeChoosen(canvasGroup, 1f));
+
+                currentHighlightedConsole = consoleData;
+
+                LogDebug($"显示玩家{consoleData.playerId}的BeChoosen效果");
+            }
+            else
+            {
+                LogWarning($"玩家{consoleData.playerId}的beChoosenImage为空");
+            }
         }
 
         /// <summary>
-        /// 清理所有BeChoosen效果
+        /// 清理BeChoosen效果
+        /// </summary>
+        private void ClearBeChoosenEffect()
+        {
+            if (currentHighlightedConsole.HasValue)
+            {
+                var consoleData = currentHighlightedConsole.Value;
+                if (consoleData.beChoosenImage != null)
+                {
+                    // 渐变到隐藏
+                    CanvasGroup canvasGroup = consoleData.beChoosenImage.GetComponent<CanvasGroup>();
+                    if (canvasGroup != null)
+                    {
+                        StartCoroutine(FadeBeChoosen(canvasGroup, 0f, () => {
+                            if (consoleData.beChoosenImage != null)
+                            {
+                                consoleData.beChoosenImage.gameObject.SetActive(false);
+                            }
+                        }));
+                    }
+                    else
+                    {
+                        consoleData.beChoosenImage.gameObject.SetActive(false);
+                    }
+
+                    LogDebug($"清理玩家{consoleData.playerId}的BeChoosen效果");
+                }
+
+                currentHighlightedConsole = null;
+            }
+        }
+
+        /// <summary>
+        /// 清理所有BeChoosen效果（保留原方法作为备用）
         /// </summary>
         private void ClearAllBeChoosenEffects()
         {
-            var keysToRemove = new List<GameObject>();
+            ClearBeChoosenEffect();
 
+            // 清理旧的CanvasGroup字典（如果还在使用）
+            var keysToRemove = new List<GameObject>();
             foreach (var kvp in beChoosenCanvasGroups)
             {
                 if (kvp.Key == null)
@@ -628,7 +729,6 @@ namespace Cards.UI
                 }));
             }
 
-            // 清理无效引用
             foreach (var key in keysToRemove)
             {
                 beChoosenCanvasGroups.Remove(key);
@@ -675,7 +775,7 @@ namespace Cards.UI
             Color targetColor = GetArrowColorForTarget();
 
             // TODO: 应用颜色到箭头节点
-            // 这里需要根据shader实现来设置颜色
+            // 这里需要根据你的shader实现来设置颜色
             // 目前暂时不实现，等shader完成后再添加
         }
 

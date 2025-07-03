@@ -14,7 +14,7 @@ namespace Cards.UI
         [SerializeField] private GameObject cardUIPrefab; // 卡牌UI预制体
 
         // 预制体资源路径
-        private const string CARD_UI_PREFAB_PATH = "Prefabs/UI/CardUIPrefab";
+        private const string CARD_UI_PREFAB_PATH = "Prefabs/UI/Card/CardUIPrefab";
 
         [Header("尺寸设置")]
         [SerializeField] private Vector2 baseCardSize = new Vector2(200f, 279f);

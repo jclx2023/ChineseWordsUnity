@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 通过三阶贝塞尔曲线绘制选择箭头
+/// 通过三阶贝塞尔曲线绘制选择箭头 - 支持外部控制版本
 /// </summary>
 public class BezierArrowRenderer : MonoBehaviour
 {
@@ -21,7 +21,7 @@ public class BezierArrowRenderer : MonoBehaviour
     public float controlPoint2Position = 0.67f; // P2在直线上的位置比例
     [Range(0f, 1f)]
     public float curveIntensity = 0.2f; // 曲线弯曲强度
-    public bool invertCurve = false; // 是否反转曲线方向
+    public bool invertCurve = true; // 是否反转曲线方向
 
     [Header("节点分布")]
     public bool useLogarithmicDistribution = false; // 是否使用对数分布
@@ -30,15 +30,23 @@ public class BezierArrowRenderer : MonoBehaviour
 
     [Header("缩放设置")]
     [Range(0f, 1f)]
-    public float minScale = 0.3f; // 尾部最小缩放
+    public float minScale = 0.2f; // 尾部最小缩放
     [Range(0f, 2f)]
     public float maxScale = 1.0f; // 头部最大缩放
+
+    [Header("外部控制设置")]
+    [SerializeField] private bool useExternalControl = false; // 是否使用外部控制
+    [SerializeField] private Vector2 externalStartPosition = Vector2.zero; // 外部设置的起点
+    [SerializeField] private Vector2 externalEndPosition = Vector2.zero; // 外部设置的终点
 
     // 内部变量
     private RectTransform origin;
     private List<RectTransform> arrowNodes = new List<RectTransform>();
     private List<Vector2> controlPoints = new List<Vector2>();
     private Canvas parentCanvas;
+
+    // 外部控制状态
+    private bool isExternallyControlled = false;
 
     private void Awake()
     {
@@ -77,6 +85,22 @@ public class BezierArrowRenderer : MonoBehaviour
     {
         if (parentCanvas == null || arrowNodes.Count == 0) return;
 
+        // 如果外部控制，使用外部设置的位置
+        if (isExternallyControlled)
+        {
+            UpdateWithExternalControl();
+        }
+        else
+        {
+            UpdateWithMouseControl();
+        }
+    }
+
+    /// <summary>
+    /// 使用鼠标控制的更新（原有逻辑）
+    /// </summary>
+    private void UpdateWithMouseControl()
+    {
         // 获取鼠标位置
         Vector2 parentLocal;
         bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
@@ -88,18 +112,33 @@ public class BezierArrowRenderer : MonoBehaviour
         if (!success) return;
 
         // 计算控制点
-        CalculateControlPoints(parentLocal);
+        CalculateControlPoints(Vector2.zero, parentLocal);
 
         // 更新节点
         UpdateArrowNodes();
     }
 
-    private void CalculateControlPoints(Vector2 targetPosition)
+    /// <summary>
+    /// 使用外部控制的更新
+    /// </summary>
+    private void UpdateWithExternalControl()
     {
-        this.controlPoints[0] = Vector2.zero; // P0: 起点
+        // 计算控制点
+        CalculateControlPoints(externalStartPosition, externalEndPosition);
+
+        // 更新节点
+        UpdateArrowNodes();
+    }
+
+    /// <summary>
+    /// 计算控制点
+    /// </summary>
+    private void CalculateControlPoints(Vector2 startPosition, Vector2 targetPosition)
+    {
+        this.controlPoints[0] = startPosition; // P0: 起点
         this.controlPoints[3] = targetPosition; // P3: 终点
 
-        Vector2 direction = targetPosition - Vector2.zero;
+        Vector2 direction = targetPosition - startPosition;
         float distance = direction.magnitude;
 
         if (distance < 0.1f)
@@ -127,7 +166,10 @@ public class BezierArrowRenderer : MonoBehaviour
         }
     }
 
-    private void UpdateArrowNodes()
+    /// <summary>
+    /// 更新箭头节点 - 改为公共方法
+    /// </summary>
+    public void UpdateArrowNodes()
     {
         for (int i = 0; i < this.arrowNodes.Count; ++i)
         {
@@ -203,4 +245,57 @@ public class BezierArrowRenderer : MonoBehaviour
         float progress = (float)index / Mathf.Max(1, this.arrowNodes.Count - 1);
         return this.scaleFactor * Mathf.Lerp(minScale, maxScale, progress);
     }
+
+    #region 公共接口 - 供外部控制使用
+
+    /// <summary>
+    /// 启用外部控制模式
+    /// </summary>
+    public void EnableExternalControl(Vector2 startPosition, Vector2 endPosition)
+    {
+        isExternallyControlled = true;
+        externalStartPosition = startPosition;
+        externalEndPosition = endPosition;
+
+        // 立即更新一次
+        UpdateWithExternalControl();
+    }
+
+    /// <summary>
+    /// 禁用外部控制，返回鼠标控制模式
+    /// </summary>
+    public void DisableExternalControl()
+    {
+        isExternallyControlled = false;
+    }
+
+    /// <summary>
+    /// 设置起点位置（外部控制模式下）
+    /// </summary>
+    public void SetStartPosition(Vector2 startPosition)
+    {
+        externalStartPosition = startPosition;
+
+        // 如果正在外部控制模式，立即更新
+        if (isExternallyControlled)
+        {
+            UpdateWithExternalControl();
+        }
+    }
+
+    /// <summary>
+    /// 设置终点位置（外部控制模式下）
+    /// </summary>
+    public void SetEndPosition(Vector2 endPosition)
+    {
+        externalEndPosition = endPosition;
+
+        // 如果正在外部控制模式，立即更新
+        if (isExternallyControlled)
+        {
+            UpdateWithExternalControl();
+        }
+    }
+
+    #endregion
 }

@@ -16,7 +16,7 @@ namespace Cards.UI
     {
         [Header("缩略图设置")]
         [SerializeField] private Transform thumbnailContainer; // 缩略图容器
-        [SerializeField] private Vector2 thumbnailPosition = new Vector2(90f, 0f); // 调整到合适的位置
+        [SerializeField] private Vector2 thumbnailPosition = new Vector2(110f, 0f); // 调整到合适的位置
         [SerializeField] private float thumbnailRotation = -10f; // 缩略图容器旋转角度
         [SerializeField] private float thumbnailScale = 0.6f; // 缩略图缩放（从0.4增大到0.6）
         [SerializeField] private float thumbnailFanRadius = 100f; // 缩略图扇形半径（从80增大到100）
@@ -25,9 +25,9 @@ namespace Cards.UI
 
         [Header("扇形展示设置")]
         [SerializeField] private Transform fanDisplayContainer; // 扇形展示容器
-        [SerializeField] private float fanRadius = 300f; // 扇形半径
+        [SerializeField] private float fanRadius = 200f; // 扇形半径
         [SerializeField] private float fanAngleSpread = 60f; // 扇形角度范围
-        [SerializeField] private float bottomMargin = 50f; // 距离屏幕底部的边距
+        [SerializeField] private float bottomMargin = -200f; // 距离屏幕底部的边距
         [SerializeField] private float cardHeight = 200f; // 卡牌高度（用于计算位置）
 
         [Header("悬停交互设置")]

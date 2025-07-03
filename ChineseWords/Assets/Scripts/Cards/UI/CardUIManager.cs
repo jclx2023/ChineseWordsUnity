@@ -26,6 +26,7 @@ namespace Cards.UI
 
         [Header("箭头系统设置")]
         [SerializeField] private GameObject arrowPrefab; // 贝塞尔箭头预制体
+        [SerializeField] private string arrowPrefabPath = "Prefabs/UI/InGame/Arr"; // 箭头预制体路径
         [SerializeField] private float pressHoldTime = 0.2f; // 按住时间阈值
 
         [Header("拖拽设置 - 释放区域（屏幕百分比）")]
@@ -320,9 +321,15 @@ namespace Cards.UI
         /// </summary>
         private void SetupArrowManager()
         {
+            // 加载箭头预制体（如果未在Inspector中设置）
             if (arrowPrefab == null)
             {
-                LogError("箭头预制体未设置，无法创建ArrowManager");
+                LoadArrowPrefab();
+            }
+
+            if (arrowPrefab == null)
+            {
+                LogError("箭头预制体未设置且加载失败，无法创建ArrowManager");
                 return;
             }
 
@@ -349,6 +356,22 @@ namespace Cards.UI
             {
                 LogError("ArrowManager创建失败");
             }
+        }
+
+        /// <summary>
+        /// 加载箭头预制体
+        /// </summary>
+        private void LoadArrowPrefab()
+        {
+                LogDebug($"尝试从Resources加载箭头预制体: {arrowPrefabPath}");
+
+                GameObject loadedPrefab = Resources.Load<GameObject>(arrowPrefabPath);
+
+                if (loadedPrefab != null)
+                {
+                    arrowPrefab = loadedPrefab;
+                    LogDebug($"成功加载箭头预制体: {loadedPrefab.name}");
+                }
         }
 
         /// <summary>
@@ -1135,6 +1158,36 @@ namespace Cards.UI
         #endregion
 
         #region 公共接口
+
+        /// <summary>
+        /// 手动设置箭头预制体（可选，用于运行时修改）
+        /// </summary>
+        public void SetArrowPrefab(GameObject prefab)
+        {
+            arrowPrefab = prefab;
+            LogDebug($"手动设置箭头预制体: {prefab?.name}");
+
+            // 如果ArrowManager已存在，更新其预制体引用
+            if (arrowManager != null)
+            {
+                arrowManager.SetArrowPrefab(prefab);
+            }
+        }
+
+        /// <summary>
+        /// 重新加载箭头预制体（调试用）
+        /// </summary>
+        public void ReloadArrowPrefab()
+        {
+            arrowPrefab = null;
+            LoadArrowPrefab();
+
+            if (arrowManager != null && arrowPrefab != null)
+            {
+                arrowManager.SetArrowPrefab(arrowPrefab);
+                LogDebug("箭头预制体重新加载完成");
+            }
+        }
 
         /// <summary>
         /// 显示扇形展示
