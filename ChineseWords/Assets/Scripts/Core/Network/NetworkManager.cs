@@ -568,6 +568,56 @@ namespace Core.Network
                 }
             }
         }
+        [PunRPC]
+        void OnPlayerHealthChangeRequested_RPC(int playerId, int healthChange, string reason)
+        {
+            // 只有MasterClient处理这个请求
+            if (!PhotonNetwork.IsMasterClient) return;
+
+            LogDebug($"Host收到血量修改请求: 玩家{playerId}, 变化{healthChange}, 原因:{reason}");
+
+            // 通过HostGameManager执行血量修改
+            if (HostGameManager.Instance != null)
+            {
+                // 使用反射获取hpManager并执行修改
+                var hostManager = HostGameManager.Instance;
+                var hpManagerField = hostManager.GetType().GetField("hpManager",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                if (hpManagerField != null)
+                {
+                    var hpManager = hpManagerField.GetValue(hostManager) as PlayerHPManager;
+                    if (hpManager != null)
+                    {
+                        bool success = false;
+                        if (healthChange > 0)
+                        {
+                            success = hpManager.HealPlayer((ushort)playerId, healthChange, out int newHealth);
+                            LogDebug($"Host执行回血: 玩家{playerId} +{healthChange} → {newHealth}, 成功:{success}");
+                        }
+                        else if (healthChange < 0)
+                        {
+                            success = hpManager.ApplyDamage((ushort)playerId, out int newHealth, out bool isDead, -healthChange);
+                            LogDebug($"Host执行扣血: 玩家{playerId} {healthChange} → {newHealth}, 死亡:{isDead}, 成功:{success}");
+                        }
+
+                        LogDebug($"Host执行血量修改结果: {success}");
+                    }
+                    else
+                    {
+                        LogDebug("Host的hpManager为空，无法执行血量修改");
+                    }
+                }
+                else
+                {
+                    LogDebug("Host无法通过反射获取hpManager字段");
+                }
+            }
+            else
+            {
+                LogDebug("HostGameManager.Instance为空，无法执行血量修改");
+            }
+        }
 
         [PunRPC]
         void OnPlayerHandCardsReceived_RPC(int playerId, int[] cardIds)
@@ -848,6 +898,28 @@ namespace Core.Network
                 persistentManager.photonView.RPC("OnCardAdded_RPC", RpcTarget.All,
                     (int)playerId, cardId);
                 LogDebug($"✓ 广播卡牌添加: 玩家{playerId}获得卡牌{cardId}");
+            }
+        }
+        /// <summary>
+        /// 请求修改玩家血量（Client → Host）
+        /// </summary>
+        public void RequestPlayerHealthChange(int playerId, int healthChange, string reason = "")
+        {
+            if (!PhotonNetwork.InRoom)
+            {
+                Debug.LogWarning("[NetworkManager] 未在房间中，无法请求血量修改");
+                return;
+            }
+
+            var persistentManager = PersistentNetworkManager.Instance;
+            if (persistentManager != null && persistentManager.photonView != null)
+            {
+                persistentManager.photonView.RPC("OnPlayerHealthChangeRequested_RPC", RpcTarget.MasterClient, playerId, healthChange, reason);
+                LogDebug($"请求修改玩家{playerId}血量: {healthChange} (原因: {reason})");
+            }
+            else
+            {
+                Debug.LogError("[NetworkManager] 无法发送RPC，PersistentNetworkManager不可用");
             }
         }
 

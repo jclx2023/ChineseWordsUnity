@@ -682,6 +682,26 @@ namespace UI
         #region 公共接口
 
         /// <summary>
+        /// 供外部查询玩家存活状态
+        /// </summary>
+        public bool IsPlayerAlive(ushort playerId)
+        {
+            if (gamePlayerStates.ContainsKey(playerId))
+            {
+                return gamePlayerStates[playerId].isAlive;
+            }
+            return false; // 玩家不存在时返回false
+        }
+
+        /// <summary>
+        /// 检查是否包含指定玩家
+        /// </summary>
+        public bool ContainsPlayer(ushort playerId)
+        {
+            return gamePlayerStates.ContainsKey(playerId);
+        }
+
+        /// <summary>
         /// 显示玩家列表
         /// </summary>
         public void ShowGamePlayerList()

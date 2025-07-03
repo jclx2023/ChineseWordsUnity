@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using Core;
@@ -10,36 +10,36 @@ using System;
 namespace Cards.Player
 {
     /// <summary>
-    /// Íæ¼Ò¿¨ÅÆ¹ÜÀíÆ÷£¨ĞŞ¸Ä°æ - Ö§³ÖHost·Ö·¢ÊÖÅÆ£©
-    /// ¸ºÔğ¹ÜÀíÃ¿¸öÍæ¼ÒµÄ¿¨ÅÆ×´Ì¬¡¢Ê¹ÓÃÈ¨ÏŞ¡¢ÊÖÅÆ²Ù×÷µÈ
-    /// ÓëÏÖÓĞÓÎÏ·ÏµÍ³¼¯³É£¬ÊµÏÖ¸öÈË»ØºÏÖÆµÄ¿¨ÅÆ»úÖÆ
-    /// Ö§³ÖĞÂµÄ12ÕÅ¿¨ÅÆÏµÍ³
-    /// ÒÆ³ı±¾µØÊÖÅÆÉú³É£¬¸ÄÎª½ÓÊÕHost·Ö·¢µÄÊÖÅÆ
+    /// ç©å®¶å¡ç‰Œç®¡ç†å™¨ï¼ˆä¿®æ”¹ç‰ˆ - æ”¯æŒHoståˆ†å‘æ‰‹ç‰Œï¼‰
+    /// è´Ÿè´£ç®¡ç†æ¯ä¸ªç©å®¶çš„å¡ç‰ŒçŠ¶æ€ã€ä½¿ç”¨æƒé™ã€æ‰‹ç‰Œæ“ä½œç­‰
+    /// ä¸ç°æœ‰æ¸¸æˆç³»ç»Ÿé›†æˆï¼Œå®ç°ä¸ªäººå›åˆåˆ¶çš„å¡ç‰Œæœºåˆ¶
+    /// æ”¯æŒæ–°çš„12å¼ å¡ç‰Œç³»ç»Ÿ
+    /// ç§»é™¤æœ¬åœ°æ‰‹ç‰Œç”Ÿæˆï¼Œæ”¹ä¸ºæ¥æ”¶Hoståˆ†å‘çš„æ‰‹ç‰Œ
     /// </summary>
     public class PlayerCardManager : MonoBehaviour
     {
-        [Header("ÅäÖÃÉèÖÃ")]
+        [Header("é…ç½®è®¾ç½®")]
         [SerializeField] private int maxHandSize = 5;
         [SerializeField] private int initialCardCount = 3;
         [SerializeField] private bool enableDebugLogs = true;
 
-        [Header("¿¨ÅÆÅäÖÃ")]
+        [Header("å¡ç‰Œé…ç½®")]
         [SerializeField] private CardConfig cardConfig;
 
-        [Header("ÍøÂçÉèÖÃ")]
+        [Header("ç½‘ç»œè®¾ç½®")]
         [SerializeField] private bool enableNetworkSync = true;
 
-        // µ¥ÀıÊµÀı
+        // å•ä¾‹å®ä¾‹
         public static PlayerCardManager Instance { get; private set; }
 
-        // Íæ¼Ò¿¨ÅÆ×´Ì¬¹ÜÀí
+        // ç©å®¶å¡ç‰ŒçŠ¶æ€ç®¡ç†
         private Dictionary<int, EnhancedPlayerCardState> playerCardStates;
 
-        // µ±Ç°»ØºÏĞÅÏ¢
+        // å½“å‰å›åˆä¿¡æ¯
         private int currentTurnPlayerId = 0;
         private bool isInitialized = false;
 
-        #region ÊÂ¼ş¶¨Òå
+        #region äº‹ä»¶å®šä¹‰
         public System.Action<int, int, int> OnCardUsed;
         public System.Action<int, int, string> OnCardAcquired;
         public System.Action<int> OnUsageOpportunityReset;
@@ -48,11 +48,11 @@ namespace Cards.Player
 
         #endregion
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
-            LogDebug($"{GetType().Name} ×é¼şÒÑ´´½¨£¬µÈ´ıµ¥ÀıÉèÖÃ");
+            LogDebug($"{GetType().Name} ç»„ä»¶å·²åˆ›å»ºï¼Œç­‰å¾…å•ä¾‹è®¾ç½®");
             playerCardStates = new Dictionary<int, EnhancedPlayerCardState>();
         }
 
@@ -72,16 +72,16 @@ namespace Cards.Player
 
         #endregion
 
-        #region ³õÊ¼»¯
+        #region åˆå§‹åŒ–
 
         /// <summary>
-        /// ³õÊ¼»¯¿¨ÅÆ¹ÜÀíÆ÷
+        /// åˆå§‹åŒ–å¡ç‰Œç®¡ç†å™¨
         /// </summary>
         public void Initialize()
         {
             if (isInitialized)
             {
-                LogDebug("PlayerCardManagerÒÑ³õÊ¼»¯£¬Ìø¹ıÖØ¸´³õÊ¼»¯");
+                LogDebug("PlayerCardManagerå·²åˆå§‹åŒ–ï¼Œè·³è¿‡é‡å¤åˆå§‹åŒ–");
                 return;
             }
 
@@ -89,85 +89,85 @@ namespace Cards.Player
             {
                 if (cardConfig == null)
                 {
-                    LogDebug("³¢ÊÔ´ÓResources¼ÓÔØCardConfig...");
+                    LogDebug("å°è¯•ä»ResourcesåŠ è½½CardConfig...");
 
-                    // ³¢ÊÔ¼ÓÔØ
+                    // å°è¯•åŠ è½½
                     cardConfig = Resources.Load<CardConfig>("QuestionConfigs/CardConfig");
 
                     if (cardConfig == null)
                     {
-                        // µ÷ÊÔ£ºÁĞ³öResourcesÎÄ¼ş¼ĞÖĞµÄËùÓĞ×ÊÔ´
+                        // è°ƒè¯•ï¼šåˆ—å‡ºResourcesæ–‡ä»¶å¤¹ä¸­çš„æ‰€æœ‰èµ„æº
                         var allResources = Resources.LoadAll("QuestionConfigs");
-                        LogDebug($"QuestionConfigsÎÄ¼ş¼ĞÖĞÕÒµ½{allResources.Length}¸ö×ÊÔ´:");
+                        LogDebug($"QuestionConfigsæ–‡ä»¶å¤¹ä¸­æ‰¾åˆ°{allResources.Length}ä¸ªèµ„æº:");
 
                         foreach (var resource in allResources)
                         {
                             LogDebug($"- {resource.name} ({resource.GetType().Name})");
                         }
 
-                        // ³¢ÊÔÖ±½Ó¼ÓÔØËùÓĞCardConfigÀàĞÍµÄ×ÊÔ´
+                        // å°è¯•ç›´æ¥åŠ è½½æ‰€æœ‰CardConfigç±»å‹çš„èµ„æº
                         var allCardConfigs = Resources.LoadAll<CardConfig>("QuestionConfigs");
-                        LogDebug($"ÕÒµ½{allCardConfigs.Length}¸öCardConfigÀàĞÍµÄ×ÊÔ´");
+                        LogDebug($"æ‰¾åˆ°{allCardConfigs.Length}ä¸ªCardConfigç±»å‹çš„èµ„æº");
 
-                        throw new InvalidOperationException("ÎŞ·¨¼ÓÔØCardConfig×ÊÔ´");
+                        throw new InvalidOperationException("æ— æ³•åŠ è½½CardConfigèµ„æº");
                     }
                     else
                     {
-                        LogDebug("CardConfig¼ÓÔØ³É¹¦£¡");
+                        LogDebug("CardConfigåŠ è½½æˆåŠŸï¼");
                     }
                 }
 
-                // ÑéÖ¤ÅäÖÃ
+                // éªŒè¯é…ç½®
                 if (!cardConfig.ValidateConfig())
                 {
-                    Debug.LogError("[PlayerCardManager] CardConfigÑéÖ¤Ê§°Ü");
+                    Debug.LogError("[PlayerCardManager] CardConfigéªŒè¯å¤±è´¥");
                     return;
                 }
 
-                // ´ÓÅäÖÃÖĞ»ñÈ¡ÉèÖÃ
+                // ä»é…ç½®ä¸­è·å–è®¾ç½®
                 maxHandSize = cardConfig.SystemSettings.maxHandSize;
                 initialCardCount = cardConfig.SystemSettings.startingCardCount;
 
-                // ¶©ÔÄÓÎÏ·ÊÂ¼ş
+                // è®¢é˜…æ¸¸æˆäº‹ä»¶
                 SubscribeToGameEvents();
 
                 isInitialized = true;
-                LogDebug("PlayerCardManager³õÊ¼»¯Íê³É");
-                LogDebug($"ÅäÖÃ: ×î´óÊÖÅÆÊı={maxHandSize}, ³õÊ¼¿¨ÅÆÊı={initialCardCount}");
+                LogDebug("PlayerCardManageråˆå§‹åŒ–å®Œæˆ");
+                LogDebug($"é…ç½®: æœ€å¤§æ‰‹ç‰Œæ•°={maxHandSize}, åˆå§‹å¡ç‰Œæ•°={initialCardCount}");
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[PlayerCardManager] ³õÊ¼»¯Ê§°Ü: {e.Message}");
+                Debug.LogError($"[PlayerCardManager] åˆå§‹åŒ–å¤±è´¥: {e.Message}");
             }
         }
 
         /// <summary>
-        /// ¶©ÔÄÓÎÏ·ÊÂ¼ş
+        /// è®¢é˜…æ¸¸æˆäº‹ä»¶
         /// </summary>
         private void SubscribeToGameEvents()
         {
-            // ¶©ÔÄ¿¨ÅÆÏµÍ³ÊÂ¼ş
+            // è®¢é˜…å¡ç‰Œç³»ç»Ÿäº‹ä»¶
             CardEvents.OnPlayerTurnCompleted += OnPlayerAnswerCompleted;
 
-            LogDebug("ÒÑ¶©ÔÄÓÎÏ·ÊÂ¼ş");
+            LogDebug("å·²è®¢é˜…æ¸¸æˆäº‹ä»¶");
         }
 
         /// <summary>
-        /// È¡Ïû¶©ÔÄÓÎÏ·ÊÂ¼ş
+        /// å–æ¶ˆè®¢é˜…æ¸¸æˆäº‹ä»¶
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            // È¡Ïû¶©ÔÄ¿¨ÅÆÏµÍ³ÊÂ¼ş
+            // å–æ¶ˆè®¢é˜…å¡ç‰Œç³»ç»Ÿäº‹ä»¶
             CardEvents.OnPlayerTurnCompleted -= OnPlayerAnswerCompleted;
 
-            // È¡Ïû×Ô¶¨ÒåÊÂ¼ş¶©ÔÄ
+            // å–æ¶ˆè‡ªå®šä¹‰äº‹ä»¶è®¢é˜…
             OnCardUsed = null;
             OnCardAcquired = null;
             OnUsageOpportunityReset = null;
             OnCardTransferred = null;
             OnHandSizeChanged = null;
 
-            // ÇåÀíËùÓĞÍæ¼Ò×´Ì¬ÖĞµÄÊÂ¼ş¶©ÔÄ
+            // æ¸…ç†æ‰€æœ‰ç©å®¶çŠ¶æ€ä¸­çš„äº‹ä»¶è®¢é˜…
             foreach (var cardState in playerCardStates.Values)
             {
                 if (cardState is EnhancedPlayerCardState enhancedState)
@@ -176,31 +176,31 @@ namespace Cards.Player
                 }
             }
 
-            LogDebug("ÒÑÈ¡ÏûËùÓĞÊÂ¼ş¶©ÔÄ");
+            LogDebug("å·²å–æ¶ˆæ‰€æœ‰äº‹ä»¶è®¢é˜…");
         }
 
         #endregion
 
-        #region Íæ¼Ò¹ÜÀí
+        #region ç©å®¶ç®¡ç†
 
         /// <summary>
-        /// ³õÊ¼»¯Íæ¼Ò¿¨ÅÆ×´Ì¬£¨ĞŞ¸Ä°æ - ²»ÔÙ·Ö·¢³õÊ¼ÊÖÅÆ£©
+        /// åˆå§‹åŒ–ç©å®¶å¡ç‰ŒçŠ¶æ€ï¼ˆä¿®æ”¹ç‰ˆ - ä¸å†åˆ†å‘åˆå§‹æ‰‹ç‰Œï¼‰
         /// </summary>
         public void InitializePlayer(int playerId, string playerName = "")
         {
             if (!isInitialized)
             {
-                Debug.LogWarning("[PlayerCardManager] ¹ÜÀíÆ÷Î´³õÊ¼»¯£¬ÎŞ·¨³õÊ¼»¯Íæ¼Ò");
+                Debug.LogWarning("[PlayerCardManager] ç®¡ç†å™¨æœªåˆå§‹åŒ–ï¼Œæ— æ³•åˆå§‹åŒ–ç©å®¶");
                 return;
             }
 
             if (playerCardStates.ContainsKey(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} µÄ¿¨ÅÆ×´Ì¬ÒÑ´æÔÚ£¬Ìø¹ıÖØ¸´³õÊ¼»¯");
+                LogDebug($"ç©å®¶ {playerId} çš„å¡ç‰ŒçŠ¶æ€å·²å­˜åœ¨ï¼Œè·³è¿‡é‡å¤åˆå§‹åŒ–");
                 return;
             }
 
-            // ´´½¨ÔöÇ¿µÄÍæ¼Ò¿¨ÅÆ×´Ì¬£¬µ«²»·Ö·¢³õÊ¼ÊÖÅÆ
+            // åˆ›å»ºå¢å¼ºçš„ç©å®¶å¡ç‰ŒçŠ¶æ€ï¼Œä½†ä¸åˆ†å‘åˆå§‹æ‰‹ç‰Œ
             var cardState = new EnhancedPlayerCardState(maxHandSize, cardConfig.DrawSettings)
             {
                 playerId = playerId,
@@ -208,58 +208,58 @@ namespace Cards.Player
                 canUseCardThisRound = true
             };
 
-            // ½¨Á¢ÊÖÅÆ±ä»¯ÊÂ¼şÁ¬½Ó
+            // å»ºç«‹æ‰‹ç‰Œå˜åŒ–äº‹ä»¶è¿æ¥
             cardState.OnHandSizeChanged += (pId, newSize) =>
             {
-                LogDebug($"Íæ¼Ò {pId} ÊÖÅÆÊıÁ¿±ä»¯: {newSize}");
+                LogDebug($"ç©å®¶ {pId} æ‰‹ç‰Œæ•°é‡å˜åŒ–: {newSize}");
                 OnHandSizeChanged?.Invoke(pId, newSize);
             };
 
             playerCardStates[playerId] = cardState;
 
-            LogDebug($"Íæ¼Ò {playerId} ¿¨ÅÆ×´Ì¬³õÊ¼»¯Íê³É - µÈ´ıHost·Ö·¢ÊÖÅÆ");
+            LogDebug($"ç©å®¶ {playerId} å¡ç‰ŒçŠ¶æ€åˆå§‹åŒ–å®Œæˆ - ç­‰å¾…Hoståˆ†å‘æ‰‹ç‰Œ");
         }
 
         /// <summary>
-        /// ½ÓÊÕHost·Ö·¢µÄÊÖÅÆ£¨ĞÂÔö·½·¨£©
+        /// æ¥æ”¶Hoståˆ†å‘çš„æ‰‹ç‰Œï¼ˆæ–°å¢æ–¹æ³•ï¼‰
         /// </summary>
         public bool ReceiveHostDistributedCards(int playerId, List<int> cardIds)
         {
             if (!isInitialized)
             {
-                Debug.LogWarning("[PlayerCardManager] ¹ÜÀíÆ÷Î´³õÊ¼»¯£¬ÎŞ·¨½ÓÊÕÊÖÅÆ");
+                Debug.LogWarning("[PlayerCardManager] ç®¡ç†å™¨æœªåˆå§‹åŒ–ï¼Œæ— æ³•æ¥æ”¶æ‰‹ç‰Œ");
                 return false;
             }
 
             if (!playerCardStates.ContainsKey(playerId))
             {
-                Debug.LogWarning($"[PlayerCardManager] Íæ¼Ò {playerId} µÄ¿¨ÅÆ×´Ì¬²»´æÔÚ");
+                Debug.LogWarning($"[PlayerCardManager] ç©å®¶ {playerId} çš„å¡ç‰ŒçŠ¶æ€ä¸å­˜åœ¨");
                 return false;
             }
 
             if (cardIds == null || cardIds.Count == 0)
             {
-                Debug.LogWarning($"[PlayerCardManager] Íæ¼Ò {playerId} ÊÕµ½¿ÕµÄÊÖÅÆÊı¾İ");
+                Debug.LogWarning($"[PlayerCardManager] ç©å®¶ {playerId} æ”¶åˆ°ç©ºçš„æ‰‹ç‰Œæ•°æ®");
                 return false;
             }
 
             var cardState = playerCardStates[playerId];
 
-            // ÑéÖ¤ÊÖÅÆÊı¾İµÄÓĞĞ§ĞÔ
+            // éªŒè¯æ‰‹ç‰Œæ•°æ®çš„æœ‰æ•ˆæ€§
             foreach (var cardId in cardIds)
             {
                 var cardData = cardConfig.GetCardById(cardId);
                 if (cardData == null)
                 {
-                    Debug.LogError($"[PlayerCardManager] ÎŞĞ§µÄ¿¨ÅÆID: {cardId}");
+                    Debug.LogError($"[PlayerCardManager] æ— æ•ˆçš„å¡ç‰ŒID: {cardId}");
                     return false;
                 }
             }
 
-            // Çå¿ÕÏÖÓĞÊÖÅÆ£¨Èç¹ûÓĞµÄ»°£©
+            // æ¸…ç©ºç°æœ‰æ‰‹ç‰Œï¼ˆå¦‚æœæœ‰çš„è¯ï¼‰
             cardState.ClearHand();
 
-            // Ìí¼ÓHost·Ö·¢µÄÊÖÅÆ
+            // æ·»åŠ Hoståˆ†å‘çš„æ‰‹ç‰Œ
             int successCount = 0;
             foreach (var cardId in cardIds)
             {
@@ -268,51 +268,51 @@ namespace Cards.Player
                     var cardData = cardConfig.GetCardById(cardId);
                     successCount++;
 
-                    LogDebug($"Íæ¼Ò {playerId} ÊÕµ½ÊÖÅÆ: {cardData?.cardName} (ID: {cardId})");
+                    LogDebug($"ç©å®¶ {playerId} æ”¶åˆ°æ‰‹ç‰Œ: {cardData?.cardName} (ID: {cardId})");
 
-                    // ´¥·¢¿¨ÅÆ»ñµÃÊÂ¼ş
-                    OnCardAcquired?.Invoke(playerId, cardId, cardData?.cardName ?? "Î´Öª¿¨ÅÆ");
+                    // è§¦å‘å¡ç‰Œè·å¾—äº‹ä»¶
+                    OnCardAcquired?.Invoke(playerId, cardId, cardData?.cardName ?? "æœªçŸ¥å¡ç‰Œ");
                     CardEvents.OnCardAddedToHand?.Invoke(playerId, cardId);
                 }
                 else
                 {
-                    Debug.LogWarning($"[PlayerCardManager] Íæ¼Ò {playerId} ÎŞ·¨Ìí¼Ó¿¨ÅÆ {cardId}");
+                    Debug.LogWarning($"[PlayerCardManager] ç©å®¶ {playerId} æ— æ³•æ·»åŠ å¡ç‰Œ {cardId}");
                 }
             }
 
-            LogDebug($"Íæ¼Ò {playerId} ³É¹¦½ÓÊÕ {successCount}/{cardIds.Count} ÕÅÊÖÅÆ");
+            LogDebug($"ç©å®¶ {playerId} æˆåŠŸæ¥æ”¶ {successCount}/{cardIds.Count} å¼ æ‰‹ç‰Œ");
             return successCount == cardIds.Count;
         }
 
         /// <summary>
-        /// ÒÆ³ıÍæ¼Ò
+        /// ç§»é™¤ç©å®¶
         /// </summary>
-        /// <param name="playerId">Íæ¼ÒID</param>
+        /// <param name="playerId">ç©å®¶ID</param>
         public void RemovePlayer(int playerId)
         {
             if (playerCardStates.ContainsKey(playerId))
             {
                 playerCardStates.Remove(playerId);
-                LogDebug($"Íæ¼Ò {playerId} µÄ¿¨ÅÆ×´Ì¬ÒÑÒÆ³ı");
+                LogDebug($"ç©å®¶ {playerId} çš„å¡ç‰ŒçŠ¶æ€å·²ç§»é™¤");
             }
         }
 
         /// <summary>
-        /// ÇåÀíËùÓĞÍæ¼ÒÊı¾İ
+        /// æ¸…ç†æ‰€æœ‰ç©å®¶æ•°æ®
         /// </summary>
         public void ClearAllPlayers()
         {
             playerCardStates.Clear();
             currentTurnPlayerId = 0;
-            LogDebug("ËùÓĞÍæ¼Ò¿¨ÅÆÊı¾İÒÑÇåÀí");
+            LogDebug("æ‰€æœ‰ç©å®¶å¡ç‰Œæ•°æ®å·²æ¸…ç†");
         }
 
         #endregion
 
-        #region ¿¨ÅÆÊ¹ÓÃ
+        #region å¡ç‰Œä½¿ç”¨
 
         /// <summary>
-        /// Ê¹ÓÃ¿¨ÅÆ£¨¸üĞÂ°æ - ÍêÕûµÄĞ§¹ûÖ´ĞĞÁ÷³Ì£©
+        /// ä½¿ç”¨å¡ç‰Œï¼ˆæ›´æ–°ç‰ˆ - å®Œæ•´çš„æ•ˆæœæ‰§è¡Œæµç¨‹ï¼‰
         /// </summary>
         public bool UseCard(int playerId, int cardId, int targetPlayerId = -1)
         {
@@ -323,25 +323,25 @@ namespace Cards.Player
 
             try
             {
-                // »ñÈ¡¿¨ÅÆÊı¾İ
+                // è·å–å¡ç‰Œæ•°æ®
                 var cardData = cardConfig.GetCardById(cardId);
                 if (cardData == null)
                 {
-                    LogDebug($"Î´ÕÒµ½¿¨ÅÆ: {cardId}");
+                    LogDebug($"æœªæ‰¾åˆ°å¡ç‰Œ: {cardId}");
                     return false;
                 }
 
-                // ¶îÍâÑéÖ¤£ºÊ¹ÓÃCardUtilities½øĞĞÍêÕûÑéÖ¤
+                // é¢å¤–éªŒè¯ï¼šä½¿ç”¨CardUtilitiesè¿›è¡Œå®Œæ•´éªŒè¯
                 var playerState = GetPlayerState(playerId);
                 bool isMyTurn = (currentTurnPlayerId == playerId);
 
                 if (!CardUtilities.Validator.ValidatePlayerCanUseCard(playerId, cardData, playerState, isMyTurn))
                 {
-                    LogDebug($"CardUtilitiesÑéÖ¤Ê§°Ü: Íæ¼Ò{playerId}ÎŞ·¨Ê¹ÓÃ¿¨ÅÆ{cardData.cardName}");
+                    LogDebug($"CardUtilitieséªŒè¯å¤±è´¥: ç©å®¶{playerId}æ— æ³•ä½¿ç”¨å¡ç‰Œ{cardData.cardName}");
                     return false;
                 }
 
-                // ´´½¨Ê¹ÓÃÇëÇó
+                // åˆ›å»ºä½¿ç”¨è¯·æ±‚
                 var useRequest = new CardUseRequest
                 {
                     userId = playerId,
@@ -350,60 +350,64 @@ namespace Cards.Player
                     timestamp = Time.time
                 };
 
-                // ¶îÍâµÄÄ¿±êÑéÖ¤£¨Õë¶ÔÖ¸ÏòĞÍ¿¨ÅÆ£©
+                // é¢å¤–çš„ç›®æ ‡éªŒè¯ï¼ˆé’ˆå¯¹æŒ‡å‘å‹å¡ç‰Œï¼‰
                 if (cardData.cardType == CardType.PlayerTarget)
                 {
                     var alivePlayers = GetAllAlivePlayerIds();
                     if (!CardUtilities.Validator.ValidateTargetSelection(useRequest, cardData, alivePlayers))
                     {
-                        LogDebug($"Ä¿±êÑ¡ÔñÑéÖ¤Ê§°Ü: ¿¨ÅÆ{cardData.cardName}");
+                        LogDebug($"ç›®æ ‡é€‰æ‹©éªŒè¯å¤±è´¥: å¡ç‰Œ{cardData.cardName}");
                         return false;
                     }
                 }
 
-                // ´ÓÍæ¼ÒÊÖÅÆÖĞÒÆ³ı²¢±ê¼ÇÒÑÊ¹ÓÃ
+                // ä»ç©å®¶æ‰‹ç‰Œä¸­ç§»é™¤å¹¶æ ‡è®°å·²ä½¿ç”¨
                 var cardState = playerCardStates[playerId];
                 cardState.RemoveCard(cardId);
                 cardState.MarkCardUsedThisRound();
 
-                LogDebug($"Íæ¼Ò {playerId} Ê¹ÓÃ¿¨ÅÆ: {cardData.cardName} -> Ä¿±ê: {targetPlayerId}");
+                LogDebug($"ç©å®¶ {playerId} ä½¿ç”¨å¡ç‰Œ: {cardData.cardName} -> ç›®æ ‡: {targetPlayerId}");
 
-                // ´¥·¢¿¨ÅÆÊ¹ÓÃÊÂ¼ş
-                CardEvents.OnCardUseRequested?.Invoke(useRequest, cardData);
-                OnCardUsed?.Invoke(playerId, cardId, targetPlayerId);
-
-                // Í¨¹ıCardEffectSystemÖ´ĞĞ¿¨ÅÆĞ§¹û
                 if (CardEffectSystem.Instance != null)
                 {
-                    CardEffectSystem.Instance.UseCard(useRequest, cardData);
+                    try
+                    {
+                        CardEffectSystem.Instance.UseCard(useRequest, cardData);
+                        LogDebug($"å¡ç‰Œæ•ˆæœæ‰§è¡Œå®Œæˆ: {cardData.cardName}");
+                    }
+                    catch (System.Exception effectException)
+                    {
+                        Debug.LogError($"[PlayerCardManager] å¡ç‰Œæ•ˆæœæ‰§è¡Œå¼‚å¸¸: {effectException.Message}");
+                        return false;
+                    }
                 }
                 else
                 {
-                    Debug.LogWarning("[PlayerCardManager] CardEffectSystemÊµÀı²»´æÔÚ£¬ÎŞ·¨Ö´ĞĞ¿¨ÅÆĞ§¹û");
+                    Debug.LogWarning("[PlayerCardManager] CardEffectSystemå®ä¾‹ä¸å­˜åœ¨ï¼Œæ— æ³•æ‰§è¡Œå¡ç‰Œæ•ˆæœ");
+                    return false;
                 }
 
-                LogDebug($"¿¨ÅÆ {cardData.cardName} Ê¹ÓÃÁ÷³ÌÍê³É");
-
-                // ´¥·¢ÒÆ³ıÊÂ¼ş
+                OnCardUsed?.Invoke(playerId, cardId, targetPlayerId);
                 CardEvents.OnCardRemovedFromHand?.Invoke(playerId, cardId);
 
+                LogDebug($"å¡ç‰Œ {cardData.cardName} ä½¿ç”¨æµç¨‹å®Œæˆ");
                 return true;
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[PlayerCardManager] Ê¹ÓÃ¿¨ÅÆÊ§°Ü: {e.Message}");
+                Debug.LogError($"[PlayerCardManager] ä½¿ç”¨å¡ç‰Œå¤±è´¥: {e.Message}");
                 return false;
             }
         }
 
         /// <summary>
-        /// ÑéÖ¤¿¨ÅÆÊ¹ÓÃÊÇ·ñÓĞĞ§£¨¸üĞÂ°æ£©
+        /// éªŒè¯å¡ç‰Œä½¿ç”¨æ˜¯å¦æœ‰æ•ˆï¼ˆæ›´æ–°ç‰ˆï¼‰
         /// </summary>
         private bool ValidateCardUsage(int playerId, int cardId)
         {
             if (!playerCardStates.ContainsKey(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} µÄ¿¨ÅÆ×´Ì¬²»´æÔÚ");
+                LogDebug($"ç©å®¶ {playerId} çš„å¡ç‰ŒçŠ¶æ€ä¸å­˜åœ¨");
                 return false;
             }
 
@@ -411,28 +415,28 @@ namespace Cards.Player
 
             if (!cardState.canUseCardThisRound)
             {
-                LogDebug($"Íæ¼Ò {playerId} ±¾»ØºÏÒÑÊ¹ÓÃ¹ı¿¨ÅÆ");
+                LogDebug($"ç©å®¶ {playerId} æœ¬å›åˆå·²ä½¿ç”¨è¿‡å¡ç‰Œ");
                 return false;
             }
 
             if (!cardState.HasCard(cardId))
             {
-                LogDebug($"Íæ¼Ò {playerId} ÊÖÅÆÖĞÃ»ÓĞ¿¨ÅÆ: {cardId}");
+                LogDebug($"ç©å®¶ {playerId} æ‰‹ç‰Œä¸­æ²¡æœ‰å¡ç‰Œ: {cardId}");
                 return false;
             }
 
-            // ¼ì²éÍæ¼ÒÊÇ·ñ´æ»î
+            // æ£€æŸ¥ç©å®¶æ˜¯å¦å­˜æ´»
             if (!IsPlayerAlive(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} ÒÑËÀÍö£¬ÎŞ·¨Ê¹ÓÃ¿¨ÅÆ");
+                LogDebug($"ç©å®¶ {playerId} å·²æ­»äº¡ï¼Œæ— æ³•ä½¿ç”¨å¡ç‰Œ");
                 return false;
             }
 
-            // ¼ì²é¿¨ÅÆÊÇ·ñÔÊĞíÔÚ·Ç×Ô¼º»ØºÏÊ¹ÓÃ
+            // æ£€æŸ¥å¡ç‰Œæ˜¯å¦å…è®¸åœ¨éè‡ªå·±å›åˆä½¿ç”¨
             var cardData = cardConfig.GetCardById(cardId);
             if (cardData != null && !cardData.canUseWhenNotMyTurn && currentTurnPlayerId != playerId)
             {
-                LogDebug($"¿¨ÅÆ {cardData.cardName} ²»ÔÊĞíÔÚ·Ç×Ô¼º»ØºÏÊ¹ÓÃ");
+                LogDebug($"å¡ç‰Œ {cardData.cardName} ä¸å…è®¸åœ¨éè‡ªå·±å›åˆä½¿ç”¨");
                 return false;
             }
 
@@ -441,16 +445,16 @@ namespace Cards.Player
 
         #endregion
 
-        #region ¿¨ÅÆ»ñµÃ
+        #region å¡ç‰Œè·å¾—
 
         /// <summary>
-        /// ¸øÍæ¼ÒÌí¼Ó¿¨ÅÆ£¨¸üĞÂ°æ - Ö§³Ö¶àÕÅ¿¨ÅÆ£©
+        /// ç»™ç©å®¶æ·»åŠ å¡ç‰Œï¼ˆæ›´æ–°ç‰ˆ - æ”¯æŒå¤šå¼ å¡ç‰Œï¼‰
         /// </summary>
         public bool GiveCardToPlayer(int playerId, int cardId = 0, int count = 1)
         {
             if (!playerCardStates.ContainsKey(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} µÄ¿¨ÅÆ×´Ì¬²»´æÔÚ");
+                LogDebug($"ç©å®¶ {playerId} çš„å¡ç‰ŒçŠ¶æ€ä¸å­˜åœ¨");
                 return false;
             }
 
@@ -462,49 +466,49 @@ namespace Cards.Player
                 CardData cardData;
                 if (cardId == 0)
                 {
-                    // Ëæ»ú»ñµÃ¿¨ÅÆ
+                    // éšæœºè·å¾—å¡ç‰Œ
                     cardData = DrawRandomCard();
                     if (cardData == null)
                     {
-                        LogDebug("Ëæ»ú³éÈ¡¿¨ÅÆÊ§°Ü");
+                        LogDebug("éšæœºæŠ½å–å¡ç‰Œå¤±è´¥");
                         break;
                     }
                 }
                 else
                 {
-                    // »ñµÃÖ¸¶¨¿¨ÅÆ
+                    // è·å¾—æŒ‡å®šå¡ç‰Œ
                     cardData = cardConfig.GetCardById(cardId);
                     if (cardData == null)
                     {
-                        LogDebug($"Î´ÕÒµ½Ö¸¶¨¿¨ÅÆ: {cardId}");
+                        LogDebug($"æœªæ‰¾åˆ°æŒ‡å®šå¡ç‰Œ: {cardId}");
                         break;
                     }
                 }
 
-                // ¼ì²éÊÇ·ñ¿ÉÒÔÌí¼Ó
+                // æ£€æŸ¥æ˜¯å¦å¯ä»¥æ·»åŠ 
                 if (!cardState.CanAddSpecificCard(cardData.cardId))
                 {
-                    LogDebug($"Íæ¼Ò {playerId} ÎŞ·¨Ìí¼ÓµÚ{i + 1}ÕÅ¿¨ÅÆ {cardData.cardName}£¨ÊÖÅÆÒÑÂú»òÎ¥·´¹æÔò£©");
+                    LogDebug($"ç©å®¶ {playerId} æ— æ³•æ·»åŠ ç¬¬{i + 1}å¼ å¡ç‰Œ {cardData.cardName}ï¼ˆæ‰‹ç‰Œå·²æ»¡æˆ–è¿åè§„åˆ™ï¼‰");
                     break;
                 }
 
-                // Ìí¼Óµ½Íæ¼ÒÊÖÅÆ
+                // æ·»åŠ åˆ°ç©å®¶æ‰‹ç‰Œ
                 cardState.AddCard(cardData.cardId);
                 successCount++;
 
-                LogDebug($"Íæ¼Ò {playerId} »ñµÃ¿¨ÅÆ: {cardData.cardName} ({successCount}/{count})");
+                LogDebug($"ç©å®¶ {playerId} è·å¾—å¡ç‰Œ: {cardData.cardName} ({successCount}/{count})");
 
-                // ´¥·¢¿¨ÅÆ»ñµÃÊÂ¼ş
+                // è§¦å‘å¡ç‰Œè·å¾—äº‹ä»¶
                 OnCardAcquired?.Invoke(playerId, cardData.cardId, cardData.cardName);
                 CardEvents.OnCardAddedToHand?.Invoke(playerId, cardData.cardId);
             }
 
-            LogDebug($"Íæ¼Ò {playerId} ³É¹¦»ñµÃ {successCount}/{count} ÕÅ¿¨ÅÆ");
+            LogDebug($"ç©å®¶ {playerId} æˆåŠŸè·å¾— {successCount}/{count} å¼ å¡ç‰Œ");
             return successCount > 0;
         }
 
         /// <summary>
-        /// Ëæ»ú³éÈ¡¿¨ÅÆ£¨¸üĞÂ°æ - Ê¹ÓÃCardUtilities£©
+        /// éšæœºæŠ½å–å¡ç‰Œï¼ˆæ›´æ–°ç‰ˆ - ä½¿ç”¨CardUtilitiesï¼‰
         /// </summary>
         private CardData DrawRandomCard()
         {
@@ -513,53 +517,53 @@ namespace Cards.Player
                 return null;
             }
 
-            // Ê¹ÓÃCardUtilitiesµÄ³é¿¨¹¤¾ß
+            // ä½¿ç”¨CardUtilitiesçš„æŠ½å¡å·¥å…·
             return CardUtilities.DrawRandomCard(cardConfig.AllCards);
         }
 
         /// <summary>
-        /// ×ªÒÆ¿¨ÅÆ£¨´ÓÒ»¸öÍæ¼Òµ½ÁíÒ»¸öÍæ¼Ò£©
+        /// è½¬ç§»å¡ç‰Œï¼ˆä»ä¸€ä¸ªç©å®¶åˆ°å¦ä¸€ä¸ªç©å®¶ï¼‰
         /// </summary>
         public bool TransferCard(int fromPlayerId, int toPlayerId, int cardId)
         {
             if (!playerCardStates.ContainsKey(fromPlayerId) || !playerCardStates.ContainsKey(toPlayerId))
             {
-                LogDebug("Ô´Íæ¼Ò»òÄ¿±êÍæ¼Ò×´Ì¬²»´æÔÚ");
+                LogDebug("æºç©å®¶æˆ–ç›®æ ‡ç©å®¶çŠ¶æ€ä¸å­˜åœ¨");
                 return false;
             }
 
             var fromState = playerCardStates[fromPlayerId];
             var toState = playerCardStates[toPlayerId];
 
-            // ÑéÖ¤Ô´Íæ¼ÒÓĞ´Ë¿¨ÅÆ
+            // éªŒè¯æºç©å®¶æœ‰æ­¤å¡ç‰Œ
             if (!fromState.HasCard(cardId))
             {
-                LogDebug($"Íæ¼Ò {fromPlayerId} Ã»ÓĞ¿¨ÅÆ: {cardId}");
+                LogDebug($"ç©å®¶ {fromPlayerId} æ²¡æœ‰å¡ç‰Œ: {cardId}");
                 return false;
             }
 
-            // ÑéÖ¤Ä¿±êÍæ¼ÒÊÇ·ñ¿ÉÒÔ½ÓÊÕ¿¨ÅÆ
+            // éªŒè¯ç›®æ ‡ç©å®¶æ˜¯å¦å¯ä»¥æ¥æ”¶å¡ç‰Œ
             if (!toState.CanAddSpecificCard(cardId))
             {
-                LogDebug($"Íæ¼Ò {toPlayerId} ÎŞ·¨½ÓÊÕ¿¨ÅÆ: {cardId}");
+                LogDebug($"ç©å®¶ {toPlayerId} æ— æ³•æ¥æ”¶å¡ç‰Œ: {cardId}");
                 return false;
             }
 
-            // ÑéÖ¤Íæ¼Ò´æ»î×´Ì¬
+            // éªŒè¯ç©å®¶å­˜æ´»çŠ¶æ€
             if (!IsPlayerAlive(fromPlayerId) || !IsPlayerAlive(toPlayerId))
             {
-                LogDebug("Ô´Íæ¼Ò»òÄ¿±êÍæ¼ÒÒÑËÀÍö£¬ÎŞ·¨×ªÒÆ¿¨ÅÆ");
+                LogDebug("æºç©å®¶æˆ–ç›®æ ‡ç©å®¶å·²æ­»äº¡ï¼Œæ— æ³•è½¬ç§»å¡ç‰Œ");
                 return false;
             }
 
-            // Ö´ĞĞ×ªÒÆ
+            // æ‰§è¡Œè½¬ç§»
             fromState.RemoveCard(cardId);
             toState.AddCard(cardId);
 
             var cardData = cardConfig.GetCardById(cardId);
-            LogDebug($"¿¨ÅÆ×ªÒÆ³É¹¦: {cardData?.cardName} ´ÓÍæ¼Ò{fromPlayerId}×ªÒÆµ½Íæ¼Ò{toPlayerId}");
+            LogDebug($"å¡ç‰Œè½¬ç§»æˆåŠŸ: {cardData?.cardName} ä»ç©å®¶{fromPlayerId}è½¬ç§»åˆ°ç©å®¶{toPlayerId}");
 
-            // ´¥·¢×ªÒÆÊÂ¼ş
+            // è§¦å‘è½¬ç§»äº‹ä»¶
             OnCardTransferred?.Invoke(fromPlayerId, toPlayerId, cardId);
             CardEvents.OnCardRemovedFromHand?.Invoke(fromPlayerId, cardId);
             CardEvents.OnCardAddedToHand?.Invoke(toPlayerId, cardId);
@@ -569,10 +573,10 @@ namespace Cards.Player
 
         #endregion
 
-        #region »ØºÏ¹ÜÀí
+        #region å›åˆç®¡ç†
 
         /// <summary>
-        /// ÉèÖÃµ±Ç°»ØºÏÍæ¼Ò
+        /// è®¾ç½®å½“å‰å›åˆç©å®¶
         /// </summary>
         public void SetCurrentTurnPlayer(int playerId)
         {
@@ -580,22 +584,22 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// ÖØÖÃÍæ¼ÒµÄ¿¨ÅÆÊ¹ÓÃ»ú»á£¨¸öÈË»ØºÏÖÆ£©
+        /// é‡ç½®ç©å®¶çš„å¡ç‰Œä½¿ç”¨æœºä¼šï¼ˆä¸ªäººå›åˆåˆ¶ï¼‰
         /// </summary>
         public void ResetPlayerUsageOpportunity(int playerId)
         {
             if (!playerCardStates.ContainsKey(playerId))
             {
-                LogDebug($"Íæ¼Ò {playerId} µÄ¿¨ÅÆ×´Ì¬²»´æÔÚ");
+                LogDebug($"ç©å®¶ {playerId} çš„å¡ç‰ŒçŠ¶æ€ä¸å­˜åœ¨");
                 return;
             }
 
             var cardState = playerCardStates[playerId];
             cardState.ResetForNewRound();
 
-            LogDebug($"Íæ¼Ò {playerId} µÄ¿¨ÅÆÊ¹ÓÃ»ú»áÒÑÖØÖÃ");
+            LogDebug($"ç©å®¶ {playerId} çš„å¡ç‰Œä½¿ç”¨æœºä¼šå·²é‡ç½®");
 
-            // ´¥·¢ÖØÖÃÊÂ¼ş
+            // è§¦å‘é‡ç½®äº‹ä»¶
             OnUsageOpportunityReset?.Invoke(playerId);
             CardEvents.OnPlayerCardUsageReset?.Invoke(playerId);
         }
@@ -603,10 +607,10 @@ namespace Cards.Player
 
         #endregion
 
-        #region ²éÑ¯·½·¨£¨¸üĞÂ°æ - ¼¯³ÉCardGameBridge£©
+        #region æŸ¥è¯¢æ–¹æ³•ï¼ˆæ›´æ–°ç‰ˆ - é›†æˆCardGameBridgeï¼‰
 
         /// <summary>
-        /// »ñÈ¡Íæ¼ÒÊÖÅÆIDÁĞ±í
+        /// è·å–ç©å®¶æ‰‹ç‰ŒIDåˆ—è¡¨
         /// </summary>
         public List<int> GetPlayerHand(int playerId)
         {
@@ -619,7 +623,7 @@ namespace Cards.Player
 
 
         /// <summary>
-        /// ¼ì²éÍæ¼ÒÊÇ·ñ¿ÉÒÔÊ¹ÓÃ¿¨ÅÆ
+        /// æ£€æŸ¥ç©å®¶æ˜¯å¦å¯ä»¥ä½¿ç”¨å¡ç‰Œ
         /// </summary>
         public bool CanPlayerUseCards(int playerId)
         {
@@ -631,7 +635,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// »ñÈ¡Íæ¼ÒÊÖÅÆÊıÁ¿
+        /// è·å–ç©å®¶æ‰‹ç‰Œæ•°é‡
         /// </summary>
         public int GetPlayerHandCount(int playerId)
         {
@@ -643,22 +647,22 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// »ñÈ¡Íæ¼Ò¿¨ÅÆ×´Ì¬ÕªÒª
+        /// è·å–ç©å®¶å¡ç‰ŒçŠ¶æ€æ‘˜è¦
         /// </summary>
         public string GetPlayerCardSummary(int playerId)
         {
             if (!playerCardStates.ContainsKey(playerId))
-                return "Íæ¼Ò×´Ì¬²»´æÔÚ";
+                return "ç©å®¶çŠ¶æ€ä¸å­˜åœ¨";
 
             var cardState = playerCardStates[playerId];
             bool isAlive = IsPlayerAlive(playerId);
-            return $"Íæ¼Ò {cardState.playerName}: ÊÖÅÆÊı {cardState.HandCount}/{maxHandSize}, " +
-                   $"¿ÉÊ¹ÓÃ: {(cardState.canUseCardThisRound && isAlive ? "ÊÇ" : "·ñ")}, " +
-                   $"´æ»î: {(isAlive ? "ÊÇ" : "·ñ")}";
+            return $"ç©å®¶ {cardState.playerName}: æ‰‹ç‰Œæ•° {cardState.HandCount}/{maxHandSize}, " +
+                   $"å¯ä½¿ç”¨: {(cardState.canUseCardThisRound && isAlive ? "æ˜¯" : "å¦")}, " +
+                   $"å­˜æ´»: {(isAlive ? "æ˜¯" : "å¦")}";
         }
 
         /// <summary>
-        /// »ñÈ¡Íæ¼Ò×´Ì¬
+        /// è·å–ç©å®¶çŠ¶æ€
         /// </summary>
         public EnhancedPlayerCardState GetPlayerState(int playerId)
         {
@@ -666,11 +670,11 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// ¼ì²éÍæ¼ÒÊÇ·ñ´æ»î£¨¼¯³ÉCardGameBridge£©
+        /// æ£€æŸ¥ç©å®¶æ˜¯å¦å­˜æ´»ï¼ˆé›†æˆCardGameBridgeï¼‰
         /// </summary>
         private bool IsPlayerAlive(int playerId)
         {
-            // ÓÅÏÈÊ¹ÓÃCardGameBridge²éÑ¯
+            // ä¼˜å…ˆä½¿ç”¨CardGameBridgeæŸ¥è¯¢
             if (Cards.Integration.CardGameBridge.Instance != null)
             {
                 return Cards.Integration.CardGameBridge.IsPlayerAlive(playerId);
@@ -680,41 +684,41 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// »ñÈ¡ËùÓĞ´æ»îÍæ¼ÒIDÁĞ±í£¨¼¯³ÉCardGameBridge£©
+        /// è·å–æ‰€æœ‰å­˜æ´»ç©å®¶IDåˆ—è¡¨ï¼ˆé›†æˆCardGameBridgeï¼‰
         /// </summary>
         private List<int> GetAllAlivePlayerIds()
         {
-            // ÓÅÏÈÊ¹ÓÃCardGameBridge²éÑ¯
+            // ä¼˜å…ˆä½¿ç”¨CardGameBridgeæŸ¥è¯¢
             if (Cards.Integration.CardGameBridge.Instance != null)
             {
                 return Cards.Integration.CardGameBridge.GetAllAlivePlayerIds();
             }
 
-            // ¶µµ×£º·µ»ØËùÓĞÒÑ×¢²áµÄÍæ¼ÒID
+            // å…œåº•ï¼šè¿”å›æ‰€æœ‰å·²æ³¨å†Œçš„ç©å®¶ID
             return playerCardStates.Keys.ToList();
         }
 
         #endregion
 
-        #region ÓëÏÖÓĞÏµÍ³¼¯³É
+        #region ä¸ç°æœ‰ç³»ç»Ÿé›†æˆ
 
         /// <summary>
-        /// ´ğÌâÍê³ÉºóµÄ»Øµ÷£¨¼¯³Éµã£©
+        /// ç­”é¢˜å®Œæˆåçš„å›è°ƒï¼ˆé›†æˆç‚¹ï¼‰
         /// </summary>
         public void OnPlayerAnswerCompleted(int playerId)
         {
-            // ÖØÖÃ¸ÃÍæ¼ÒµÄ¿¨ÅÆÊ¹ÓÃ»ú»á
+            // é‡ç½®è¯¥ç©å®¶çš„å¡ç‰Œä½¿ç”¨æœºä¼š
             ResetPlayerUsageOpportunity(playerId);
 
-            LogDebug($"Íæ¼Ò {playerId} ´ğÌâÍê³É£¬¿¨ÅÆÊ¹ÓÃ»ú»áÒÑÖØÖÃ");
+            LogDebug($"ç©å®¶ {playerId} ç­”é¢˜å®Œæˆï¼Œå¡ç‰Œä½¿ç”¨æœºä¼šå·²é‡ç½®");
         }
 
         #endregion
 
-        #region µ÷ÊÔºÍ¹¤¾ß·½·¨
+        #region è°ƒè¯•å’Œå·¥å…·æ–¹æ³•
 
         /// <summary>
-        /// »ñÈ¡ËùÓĞÍæ¼ÒµÄ¿¨ÅÆ×´Ì¬£¨µ÷ÊÔÓÃ£©
+        /// è·å–æ‰€æœ‰ç©å®¶çš„å¡ç‰ŒçŠ¶æ€ï¼ˆè°ƒè¯•ç”¨ï¼‰
         /// </summary>
         public Dictionary<int, string> GetAllPlayerCardSummaries()
         {
@@ -727,7 +731,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
+        /// è°ƒè¯•æ—¥å¿—
         /// </summary>
         private void LogDebug(string message)
         {
@@ -739,7 +743,7 @@ namespace Cards.Player
 
         #endregion
 
-        #region ¹«¹²½Ó¿ÚÊôĞÔ
+        #region å…¬å…±æ¥å£å±æ€§
 
         public bool IsInitialized => isInitialized;
         public int PlayerCount => playerCardStates.Count;
@@ -749,11 +753,11 @@ namespace Cards.Player
         #endregion
     }
 
-    #region ÔöÇ¿µÄPlayerCardState
+    #region å¢å¼ºçš„PlayerCardState
 
     /// <summary>
-    /// ÔöÇ¿µÄÍæ¼Ò¿¨ÅÆ×´Ì¬
-    /// ÕûºÏÁËÔ­À´CardInventoryµÄ¹¦ÄÜ
+    /// å¢å¼ºçš„ç©å®¶å¡ç‰ŒçŠ¶æ€
+    /// æ•´åˆäº†åŸæ¥CardInventoryçš„åŠŸèƒ½
     /// </summary>
     [System.Serializable]
     public class EnhancedPlayerCardState : PlayerCardState
@@ -761,7 +765,7 @@ namespace Cards.Player
         private int maxHandSize;
         private CardDrawSettings drawSettings;
 
-        // Ìí¼ÓÊÂ¼şÎ¯ÍĞÓÃÓÚÍ¨ÖªÊÖÅÆ±ä»¯
+        // æ·»åŠ äº‹ä»¶å§”æ‰˜ç”¨äºé€šçŸ¥æ‰‹ç‰Œå˜åŒ–
         public System.Action<int, int> OnHandSizeChanged;
 
         public EnhancedPlayerCardState(int maxSize, CardDrawSettings settings)
@@ -772,49 +776,49 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// ÊÖÅÆÊıÁ¿
+        /// æ‰‹ç‰Œæ•°é‡
         /// </summary>
         public int HandCount => handCards.Count;
 
         /// <summary>
-        /// ÊÇ·ñÊÖÅÆÒÑÂú
+        /// æ˜¯å¦æ‰‹ç‰Œå·²æ»¡
         /// </summary>
         public bool IsFull => handCards.Count >= maxHandSize;
 
         /// <summary>
-        /// Ê£ÓàÈİÁ¿
+        /// å‰©ä½™å®¹é‡
         /// </summary>
         public int RemainingCapacity => maxHandSize - handCards.Count;
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñ¿ÉÒÔÌí¼Ó¿¨ÅÆ£¨¸²¸Ç»ùÀàµÄ¼òµ¥ÈİÁ¿¼ì²é£©
+        /// æ£€æŸ¥æ˜¯å¦å¯ä»¥æ·»åŠ å¡ç‰Œï¼ˆè¦†ç›–åŸºç±»çš„ç®€å•å®¹é‡æ£€æŸ¥ï¼‰
         /// </summary>
         public new bool CanAddCard => !IsFull;
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñ¿ÉÒÔÌí¼ÓÖ¸¶¨¿¨ÅÆ£¨°üº¬¹æÔòÑéÖ¤£©
+        /// æ£€æŸ¥æ˜¯å¦å¯ä»¥æ·»åŠ æŒ‡å®šå¡ç‰Œï¼ˆåŒ…å«è§„åˆ™éªŒè¯ï¼‰
         /// </summary>
         public bool CanAddSpecificCard(int cardId)
         {
-            // ¼ì²éÈİÁ¿ÏŞÖÆ
+            // æ£€æŸ¥å®¹é‡é™åˆ¶
             if (IsFull)
             {
                 return false;
             }
 
-            // ¼ì²é½ûÓÃ¿¨ÅÆ
+            // æ£€æŸ¥ç¦ç”¨å¡ç‰Œ
             if (drawSettings.bannedCardIds.Contains(cardId))
             {
                 return false;
             }
 
-            // ¼ì²éÖØ¸´ÏŞÖÆ
+            // æ£€æŸ¥é‡å¤é™åˆ¶
             if (!drawSettings.allowDuplicates && handCards.Contains(cardId))
             {
                 return false;
             }
 
-            // ¼ì²éÍ¬ÖÖ¿¨ÅÆÊıÁ¿ÏŞÖÆ
+            // æ£€æŸ¥åŒç§å¡ç‰Œæ•°é‡é™åˆ¶
             int cardCount = handCards.Count(id => id == cardId);
             if (cardCount >= drawSettings.maxSameCardInHand)
             {
@@ -825,7 +829,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// Ìí¼Ó¿¨ÅÆ£¨´øÊÖÅÆ±ä»¯Í¨Öª£©
+        /// æ·»åŠ å¡ç‰Œï¼ˆå¸¦æ‰‹ç‰Œå˜åŒ–é€šçŸ¥ï¼‰
         /// </summary>
         public bool AddCard(int cardId)
         {
@@ -838,7 +842,7 @@ namespace Cards.Player
             handCards.Add(cardId);
             int newHandSize = handCards.Count;
 
-            // ´¥·¢ÊÖÅÆÊıÁ¿±ä»¯ÊÂ¼ş
+            // è§¦å‘æ‰‹ç‰Œæ•°é‡å˜åŒ–äº‹ä»¶
             if (newHandSize != oldHandSize)
             {
                 OnHandSizeChanged?.Invoke(playerId, newHandSize);
@@ -848,7 +852,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// ÒÆ³ı¿¨ÅÆ£¨´øÊÖÅÆ±ä»¯Í¨Öª£©
+        /// ç§»é™¤å¡ç‰Œï¼ˆå¸¦æ‰‹ç‰Œå˜åŒ–é€šçŸ¥ï¼‰
         /// </summary>
         public bool RemoveCard(int cardId)
         {
@@ -856,7 +860,7 @@ namespace Cards.Player
             bool removed = handCards.Remove(cardId);
             int newHandSize = handCards.Count;
 
-            // ´¥·¢ÊÖÅÆÊıÁ¿±ä»¯ÊÂ¼ş
+            // è§¦å‘æ‰‹ç‰Œæ•°é‡å˜åŒ–äº‹ä»¶
             if (removed && newHandSize != oldHandSize)
             {
                 OnHandSizeChanged?.Invoke(playerId, newHandSize);
@@ -866,7 +870,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// Çå¿ÕÊÖÅÆ£¨ĞÂÔö·½·¨ - ÓÃÓÚ½ÓÊÕHost·Ö·¢µÄÊÖÅÆÇ°ÇåÀí£©
+        /// æ¸…ç©ºæ‰‹ç‰Œï¼ˆæ–°å¢æ–¹æ³• - ç”¨äºæ¥æ”¶Hoståˆ†å‘çš„æ‰‹ç‰Œå‰æ¸…ç†ï¼‰
         /// </summary>
         public void ClearHand()
         {
@@ -874,7 +878,7 @@ namespace Cards.Player
             handCards.Clear();
             int newHandSize = handCards.Count;
 
-            // ´¥·¢ÊÖÅÆÊıÁ¿±ä»¯ÊÂ¼ş
+            // è§¦å‘æ‰‹ç‰Œæ•°é‡å˜åŒ–äº‹ä»¶
             if (newHandSize != oldHandSize)
             {
                 OnHandSizeChanged?.Invoke(playerId, newHandSize);
@@ -882,7 +886,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñÓµÓĞÖ¸¶¨¿¨ÅÆ
+        /// æ£€æŸ¥æ˜¯å¦æ‹¥æœ‰æŒ‡å®šå¡ç‰Œ
         /// </summary>
         public bool HasCard(int cardId)
         {
@@ -890,7 +894,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// »ñÈ¡ÊÖÅÆ¸±±¾
+        /// è·å–æ‰‹ç‰Œå‰¯æœ¬
         /// </summary>
         public List<int> GetHandCards()
         {
@@ -898,7 +902,7 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// »ñÈ¡Ä³ÖÖ¿¨ÅÆµÄÊıÁ¿
+        /// è·å–æŸç§å¡ç‰Œçš„æ•°é‡
         /// </summary>
         public int GetCardCount(int cardId)
         {

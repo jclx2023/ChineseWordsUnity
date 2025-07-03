@@ -129,13 +129,13 @@ namespace Cards.Effects
             if (randomValue <= hitChance)
             {
                 // 命中！造成1点伤害
-                bool success = CardGameBridge.ModifyPlayerHealth(request.targetPlayerId, -1);
+                bool success = CardGameBridge.ModifyPlayerHealth(request.targetPlayerId, -10);
 
-                CardUtilities.LogDebug($"玩家{request.userId}的丢纸团命中玩家{request.targetPlayerId}！造成1点伤害");
+                CardUtilities.LogDebug($"玩家{request.userId}的丢纸团命中玩家{request.targetPlayerId}！造成10点伤害");
 
                 if (success)
                 {
-                    return new CardEffectResult(true, "纸团命中！目标玩家受到1点伤害");
+                    return new CardEffectResult(true, "纸团命中！目标玩家受到10点伤害");
                 }
                 else
                 {

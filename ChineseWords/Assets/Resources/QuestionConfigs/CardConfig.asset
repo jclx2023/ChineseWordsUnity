@@ -15,14 +15,14 @@ MonoBehaviour:
   allCards:
   - cardId: 1
     cardName: "\u725B\u5976\u76D2"
-    description: "\u4E3A\u81EA\u8EAB\u56DE\u590D1\u70B9\u751F\u547D\u503C"
+    description: "\u4E3A\u81EA\u8EAB\u56DE\u590D10\u70B9\u751F\u547D\u503C"
     cardIcon: {fileID: 21300000, guid: 3cbd45c47870e2642952eb07db3aabd1, type: 3}
     cardType: 0
     effectType: 2
     targetType: 0
     rarity: 0
     drawWeight: 15
-    effectValue: 1
+    effectValue: 10
     canUseWhenNotMyTurn: 1
     cardBackgroundColor: {r: 1, g: 1, b: 1, a: 1}
     showEffectValue: 1

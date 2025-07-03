@@ -7,6 +7,8 @@ using Cards.Core;
 using Cards.Effects;
 using Cards.Player;
 using Managers;
+using UI;
+using Photon.Pun;
 
 namespace Cards.Integration
 {
@@ -52,6 +54,14 @@ namespace Cards.Integration
         private float globalDamageMultiplier = 1.0f;           // 全局伤害倍数
 
         #endregion
+
+        private static Dictionary<ushort, PlayerHPState> localPlayerStates = new Dictionary<ushort, PlayerHPState>();
+        private class PlayerHPState
+        {
+            public int currentHealth;
+            public int maxHealth;
+            public bool isAlive;
+        }
 
         #region Unity生命周期
 
@@ -335,9 +345,33 @@ namespace Cards.Integration
         #region 系统访问代理 - 供CardEffects使用
 
         /// <summary>
-        /// 修改玩家生命值
+        /// 修改玩家生命值 - 网络同步版本
         /// </summary>
         public static bool ModifyPlayerHealth(int playerId, int healthChange)
+        {
+            // 如果是Host端且hpManager可用，直接执行
+            if (PhotonNetwork.IsMasterClient && Instance?.hpManager != null)
+            {
+                Instance?.LogDebug($"Host直接执行血量修改: 玩家{playerId}, 变化{healthChange}");
+                return ExecuteHealthChangeLocally(playerId, healthChange);
+            }
+
+            // 如果是客户端，通过网络请求Host执行
+            if (NetworkManager.Instance != null)
+            {
+                Instance?.LogDebug($"客户端请求血量修改: 玩家{playerId}, 变化{healthChange}");
+                string reason = healthChange > 0 ? "卡牌治疗效果" : "卡牌伤害效果";
+                NetworkManager.Instance.RequestPlayerHealthChange(playerId, healthChange, reason);
+                return true; // 假设成功，实际结果通过网络同步回来
+            }
+
+            Instance?.LogDebug("无法修改玩家血量 - 既不是Host也无法发送网络请求");
+            return false;
+        }
+        /// <summary>
+        /// 在Host端执行血量修改
+        /// </summary>
+        private static bool ExecuteHealthChangeLocally(int playerId, int healthChange)
         {
             if (Instance?.hpManager == null)
             {
@@ -677,8 +711,24 @@ namespace Cards.Integration
         /// </summary>
         public static bool IsPlayerAlive(int playerId)
         {
-            if (Instance?.hpManager == null) return false;
-            return Instance.hpManager.IsPlayerAlive((ushort)playerId);
+            ushort playerIdUShort = (ushort)playerId;
+
+            // 从NetworkUI获取状态
+            var networkUI = FindObjectOfType<NetworkUI>();
+            if (networkUI != null && networkUI.ContainsPlayer(playerIdUShort))
+            {
+                bool isAlive = networkUI.IsPlayerAlive(playerIdUShort);
+                return isAlive;
+            }
+
+            // 回退到Host端的hpManager
+            if (Instance?.hpManager != null)
+            {
+                return Instance.hpManager.IsPlayerAlive(playerIdUShort);
+            }
+
+            // 最后的回退
+            return true;
         }
 
         /// <summary>

@@ -228,7 +228,7 @@ namespace Core.Network
                 hpManager.OnPlayerDied += OnPlayerDied;
 
                 //初始化卡牌管理器
-                InitializeCardGameBridge();
+                //InitializeCardGameBridge();
 
                 LogDebug("所有管理器初始化完成");
             }
@@ -261,37 +261,37 @@ namespace Core.Network
             questionDataService?.PreloadAllProviders();
             LogDebug("服务依赖初始化完成");
         }
-        /// <summary>
-        /// 初始化卡牌游戏桥接器
-        /// </summary>
-        private void InitializeCardGameBridge()
-        {
-            try
-            {
-                if (Cards.Integration.CardGameBridge.Instance != null)
-                {
-                    // 刷新桥接器的系统引用
-                    Cards.Integration.CardGameBridge.Instance.RefreshSystemReferences();
+        ///// <summary>
+        ///// 初始化卡牌游戏桥接器
+        ///// </summary>
+        //private void InitializeCardGameBridge()
+        //{
+        //    try
+        //    {
+        //        if (Cards.Integration.CardGameBridge.Instance != null)
+        //        {
+        //            // 刷新桥接器的系统引用
+        //            Cards.Integration.CardGameBridge.Instance.RefreshSystemReferences();
 
-                    if (Cards.Integration.CardGameBridge.Instance.IsReady())
-                    {
-                        LogDebug("CardGameBridge已准备就绪");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("[HostGameManager] CardGameBridge未完全准备就绪，但游戏将继续");
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning("[HostGameManager] CardGameBridge实例不存在，卡牌效果可能无法正常工作");
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[HostGameManager] CardGameBridge初始化失败: {e.Message}");
-            }
-        }
+        //            if (Cards.Integration.CardGameBridge.Instance.IsReady())
+        //            {
+        //                LogDebug("CardGameBridge已准备就绪");
+        //            }
+        //            else
+        //            {
+        //                Debug.LogWarning("[HostGameManager] CardGameBridge未完全准备就绪，但游戏将继续");
+        //            }
+        //        }
+        //        else
+        //        {
+        //            Debug.LogWarning("[HostGameManager] CardGameBridge实例不存在，卡牌效果可能无法正常工作");
+        //        }
+        //    }
+        //    catch (System.Exception e)
+        //    {
+        //        Debug.LogError($"[HostGameManager] CardGameBridge初始化失败: {e.Message}");
+        //    }
+        //}
 
         /// <summary>
         /// 从Photon同步玩家数据
