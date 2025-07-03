@@ -379,7 +379,6 @@ namespace Cards.Core
         public static System.Action<int, int> OnCardRemovedFromHand; // playerId, cardId
 
         // 回合事件
-        public static System.Action<int> OnPlayerTurnCompleted;         // 玩家答题完成，playerId
         public static System.Action<int> OnPlayerCardUsageReset;        // 特定玩家卡牌使用机会重置
 
         // UI事件

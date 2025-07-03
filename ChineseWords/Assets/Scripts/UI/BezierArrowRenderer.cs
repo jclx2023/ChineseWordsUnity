@@ -54,11 +54,6 @@ public class BezierArrowRenderer : MonoBehaviour
 
         // 获取Canvas
         parentCanvas = GetComponentInParent<Canvas>();
-        if (parentCanvas == null)
-        {
-            Debug.LogError("BezierArrowRenderer必须在Canvas下使用！");
-            return;
-        }
 
         // 创建节点
         for (int i = 0; i < this.arrowNodeNum; ++i)

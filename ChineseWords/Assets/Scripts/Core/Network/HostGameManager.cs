@@ -899,10 +899,6 @@ namespace Core.Network
             // 立即广播结果
             NetworkManager.Instance.BroadcastPlayerAnswerResult(playerId, validationResult.isCorrect, answer);
             NetworkManager.Instance.BroadcastAnswerResult(validationResult.isCorrect, currentQuestion.correctAnswer);
-            if (PlayerCardManager.Instance != null)
-            {
-                PlayerCardManager.Instance.OnPlayerAnswerCompleted(playerId);
-            }
 
             // 更新玩家状态
             UpdatePlayerState(playerId, validationResult.isCorrect);

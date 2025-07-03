@@ -113,8 +113,14 @@ namespace Cards.UI
                 return;
             }
 
-            // 如果依赖已注入，开始初始化
-            StartCoroutine(DelayedInitialization());
+            if (!isInitialized && !isInitializing)
+            {
+                StartCoroutine(DelayedInitialization());
+            }
+            else
+            {
+                LogDebug($"跳过Start初始化调用 - 已初始化: {isInitialized}, 正在初始化: {isInitializing}");
+            }
         }
 
         private void Update()
@@ -202,11 +208,9 @@ namespace Cards.UI
             this.cardUIComponents = uiComponents;
 
             isDependencyInjected = true;
-
             LogDebug("依赖注入完成");
 
-            // 如果Start已经被调用，立即开始初始化
-            if (gameObject.activeInHierarchy)
+            if (gameObject.activeInHierarchy && !isInitialized && !isInitializing)
             {
                 StartCoroutine(DelayedInitialization());
             }
@@ -225,60 +229,90 @@ namespace Cards.UI
                 return;
             }
 
-            StartCoroutine(DelayedInitialization());
+            if (!isInitialized && !isInitializing)
+            {
+                StartCoroutine(DelayedInitialization());
+            }
+            else
+            {
+                LogDebug($"跳过SystemManager初始化调用 - 已初始化: {isInitialized}, 正在初始化: {isInitializing}");
+            }
         }
 
         #endregion
 
         #region 初始化
-
+        private bool isInitializing = false;
         /// <summary>
         /// 延迟初始化
         /// </summary>
         private IEnumerator DelayedInitialization()
         {
-            if (isInitialized)
+            // 🔧 检查是否已经初始化或正在初始化
+            if (isInitialized || isInitializing)
             {
-                LogDebug("已经初始化，跳过重复初始化");
+                LogDebug($"跳过重复初始化 - 已初始化: {isInitialized}, 正在初始化: {isInitializing}");
                 yield break;
             }
 
+            // 🔧 设置初始化锁定
+            isInitializing = true;
             LogDebug("开始延迟初始化");
 
             // 等待一帧确保所有系统完全就绪
             yield return null;
 
+            // 🔧 再次检查，防止在等待期间状态改变
+            if (isInitialized)
+            {
+                LogDebug("在等待期间已完成初始化，退出");
+                isInitializing = false;
+                yield break;
+            }
+
             // 验证依赖
             if (!ValidateDependencies())
             {
                 LogError("依赖验证失败，无法初始化UI");
+                isInitializing = false;
                 yield break;
             }
 
-            // 设置Canvas
-            SetupCanvas();
+            try
+            {
+                // 设置Canvas
+                SetupCanvas();
 
-            // 创建或查找CardDisplayUI
-            SetupCardDisplayUI();
+                // 创建或查找CardDisplayUI
+                SetupCardDisplayUI();
 
-            // 初始化CardDisplayUI（可能没有摄像机）
-            InitializeCardDisplayUI();
+                // 初始化CardDisplayUI（可能没有摄像机）
+                InitializeCardDisplayUI();
 
-            // 创建箭头管理器
-            SetupArrowManager();
+                // 创建箭头管理器
+                SetupArrowManager();
 
-            // 获取我的玩家ID
-            GetMyPlayerId();
+                // 获取我的玩家ID
+                GetMyPlayerId();
 
-            // 订阅事件
-            SubscribeToEvents();
+                // 订阅事件
+                SubscribeToEvents();
 
-            // 初始化完成
-            isInitialized = true;
-            LogDebug("CardUIManager初始化完成");
+                isInitialized = true;
+                LogDebug("CardUIManager初始化完成");
 
-            // 直接显示缩略图
-            RefreshAndShowThumbnailWithDebounce();
+                // 直接显示缩略图
+                RefreshAndShowThumbnailWithDebounce();
+            }
+            catch (System.Exception e)
+            {
+                LogError($"初始化过程中发生异常: {e.Message}");
+            }
+            finally
+            {
+                // 🔧 释放初始化锁定
+                isInitializing = false;
+            }
         }
 
         /// <summary>
@@ -321,6 +355,13 @@ namespace Cards.UI
         /// </summary>
         private void SetupArrowManager()
         {
+            // 🔧 检查是否已经创建了ArrowManager
+            if (arrowManager != null)
+            {
+                LogDebug("ArrowManager已存在，跳过重复创建");
+                return;
+            }
+
             // 加载箭头预制体（如果未在Inspector中设置）
             if (arrowPrefab == null)
             {
@@ -332,6 +373,8 @@ namespace Cards.UI
                 LogError("箭头预制体未设置且加载失败，无法创建ArrowManager");
                 return;
             }
+
+            CleanupExistingArrowManagers();
 
             // 使用工厂方法创建ArrowManager
             arrowManager = ArrowManager.CreateArrowManager(transform, cardUICanvas, arrowPrefab);
@@ -355,6 +398,23 @@ namespace Cards.UI
             else
             {
                 LogError("ArrowManager创建失败");
+            }
+        }
+        private void CleanupExistingArrowManagers()
+        {
+            // 查找并删除所有旧的ArrowManager实例
+            ArrowManager[] existingManagers = GetComponentsInChildren<ArrowManager>();
+            if (existingManagers.Length > 0)
+            {
+                LogDebug($"发现 {existingManagers.Length} 个旧的ArrowManager实例，开始清理");
+
+                foreach (var manager in existingManagers)
+                {
+                    if (manager != null)
+                    {
+                        DestroyImmediate(manager.gameObject);
+                    }
+                }
             }
         }
 

@@ -128,9 +128,6 @@ namespace Cards.Player
                 maxHandSize = cardConfig.SystemSettings.maxHandSize;
                 initialCardCount = cardConfig.SystemSettings.startingCardCount;
 
-                // 订阅游戏事件
-                SubscribeToGameEvents();
-
                 isInitialized = true;
                 LogDebug("PlayerCardManager初始化完成");
                 LogDebug($"配置: 最大手牌数={maxHandSize}, 初始卡牌数={initialCardCount}");
@@ -142,23 +139,10 @@ namespace Cards.Player
         }
 
         /// <summary>
-        /// 订阅游戏事件
-        /// </summary>
-        private void SubscribeToGameEvents()
-        {
-            // 订阅卡牌系统事件
-            CardEvents.OnPlayerTurnCompleted += OnPlayerAnswerCompleted;
-
-            LogDebug("已订阅游戏事件");
-        }
-
-        /// <summary>
         /// 取消订阅游戏事件
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            // 取消订阅卡牌系统事件
-            CardEvents.OnPlayerTurnCompleted -= OnPlayerAnswerCompleted;
 
             // 取消自定义事件订阅
             OnCardUsed = null;

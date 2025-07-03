@@ -96,21 +96,22 @@ namespace Cards.UI
         /// </summary>
         public void Initialize(Canvas canvas, GameObject arrowPrefabRef)
         {
-            // 设置依赖引用
             parentCanvas = canvas;
             arrowPrefab = arrowPrefabRef;
 
-            // 获取UI摄像机
-            uiCamera = parentCanvas.worldCamera;
-
-            // 查找NetworkUI
-            networkUI = FindObjectOfType<NetworkUI>();
-            if (networkUI == null)
+            // 根据Canvas模式设置摄像机
+            if (parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
             {
-                LogWarning("未找到NetworkUI组件，玩家目标检测可能无法正常工作");
+                uiCamera = null; // Overlay模式不需要摄像机
+            }
+            else
+            {
+                uiCamera = parentCanvas.worldCamera ?? Camera.main;
             }
 
-            LogDebug($"ArrowManager初始化完成 - Canvas: {parentCanvas.name}");
+            networkUI = FindObjectOfType<NetworkUI>();
+
+            LogDebug($"ArrowManager初始化 - Canvas模式: {parentCanvas.renderMode}, 摄像机: {(uiCamera?.name ?? "null")}");
         }
 
         /// <summary>
@@ -318,6 +319,13 @@ namespace Cards.UI
             // 获取鼠标位置
             Vector2 mouseScreenPos = Input.mousePosition;
 
+            // 🔧 添加边界检查
+            if (!IsMousePositionValid(mouseScreenPos))
+            {
+                UpdateTargetState(TargetDetectionResult.None, 0, null);
+                return;
+            }
+
             // 更新箭头终点位置
             UpdateArrowEndPosition(mouseScreenPos);
 
@@ -326,13 +334,18 @@ namespace Cards.UI
             ushort newTargetPlayerId = 0;
             NetworkUI.PlayerConsoleInfo newTargetConsole = null;
 
-            if (DetectPlayerConsoleTarget(mouseScreenPos, out newTargetPlayerId, out newTargetConsole))
+            // 🔧 修复4: 添加详细的检测日志
+            bool playerDetected = DetectPlayerConsoleTarget(mouseScreenPos, out newTargetPlayerId, out newTargetConsole);
+
+            if (playerDetected)
             {
                 newTargetType = TargetDetectionResult.PlayerConsole;
+                LogDebug($"检测到玩家目标: {newTargetPlayerId}");
             }
             else if (DetectCenterAreaTarget(mouseScreenPos))
             {
                 newTargetType = TargetDetectionResult.CenterArea;
+                LogDebug("检测到中央区域目标");
             }
 
             // 验证目标有效性
@@ -341,11 +354,17 @@ namespace Cards.UI
                 if (!ValidateTarget(newTargetType, newTargetPlayerId))
                 {
                     newTargetType = TargetDetectionResult.Invalid;
+                    LogDebug($"目标无效 - 类型: {newTargetType}, 玩家: {newTargetPlayerId}");
                 }
             }
 
             // 更新目标状态
             UpdateTargetState(newTargetType, newTargetPlayerId, newTargetConsole);
+        }
+        private bool IsMousePositionValid(Vector2 mousePos)
+        {
+            return mousePos.x >= 0 && mousePos.x <= Screen.width &&
+                   mousePos.y >= 0 && mousePos.y <= Screen.height;
         }
 
         /// <summary>
@@ -376,11 +395,9 @@ namespace Cards.UI
             playerId = 0;
             consoleInfo = null;
 
-            if (networkUI == null)
-            {
-                return false;
-            }
+            if (networkUI == null) return false;
 
+            // 直接调用NetworkUI检测，让它处理摄像机逻辑
             playerId = networkUI.GetPlayerConsoleAtPoint(screenPosition, uiCamera);
 
             if (playerId > 0)
@@ -391,7 +408,6 @@ namespace Cards.UI
 
             return false;
         }
-
         /// <summary>
         /// 检测中央区域目标
         /// </summary>

@@ -775,6 +775,17 @@ namespace Core.Network
             {
                 persistentManager.photonView.RPC("OnPlayerAnswerResult_RPC", RpcTarget.All, (int)playerId, isCorrect, answer);
                 LogDebug($"✓ 广播玩家答题结果到所有玩家: 玩家{playerId} {(isCorrect ? "正确" : "错误")}");
+
+                var cardManager = GameObject.FindObjectOfType<PlayerCardManager>();
+                if (cardManager != null)
+                {
+                    cardManager.ResetPlayerUsageOpportunity(playerId);
+                    LogDebug($"✓ 已通过 NetworkManager 重置玩家{playerId}卡牌使用机会");
+                }
+                else
+                {
+                    LogDebug("✗ 找不到 PlayerCardManager，无法重置卡牌使用");
+                }
             }
         }
         /// <summary>

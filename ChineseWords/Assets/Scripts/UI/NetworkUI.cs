@@ -443,21 +443,32 @@ namespace UI
         public bool IsPointInPlayerConsole(Vector2 screenPoint, ushort playerId, Camera uiCamera = null)
         {
             var consoleInfo = GetPlayerConsoleInfo(playerId);
-            if (consoleInfo == null || consoleInfo.consoleRect == null)
-            {
-                return false;
-            }
+            if (consoleInfo?.consoleRect == null) return false;
 
-            // 转换为本地坐标进行检测
+            Canvas canvas = GetComponentInParent<Canvas>();
+            if (canvas == null) return false;
+
             Vector2 localPoint;
-            bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                consoleInfo.consoleRect, screenPoint, uiCamera, out localPoint);
+            bool success = false;
+
+            // 根据Canvas模式选择检测方法
+            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            {
+                // Overlay模式：不用摄像机
+                success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    consoleInfo.consoleRect, screenPoint, null, out localPoint);
+            }
+            else
+            {
+                // Camera/WorldSpace模式：使用摄像机
+                Camera targetCamera = uiCamera ?? canvas.worldCamera ?? Camera.main;
+                success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    consoleInfo.consoleRect, screenPoint, targetCamera, out localPoint);
+            }
 
             if (!success) return false;
 
-            // 检查是否在矩形范围内
-            Rect rect = consoleInfo.consoleRect.rect;
-            return rect.Contains(localPoint);
+            return consoleInfo.consoleRect.rect.Contains(localPoint);
         }
 
         /// <summary>
@@ -473,7 +484,7 @@ namespace UI
                     return playerId;
                 }
             }
-            return 0; // 未找到
+            return 0;
         }
 
         #endregion
