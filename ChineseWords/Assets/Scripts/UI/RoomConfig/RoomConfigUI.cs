@@ -18,9 +18,9 @@ namespace UI.RoomConfig
         [SerializeField] private GameObject questionWeightPrefab;
         [SerializeField] private GameObject timerConfigPrefab;
         [SerializeField] private GameObject hpConfigPrefab;
-        [SerializeField] private string questionWeightPrefabPath = "Prefabs/UI/QuestionWeight";
-        [SerializeField] private string timerConfigPrefabPath = "Prefabs/UI/TimerConfig";
-        [SerializeField] private string hpConfigPrefabPath = "Prefabs/UI/HPConfig";
+        [SerializeField] private string questionWeightPrefabPath = "Prefabs/UI/Config/QuestionWeight";
+        [SerializeField] private string timerConfigPrefabPath = "Prefabs/UI/Config/TimerConfig";
+        [SerializeField] private string hpConfigPrefabPath = "Prefabs/UI/Config/HPConfig";
 
         [Header("标签页系统")]
         [SerializeField] private Transform[] tabContents;

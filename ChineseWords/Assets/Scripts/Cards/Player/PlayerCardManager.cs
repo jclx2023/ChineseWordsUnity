@@ -6,6 +6,7 @@ using Core.Network;
 using Cards.Core;
 using Cards.Effects;
 using System;
+using UI.MessageSystem;
 
 namespace Cards.Player
 {
@@ -400,6 +401,7 @@ namespace Cards.Player
             if (!cardState.canUseCardThisRound)
             {
                 LogDebug($"玩家 {playerId} 本回合已使用过卡牌");
+                MessageNotifier.Show("本回合已使用过卡牌", MessageType.Warning);
                 return false;
             }
 
@@ -421,6 +423,7 @@ namespace Cards.Player
             if (cardData != null && !cardData.canUseWhenNotMyTurn && currentTurnPlayerId != playerId)
             {
                 LogDebug($"卡牌 {cardData.cardName} 不允许在非自己回合使用");
+                MessageNotifier.Show("现在不能使用卡牌",MessageType.Warning);
                 return false;
             }
 

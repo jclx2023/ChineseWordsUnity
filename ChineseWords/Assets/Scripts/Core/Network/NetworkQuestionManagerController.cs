@@ -4,6 +4,7 @@ using Core.Network;
 using System.Collections;
 using Managers;
 using Photon.Pun;
+using UI.MessageSystem;
 
 namespace Core.Network
 {
@@ -667,7 +668,7 @@ namespace Core.Network
             hasReceivedTurnChange = true;
 
             LogDebug($"回合变更: {(isMyTurn ? "轮到我了" : $"轮到玩家{playerId}")}");
-
+            MessageNotifier.Show("轮到我了", MessageType.Turn);
             if (isMyTurn)
             {
                 currentDisplayState = QuestionDisplayState.MyTurn;

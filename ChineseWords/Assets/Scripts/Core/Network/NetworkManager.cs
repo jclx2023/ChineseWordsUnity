@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 using System.Collections.Generic;
 using Cards.Player;
+using UI.MessageSystem;
 
 namespace Core.Network
 {
@@ -296,6 +297,7 @@ namespace Core.Network
         {
             LogDebug($"收到答题结果: {(isCorrect ? "正确" : "错误")} - {correctAnswer}");
             OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
+            MessageNotifier.Show($"回答{(isCorrect ? "正确" : "错误")} - {correctAnswer}", isCorrect ? MessageType.Success : MessageType.Error);
         }
 
         [PunRPC]
@@ -326,7 +328,7 @@ namespace Core.Network
         {
             ushort firstTurnPlayerIdUShort = (ushort)firstTurnPlayerId;
             LogDebug($"收到游戏开始: 总玩家{totalPlayerCount}, 存活{alivePlayerCount}, 首回合玩家{firstTurnPlayerIdUShort}");
-
+            MessageNotifier.Show("游戏开始",MessageType.Info);
             OnGameStarted?.Invoke(totalPlayerCount, alivePlayerCount, firstTurnPlayerIdUShort);
 
             // 转发给NetworkUI

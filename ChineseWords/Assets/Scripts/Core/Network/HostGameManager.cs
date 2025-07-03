@@ -261,37 +261,6 @@ namespace Core.Network
             questionDataService?.PreloadAllProviders();
             LogDebug("服务依赖初始化完成");
         }
-        ///// <summary>
-        ///// 初始化卡牌游戏桥接器
-        ///// </summary>
-        //private void InitializeCardGameBridge()
-        //{
-        //    try
-        //    {
-        //        if (Cards.Integration.CardGameBridge.Instance != null)
-        //        {
-        //            // 刷新桥接器的系统引用
-        //            Cards.Integration.CardGameBridge.Instance.RefreshSystemReferences();
-
-        //            if (Cards.Integration.CardGameBridge.Instance.IsReady())
-        //            {
-        //                LogDebug("CardGameBridge已准备就绪");
-        //            }
-        //            else
-        //            {
-        //                Debug.LogWarning("[HostGameManager] CardGameBridge未完全准备就绪，但游戏将继续");
-        //            }
-        //        }
-        //        else
-        //        {
-        //            Debug.LogWarning("[HostGameManager] CardGameBridge实例不存在，卡牌效果可能无法正常工作");
-        //        }
-        //    }
-        //    catch (System.Exception e)
-        //    {
-        //        Debug.LogError($"[HostGameManager] CardGameBridge初始化失败: {e.Message}");
-        //    }
-        //}
 
         /// <summary>
         /// 从Photon同步玩家数据
@@ -362,9 +331,9 @@ namespace Core.Network
             {
                 currentTurnPlayerId = alivePlayerIds[0];
                 LogDebug($"选择玩家 {currentTurnPlayerId} 开始游戏");
-
+                int cardsToGive = cardConfig.SystemSettings.startingCardCount;
                 // 分发手牌
-                DistributeInitialHandCards();
+                DistributeCardsToAllAlivePlayers(cardsToGive);
 
                 // 启动NQMC
                 StartNetworkQuestionController();
@@ -754,40 +723,35 @@ namespace Core.Network
         #endregion
 
         #region 手牌处理
-        private void DistributeInitialHandCards()
+        /// <summary>
+        /// 为所有存活玩家分发卡牌
+        /// </summary>
+        private void DistributeCardsToAllAlivePlayers(int cardCount)
         {
-            if (cardConfig == null)
+            var alivePlayerIds = playerStateManager?.GetAlivePlayerIds();
+            if (alivePlayerIds == null || alivePlayerIds.Count == 0)
             {
-                Debug.LogError("[HostGameManager] CardConfig未配置，无法分发手牌");
+                LogDebug("没有存活玩家，无需分发卡牌");
                 return;
             }
-
-            var alivePlayerIds = playerStateManager.GetAlivePlayerIds();
-            if (alivePlayerIds.Count == 0)
+            // 为每个存活玩家生成并发送卡牌
+            foreach (var alivePlayerId in alivePlayerIds)
             {
-                Debug.LogError("[HostGameManager] 没有存活玩家，无法分发手牌");
-                return;
+                var newCards = new List<int>();
+
+                // 生成指定数量的随机卡牌
+                for (int i = 0; i < cardCount; i++)
+                {
+                    var randomCard = DrawRandomCardForPlayer(alivePlayerId);
+                    newCards.Add(randomCard.cardId);
+                    LogDebug($"为存活玩家 {alivePlayerId} 生成卡牌: {randomCard.cardName} (ID: {randomCard.cardId})");
+                }
+
+                NetworkManager.Instance.SendPlayerHandCards(alivePlayerId, newCards);
+                LogDebug($"已发送 {newCards.Count} 张新卡牌给存活玩家 {alivePlayerId}");
             }
 
-            LogDebug($"开始为 {alivePlayerIds.Count} 名玩家分发手牌");
-
-            // 为每个玩家生成并发送手牌
-            foreach (var playerId in alivePlayerIds)
-            {
-                var handCards = GeneratePlayerHandCards(playerId);
-                if (handCards != null && handCards.Count > 0)
-                {
-                    // 通过NetworkManager发送手牌数据
-                    NetworkManager.Instance.SendPlayerHandCards(playerId, handCards);
-                    LogDebug($"已发送手牌给玩家 {playerId}: {handCards.Count} 张卡牌");
-                }
-                else
-                {
-                    Debug.LogError($"[HostGameManager] 为玩家 {playerId} 生成手牌失败");
-                }
-            }
-
-            LogDebug("手牌分发完成");
+            LogDebug($"卡牌分发完成 - 为 {alivePlayerIds.Count} 名存活玩家每人分发了 {cardCount} 张卡牌");
         }
 
         /// <summary>
@@ -1228,6 +1192,9 @@ namespace Core.Network
             // 广播血量更新（死亡状态）
             NetworkManager.Instance.BroadcastHealthUpdate(playerId, 0, maxHealth);
             NetworkManager.Instance.BroadcastPlayerDeath(playerId, playerName);
+            int cardsToGive = cardConfig.SystemSettings.cardsReceivedOnElimination;
+            // 为所有存活玩家发放2张卡牌
+            DistributeCardsToAllAlivePlayers(cardsToGive);
 
             // 如果是当前回合玩家死亡，切换回合
             if (currentTurnPlayerId == playerId && gameInProgress)
@@ -1238,6 +1205,7 @@ namespace Core.Network
 
             CheckGameEndConditions();
         }
+
 
         #endregion
 
