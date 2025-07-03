@@ -12,8 +12,8 @@ using Classroom.Player;
 namespace Cards.UI
 {
     /// <summary>
-    /// 卡牌UI管理器 - Bug修复版
-    /// 修复：1.摄像机查找时机问题 2.Canvas挂载问题 3.频繁刷新问题
+    /// 卡牌UI管理器 - 箭头系统重构版
+    /// 完全移除键盘操作，使用贝塞尔箭头进行目标选择
     /// </summary>
     public class CardUIManager : MonoBehaviour, IUISystemDependencyInjection
     {
@@ -24,18 +24,15 @@ namespace Cards.UI
         [Header("输入设置")]
         [SerializeField] private KeyCode cardDisplayTriggerKey = KeyCode.E; // 卡牌展示触发键
 
+        [Header("箭头系统设置")]
+        [SerializeField] private GameObject arrowPrefab; // 贝塞尔箭头预制体
+        [SerializeField] private float pressHoldTime = 0.2f; // 按住时间阈值
+
         [Header("拖拽设置 - 释放区域（屏幕百分比）")]
         [SerializeField] private float releaseAreaCenterX = 0.5f; // 50%
         [SerializeField] private float releaseAreaCenterY = 0.5f; // 50%
         [SerializeField] private float releaseAreaWidth = 0.3f; // 30%
         [SerializeField] private float releaseAreaHeight = 0.3f; // 30%
-
-        [Header("目标选择设置")]
-        [SerializeField] private KeyCode targetSelfKey = KeyCode.Alpha1;      // 目标自己
-        [SerializeField] private KeyCode targetPlayer2Key = KeyCode.Alpha2;   // 目标玩家2
-        [SerializeField] private KeyCode targetPlayer3Key = KeyCode.Alpha3;   // 目标玩家3
-        [SerializeField] private KeyCode targetPlayer4Key = KeyCode.Alpha4;   // 目标玩家4
-        [SerializeField] private KeyCode targetAllKey = KeyCode.Alpha0;       // 目标所有玩家
 
         [Header("防抖设置")]
         [SerializeField] private float refreshCooldown = 0.1f; // 刷新冷却时间
@@ -46,13 +43,12 @@ namespace Cards.UI
         // 单例实例
         public static CardUIManager Instance { get; private set; }
 
-        // UI状态
+        // UI状态 - 重构后的状态
         public enum UIState
         {
             Thumbnail,        // 缩略图状态（默认状态）
             FanDisplay,       // 扇形展示状态
-            Dragging,         // 拖拽状态
-            TargetSelection,  // 目标选择状态
+            ArrowTargeting,   // 箭头目标选择状态（替代原Dragging和TargetSelection）
             Disabled          // 禁用状态（答题期间）
         }
 
@@ -72,13 +68,15 @@ namespace Cards.UI
 
         // 卡牌数据
         private List<CardDisplayData> currentHandCards = new List<CardDisplayData>();
-        private GameObject draggedCard = null;
-        private CardData pendingCardData = null; // 等待目标选择的卡牌
         private int myPlayerId = -1;
 
-        // 拖拽相关
-        private bool isDragging = false;
-        private Vector3 dragStartPosition;
+        // 箭头系统相关
+        private ArrowManager arrowManager;
+        private GameObject currentPressedCard = null;
+        private CardData currentCardData = null;
+        private Vector2 pressStartPosition = Vector2.zero;
+        private float pressStartTime = 0f;
+        private bool isWaitingForHold = false;
 
         // 防抖相关
         private float lastRefreshTime = 0f;
@@ -123,7 +121,7 @@ namespace Cards.UI
             if (!isInitialized) return;
 
             HandleInput();
-            HandleDragging();
+            HandleCardPressLogic();
             HandlePendingRefresh();
         }
 
@@ -265,6 +263,9 @@ namespace Cards.UI
             // 初始化CardDisplayUI（可能没有摄像机）
             InitializeCardDisplayUI();
 
+            // 创建箭头管理器
+            SetupArrowManager();
+
             // 获取我的玩家ID
             GetMyPlayerId();
 
@@ -312,6 +313,42 @@ namespace Cards.UI
             cardDisplayUI.Initialize(cardUIComponents, cameraController);
 
             LogDebug("CardDisplayUI初始化完成（摄像机可能为空）");
+        }
+
+        /// <summary>
+        /// 设置箭头管理器
+        /// </summary>
+        private void SetupArrowManager()
+        {
+            if (arrowPrefab == null)
+            {
+                LogError("箭头预制体未设置，无法创建ArrowManager");
+                return;
+            }
+
+            // 使用工厂方法创建ArrowManager
+            arrowManager = ArrowManager.CreateArrowManager(transform, cardUICanvas, arrowPrefab);
+
+            if (arrowManager != null)
+            {
+                // 同步中央区域设置
+                arrowManager.SyncCenterAreaSettings(
+                    releaseAreaCenterX, releaseAreaCenterY,
+                    releaseAreaWidth, releaseAreaHeight
+                );
+
+                // 订阅箭头事件
+                arrowManager.OnValidPlayerTargetDetected += OnArrowValidPlayerTarget;
+                arrowManager.OnValidCenterAreaDetected += OnArrowValidCenterArea;
+                arrowManager.OnInvalidTargetDetected += OnArrowInvalidTarget;
+                arrowManager.OnNoTargetDetected += OnArrowNoTarget;
+
+                LogDebug("ArrowManager创建并配置完成");
+            }
+            else
+            {
+                LogError("ArrowManager创建失败");
+            }
         }
 
         /// <summary>
@@ -552,9 +589,12 @@ namespace Cards.UI
             // 订阅卡牌显示UI事件
             if (cardDisplayUI != null)
             {
-                cardDisplayUI.OnCardSelected += OnCardSelected;
                 cardDisplayUI.OnCardHoverEnter += OnCardHoverEnter;
                 cardDisplayUI.OnCardHoverExit += OnCardHoverExit;
+
+                // 新的按压事件（替代原来的OnCardSelected）
+                cardDisplayUI.OnCardPressStart += OnCardPressStart;
+                cardDisplayUI.OnCardPressEnd += OnCardPressEnd;
             }
 
             LogDebug("事件订阅完成");
@@ -574,9 +614,19 @@ namespace Cards.UI
             // 取消订阅卡牌显示UI事件
             if (cardDisplayUI != null)
             {
-                cardDisplayUI.OnCardSelected -= OnCardSelected;
                 cardDisplayUI.OnCardHoverEnter -= OnCardHoverEnter;
                 cardDisplayUI.OnCardHoverExit -= OnCardHoverExit;
+                cardDisplayUI.OnCardPressStart -= OnCardPressStart;
+                cardDisplayUI.OnCardPressEnd -= OnCardPressEnd;
+            }
+
+            // 取消订阅箭头事件
+            if (arrowManager != null)
+            {
+                arrowManager.OnValidPlayerTargetDetected -= OnArrowValidPlayerTarget;
+                arrowManager.OnValidCenterAreaDetected -= OnArrowValidCenterArea;
+                arrowManager.OnInvalidTargetDetected -= OnArrowInvalidTarget;
+                arrowManager.OnNoTargetDetected -= OnArrowNoTarget;
             }
 
             LogDebug("取消事件订阅");
@@ -608,13 +658,19 @@ namespace Cards.UI
                 }
             }
 
+            // 如果轮到我的回合且在箭头状态，取消箭头
+            if (isMyTurn && currentUIState == UIState.ArrowTargeting)
+            {
+                CancelArrowTargeting();
+            }
+
             UpdateUIAvailability();
         }
 
         /// <summary>
-        /// 处理卡牌选择事件
+        /// 处理卡牌按压开始
         /// </summary>
-        private void OnCardSelected(GameObject cardUI)
+        private void OnCardPressStart(GameObject cardUI, Vector2 pressPosition)
         {
             if (currentUIState != UIState.FanDisplay) return;
 
@@ -634,16 +690,19 @@ namespace Cards.UI
                 return;
             }
 
-            // 检查是否需要目标选择
-            if (NeedsTargetSelection(cardData))
-            {
-                StartTargetSelection(cardUI, cardData);
-            }
-            else
-            {
-                // 开始拖拽
-                StartDragging(cardUI);
-            }
+            // 开始按压逻辑
+            StartCardPress(cardUI, cardData, pressPosition);
+        }
+
+        /// <summary>
+        /// 处理卡牌按压结束
+        /// </summary>
+        private void OnCardPressEnd(GameObject cardUI)
+        {
+            if (currentPressedCard != cardUI) return;
+
+            // 结束按压逻辑
+            EndCardPress();
         }
 
         /// <summary>
@@ -664,6 +723,42 @@ namespace Cards.UI
 
         #endregion
 
+        #region 箭头事件处理
+
+        /// <summary>
+        /// 箭头检测到有效玩家目标
+        /// </summary>
+        private void OnArrowValidPlayerTarget(ushort playerId)
+        {
+            LogDebug($"箭头指向有效玩家目标: {playerId}");
+        }
+
+        /// <summary>
+        /// 箭头检测到有效中央区域
+        /// </summary>
+        private void OnArrowValidCenterArea()
+        {
+            LogDebug("箭头指向有效中央区域");
+        }
+
+        /// <summary>
+        /// 箭头检测到无效目标
+        /// </summary>
+        private void OnArrowInvalidTarget()
+        {
+            LogDebug("箭头指向无效目标");
+        }
+
+        /// <summary>
+        /// 箭头无目标
+        /// </summary>
+        private void OnArrowNoTarget()
+        {
+            // 不打印日志，避免频繁输出
+        }
+
+        #endregion
+
         #region 输入处理
 
         /// <summary>
@@ -677,16 +772,17 @@ namespace Cards.UI
                 HandleCardDisplayToggle();
             }
 
-            // ESC键关闭卡牌UI
+            // ESC键关闭卡牌UI或取消箭头
             if (Input.GetKeyDown(KeyCode.Escape) && IsCardUIVisible)
             {
-                HideCardUI();
-            }
-
-            // 目标选择输入处理
-            if (currentUIState == UIState.TargetSelection)
-            {
-                HandleTargetSelectionInput();
+                if (currentUIState == UIState.ArrowTargeting)
+                {
+                    CancelArrowTargeting();
+                }
+                else
+                {
+                    HideCardUI();
+                }
             }
         }
 
@@ -718,8 +814,8 @@ namespace Cards.UI
                     }
                     break;
 
-                case UIState.TargetSelection:
-                    CancelTargetSelection();
+                case UIState.ArrowTargeting:
+                    CancelArrowTargeting();
                     break;
 
                 case UIState.Disabled:
@@ -728,265 +824,207 @@ namespace Cards.UI
             }
         }
 
-        /// <summary>
-        /// 处理目标选择输入
-        /// </summary>
-        private void HandleTargetSelectionInput()
-        {
-            int targetPlayerId = -1;
-
-            if (Input.GetKeyDown(targetSelfKey))
-            {
-                targetPlayerId = myPlayerId;
-            }
-            else if (Input.GetKeyDown(targetPlayer2Key))
-            {
-                targetPlayerId = 2;
-            }
-            else if (Input.GetKeyDown(targetPlayer3Key))
-            {
-                targetPlayerId = 3;
-            }
-            else if (Input.GetKeyDown(targetPlayer4Key))
-            {
-                targetPlayerId = 4;
-            }
-            else if (Input.GetKeyDown(targetAllKey))
-            {
-                targetPlayerId = 0; // 特殊值表示所有玩家
-            }
-
-            if (targetPlayerId != -1)
-            {
-                CompleteTargetSelection(targetPlayerId);
-            }
-        }
-
         #endregion
 
-        #region 目标选择系统
+        #region 卡牌按压逻辑
 
         /// <summary>
-        /// 检查是否需要目标选择
+        /// 处理卡牌按压逻辑
         /// </summary>
-        private bool NeedsTargetSelection(CardData cardData)
+        private void HandleCardPressLogic()
         {
-            return cardData.targetType == TargetType.SinglePlayer ||
-                   cardData.targetType == TargetType.AllPlayers;
-        }
-
-        /// <summary>
-        /// 开始目标选择
-        /// </summary>
-        private void StartTargetSelection(GameObject cardUI, CardData cardData)
-        {
-            pendingCardData = cardData;
-            draggedCard = cardUI;
-
-            SetUIState(UIState.TargetSelection);
-
-            LogDebug($"开始目标选择 - 卡牌: {cardData.cardName}");
-            ShowTargetSelectionUI(cardData);
-        }
-
-        /// <summary>
-        /// 显示目标选择UI
-        /// </summary>
-        private void ShowTargetSelectionUI(CardData cardData)
-        {
-            string message = $"请选择 {cardData.cardName} 的目标：\n";
-
-            if (cardData.targetType == TargetType.SinglePlayer)
+            if (isWaitingForHold && currentPressedCard != null)
             {
-                message += "1-自己  2-玩家2  3-玩家3  4-玩家4";
-            }
-            else if (cardData.targetType == TargetType.AllPlayers)
-            {
-                message += "0-所有玩家";
-            }
+                float pressDuration = Time.time - pressStartTime;
 
-            message += "\nESC-取消";
-
-            LogDebug(message);
-        }
-
-        /// <summary>
-        /// 完成目标选择
-        /// </summary>
-        private void CompleteTargetSelection(int targetPlayerId)
-        {
-            if (pendingCardData == null)
-            {
-                LogError("没有待处理的卡牌数据");
-                return;
-            }
-
-            // 验证目标是否有效
-            if (!ValidateTarget(pendingCardData, targetPlayerId))
-            {
-                LogWarning($"无效的目标: {targetPlayerId}");
-                return;
-            }
-
-            LogDebug($"目标选择完成 - 卡牌: {pendingCardData.cardName}, 目标: {targetPlayerId}");
-
-            // 使用卡牌
-            ExecuteCardUsage(pendingCardData.cardId, targetPlayerId);
-
-            // 清理目标选择状态
-            ClearTargetSelection();
-        }
-
-        /// <summary>
-        /// 取消目标选择
-        /// </summary>
-        private void CancelTargetSelection()
-        {
-            LogDebug("取消目标选择");
-            ClearTargetSelection();
-            SetUIState(UIState.FanDisplay);
-        }
-
-        /// <summary>
-        /// 清理目标选择状态
-        /// </summary>
-        private void ClearTargetSelection()
-        {
-            pendingCardData = null;
-            draggedCard = null;
-        }
-
-        /// <summary>
-        /// 验证目标
-        /// </summary>
-        private bool ValidateTarget(CardData cardData, int targetPlayerId)
-        {
-            if (cardData.targetType == TargetType.Self && targetPlayerId != myPlayerId)
-            {
-                return false;
-            }
-
-            if (cardData.targetType == TargetType.SinglePlayer)
-            {
-                return IsValidPlayerTarget(targetPlayerId);
-            }
-
-            if (cardData.targetType == TargetType.AllPlayers && targetPlayerId != 0)
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// 检查是否为有效的玩家目标
-        /// </summary>
-        private bool IsValidPlayerTarget(int playerId)
-        {
-            return playerId >= 1 && playerId <= 4;
-        }
-
-        #endregion
-
-        #region 拖拽处理
-
-        /// <summary>
-        /// 开始拖拽
-        /// </summary>
-        private void StartDragging(GameObject cardUI)
-        {
-            if (cardUI == null) return;
-
-            draggedCard = cardUI;
-            isDragging = true;
-            dragStartPosition = cardUI.transform.position;
-
-            SetUIState(UIState.Dragging);
-
-            LogDebug($"开始拖拽卡牌: {cardUI.name}");
-        }
-
-        /// <summary>
-        /// 处理拖拽
-        /// </summary>
-        private void HandleDragging()
-        {
-            if (!isDragging || draggedCard == null) return;
-
-            // 鼠标抬起时结束拖拽
-            if (Input.GetMouseButtonUp(0))
-            {
-                EndDragging();
-                return;
-            }
-        }
-
-        /// <summary>
-        /// 结束拖拽
-        /// </summary>
-        private void EndDragging()
-        {
-            if (!isDragging || draggedCard == null) return;
-
-            // 检查释放位置
-            bool isInReleaseArea = IsMouseInReleaseArea();
-
-            if (isInReleaseArea)
-            {
-                // 获取卡牌数据
-                CardUIIdentifier identifier = draggedCard.GetComponent<CardUIIdentifier>();
-                if (identifier != null)
+                // 检查是否达到按压时间阈值
+                if (pressDuration >= pressHoldTime)
                 {
-                    // 在释放区域内，使用卡牌（无目标或自目标）
-                    ExecuteCardUsage(identifier.cardId, myPlayerId);
+                    // 开始箭头目标选择
+                    StartArrowTargeting();
+                    isWaitingForHold = false;
                 }
+
+                // 检查是否提前松开了鼠标
+                if (!Input.GetMouseButton(0))
+                {
+                    // 取消操作
+                    CancelCardPress();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 开始卡牌按压
+        /// </summary>
+        private void StartCardPress(GameObject cardUI, CardData cardData, Vector2 pressPosition)
+        {
+            if (currentUIState != UIState.FanDisplay)
+            {
+                LogWarning("不在扇形展示状态，无法开始卡牌按压");
+                return;
+            }
+
+            LogDebug($"开始卡牌按压: {cardData.cardName}");
+
+            currentPressedCard = cardUI;
+            currentCardData = cardData;
+            pressStartPosition = pressPosition;
+            pressStartTime = Time.time;
+            isWaitingForHold = true;
+        }
+
+        /// <summary>
+        /// 结束卡牌按压
+        /// </summary>
+        private void EndCardPress()
+        {
+            if (currentUIState == UIState.ArrowTargeting)
+            {
+                // 在箭头模式下，结束按压意味着释放卡牌
+                CompleteArrowTargeting();
+            }
+            else if (isWaitingForHold)
+            {
+                // 还在等待按压时间，视为取消
+                CancelCardPress();
+            }
+        }
+
+        /// <summary>
+        /// 取消卡牌按压
+        /// </summary>
+        private void CancelCardPress()
+        {
+            LogDebug("取消卡牌按压");
+
+            currentPressedCard = null;
+            currentCardData = null;
+            pressStartPosition = Vector2.zero;
+            pressStartTime = 0f;
+            isWaitingForHold = false;
+        }
+
+        #endregion
+
+        #region 箭头目标选择系统
+
+        /// <summary>
+        /// 开始箭头目标选择
+        /// </summary>
+        private void StartArrowTargeting()
+        {
+            if (arrowManager == null || currentCardData == null)
+            {
+                LogError("ArrowManager或卡牌数据为空，无法开始箭头目标选择");
+                CancelCardPress();
+                return;
+            }
+
+            LogDebug($"开始箭头目标选择: {currentCardData.cardName}");
+
+            // 启动箭头管理器
+            bool success = arrowManager.StartArrowTargeting(pressStartPosition, currentCardData);
+            if (success)
+            {
+                SetUIState(UIState.ArrowTargeting);
+                LogDebug("箭头目标选择模式已激活");
             }
             else
             {
-                LogDebug("拖拽释放位置无效，取消使用卡牌");
+                LogError("启动箭头目标选择失败");
+                CancelCardPress();
+            }
+        }
+
+        /// <summary>
+        /// 完成箭头目标选择
+        /// </summary>
+        private void CompleteArrowTargeting()
+        {
+            if (arrowManager == null || currentCardData == null)
+            {
+                LogError("ArrowManager或卡牌数据为空，无法完成箭头目标选择");
+                return;
             }
 
-            // 清理拖拽状态
-            CleanupDragging();
+            // 获取最终目标结果
+            ushort targetPlayerId;
+            ArrowManager.TargetDetectionResult result = arrowManager.EndArrowTargeting(out targetPlayerId);
+
+            LogDebug($"箭头目标选择完成 - 结果: {result}, 目标玩家: {targetPlayerId}");
+
+            // 根据结果执行相应操作
+            switch (result)
+            {
+                case ArrowManager.TargetDetectionResult.PlayerConsole:
+                    // 指向玩家，使用卡牌
+                    ExecuteCardUsage(currentCardData.cardId, targetPlayerId);
+                    break;
+
+                case ArrowManager.TargetDetectionResult.CenterArea:
+                    // 指向中央区域，根据卡牌类型决定目标
+                    int centerTargetId = GetCenterAreaTargetId(currentCardData);
+                    ExecuteCardUsage(currentCardData.cardId, centerTargetId);
+                    break;
+
+                case ArrowManager.TargetDetectionResult.Invalid:
+                case ArrowManager.TargetDetectionResult.None:
+                default:
+                    LogDebug("无效目标或无目标，取消卡牌使用");
+                    break;
+            }
+
+            // 清理状态
+            CleanupArrowTargeting();
         }
 
         /// <summary>
-        /// 清理拖拽状态
+        /// 取消箭头目标选择
         /// </summary>
-        private void CleanupDragging()
+        private void CancelArrowTargeting()
         {
-            isDragging = false;
-            draggedCard = null;
+            LogDebug("取消箭头目标选择");
 
-            // 返回到扇形展示状态
+            if (arrowManager != null)
+            {
+                arrowManager.CancelArrowTargeting();
+            }
+
+            CleanupArrowTargeting();
+        }
+
+        /// <summary>
+        /// 清理箭头目标选择状态
+        /// </summary>
+        private void CleanupArrowTargeting()
+        {
+            // 清理卡牌按压状态
+            CancelCardPress();
+
+            // 返回扇形展示状态
             SetUIState(UIState.FanDisplay);
 
-            LogDebug("拖拽状态已清理");
+            LogDebug("箭头目标选择状态已清理");
         }
 
         /// <summary>
-        /// 检查鼠标是否在释放区域内
+        /// 获取中央区域目标ID
         /// </summary>
-        private bool IsMouseInReleaseArea()
+        private int GetCenterAreaTargetId(CardData cardData)
         {
-            Vector2 mouseScreenPos = Input.mousePosition;
-            Vector2 screenSize = new Vector2(Screen.width, Screen.height);
+            switch (cardData.targetType)
+            {
+                case TargetType.Self:
+                    return myPlayerId;
 
-            // 转换为屏幕百分比
-            Vector2 mousePercent = new Vector2(mouseScreenPos.x / screenSize.x, mouseScreenPos.y / screenSize.y);
+                case TargetType.AllPlayers:
+                    return 0; // 特殊值表示所有玩家
 
-            // 计算释放区域边界
-            float leftBound = releaseAreaCenterX - releaseAreaWidth / 2f;
-            float rightBound = releaseAreaCenterX + releaseAreaWidth / 2f;
-            float bottomBound = releaseAreaCenterY - releaseAreaHeight / 2f;
-            float topBound = releaseAreaCenterY + releaseAreaHeight / 2f;
-
-            // 检查是否在区域内
-            bool inArea = mousePercent.x >= leftBound && mousePercent.x <= rightBound &&
-                         mousePercent.y >= bottomBound && mousePercent.y <= topBound;
-
-            return inArea;
+                default:
+                    LogWarning($"卡牌类型 {cardData.targetType} 不应该拖到中央区域");
+                    return myPlayerId;
+            }
         }
 
         #endregion
@@ -1083,6 +1121,7 @@ namespace Cards.UI
             if (cardData == null) return;
 
             string tooltip = $"{cardData.cardName}\n{cardData.description}";
+            // TODO: 显示实际的提示UI
         }
 
         /// <summary>
@@ -1127,15 +1166,16 @@ namespace Cards.UI
         {
             LogDebug("隐藏卡牌UI");
 
-            // 清理各种状态
-            if (isDragging)
+            // 清理箭头状态
+            if (currentUIState == UIState.ArrowTargeting)
             {
-                CleanupDragging();
+                CancelArrowTargeting();
             }
 
-            if (currentUIState == UIState.TargetSelection)
+            // 清理按压状态
+            if (isWaitingForHold)
             {
-                ClearTargetSelection();
+                CancelCardPress();
             }
 
             // 隐藏展示UI
@@ -1210,6 +1250,12 @@ namespace Cards.UI
         public void DisableCardUI()
         {
             LogDebug("强制禁用卡牌UI");
+
+            // 取消任何进行中的操作
+            if (currentUIState == UIState.ArrowTargeting)
+            {
+                CancelArrowTargeting();
+            }
 
             if (currentUIState == UIState.FanDisplay)
             {
@@ -1359,15 +1405,16 @@ namespace Cards.UI
             // 取消事件订阅
             UnsubscribeFromEvents();
 
-            // 清理各种状态
-            if (isDragging)
+            // 清理箭头状态
+            if (currentUIState == UIState.ArrowTargeting)
             {
-                CleanupDragging();
+                CancelArrowTargeting();
             }
 
-            if (currentUIState == UIState.TargetSelection)
+            // 清理按压状态
+            if (isWaitingForHold)
             {
-                ClearTargetSelection();
+                CancelCardPress();
             }
 
             // 清理数据

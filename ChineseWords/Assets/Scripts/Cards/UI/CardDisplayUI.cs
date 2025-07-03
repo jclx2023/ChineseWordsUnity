@@ -8,9 +8,9 @@ using Classroom.Player;
 namespace Cards.UI
 {
     /// <summary>
-    /// 卡牌展示UI控制器 - 重构版
+    /// 卡牌展示UI控制器 - 箭头系统重构版
     /// 负责管理卡牌的视觉展示状态：缩略图 <-> 扇形展示
-    /// 移除Hidden状态，改为被CardUIManager完全控制的子组件
+    /// 支持按压事件替代点击事件
     /// </summary>
     public class CardDisplayUI : MonoBehaviour
     {
@@ -18,16 +18,16 @@ namespace Cards.UI
         [SerializeField] private Transform thumbnailContainer; // 缩略图容器
         [SerializeField] private Vector2 thumbnailPosition = new Vector2(90f, 0f); // 调整到合适的位置
         [SerializeField] private float thumbnailRotation = -10f; // 缩略图容器旋转角度
-        [SerializeField] private float thumbnailScale = 0.4f; // 缩略图缩放
-        [SerializeField] private float thumbnailFanRadius = 80f; // 缩略图扇形半径
-        [SerializeField] private float thumbnailFanAngle = 30f; // 缩略图扇形角度
+        [SerializeField] private float thumbnailScale = 0.6f; // 缩略图缩放（从0.4增大到0.6）
+        [SerializeField] private float thumbnailFanRadius = 100f; // 缩略图扇形半径（从80增大到100）
+        [SerializeField] private float thumbnailFanAngle = 40f; // 缩略图扇形角度（从30增大到40）
         [SerializeField] private int maxThumbnailCards = 3; // 最多显示3张缩略图
 
         [Header("扇形展示设置")]
         [SerializeField] private Transform fanDisplayContainer; // 扇形展示容器
-        [SerializeField] private float fanRadius = 400f; // 扇形半径
+        [SerializeField] private float fanRadius = 300f; // 扇形半径
         [SerializeField] private float fanAngleSpread = 60f; // 扇形角度范围
-        [SerializeField] private float bottomMargin = 150f; // 距离屏幕底部的边距
+        [SerializeField] private float bottomMargin = 50f; // 距离屏幕底部的边距
         [SerializeField] private float cardHeight = 200f; // 卡牌高度（用于计算位置）
 
         [Header("悬停交互设置")]
@@ -39,10 +39,13 @@ namespace Cards.UI
         [SerializeField] private float transitionDuration = 0.5f; // 状态切换动画时长
         [SerializeField] private AnimationCurve transitionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
+        [Header("按压检测设置")]
+        [SerializeField] private float pressDetectionThreshold = 0.1f; // 按压检测阈值（秒）
+
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // 展示状态枚举 - 移除Hidden状态
+        // 展示状态枚举
         public enum DisplayState
         {
             Thumbnail,     // 缩略图状态（默认状态）
@@ -63,6 +66,12 @@ namespace Cards.UI
         private Coroutine transitionCoroutine = null;
         private Coroutine hoverCoroutine = null;
 
+        // 按压检测相关
+        private GameObject pressedCard = null;
+        private Vector2 pressStartPosition = Vector2.zero;
+        private float pressStartTime = 0f;
+        private bool isPressing = false;
+
         // 动态计算的扇形中心点
         private Vector2 dynamicFanCenter;
 
@@ -76,7 +85,8 @@ namespace Cards.UI
         // 事件
         public System.Action<GameObject> OnCardHoverEnter;
         public System.Action<GameObject> OnCardHoverExit;
-        public System.Action<GameObject> OnCardSelected;
+        public System.Action<GameObject, Vector2> OnCardPressStart;
+        public System.Action<GameObject> OnCardPressEnd;
 
         // 属性
         public DisplayState CurrentState => currentState;
@@ -151,7 +161,7 @@ namespace Cards.UI
                 // 设置锚点和尺寸
                 thumbRect.anchorMin = Vector2.zero;
                 thumbRect.anchorMax = Vector2.zero;
-                thumbRect.sizeDelta = new Vector2(400, 300); // 给一个合理的尺寸
+                thumbRect.sizeDelta = new Vector2(500, 400); // 增大尺寸（从400x300到500x400）
 
                 thumbnailContainer = thumbContainer.transform;
             }
@@ -186,6 +196,174 @@ namespace Cards.UI
                 LogWarning("CardDisplayUI未找到父Canvas，可能会导致UI显示问题");
             }
         }
+        #endregion
+
+        #region Unity生命周期
+
+        private void Update()
+        {
+            // 处理按压检测
+            HandlePressDetection();
+        }
+
+        #endregion
+
+        #region 按压检测系统
+
+        /// <summary>
+        /// 处理按压检测
+        /// </summary>
+        private void HandlePressDetection()
+        {
+            if (currentState != DisplayState.FanDisplay) return;
+
+            // 检测鼠标按下
+            if (Input.GetMouseButtonDown(0))
+            {
+                HandleMouseDown();
+            }
+            // 检测鼠标抬起
+            else if (Input.GetMouseButtonUp(0))
+            {
+                HandleMouseUp();
+            }
+        }
+
+        /// <summary>
+        /// 处理鼠标按下
+        /// </summary>
+        private void HandleMouseDown()
+        {
+            // 获取鼠标位置
+            Vector2 mousePosition = Input.mousePosition;
+
+            // 检测是否点击在卡牌上
+            GameObject clickedCard = GetCardUnderMouse(mousePosition);
+            if (clickedCard != null)
+            {
+                StartCardPress(clickedCard, mousePosition);
+            }
+        }
+
+        /// <summary>
+        /// 处理鼠标抬起
+        /// </summary>
+        private void HandleMouseUp()
+        {
+            if (isPressing && pressedCard != null)
+            {
+                EndCardPress();
+            }
+        }
+
+        /// <summary>
+        /// 开始卡牌按压
+        /// </summary>
+        private void StartCardPress(GameObject card, Vector2 mousePosition)
+        {
+            pressedCard = card;
+            pressStartPosition = mousePosition;
+            pressStartTime = Time.time;
+            isPressing = true;
+
+            LogDebug($"开始按压卡牌: {card.name}");
+
+            // 转换鼠标屏幕坐标为Canvas坐标
+            Vector2 canvasPosition;
+            RectTransform canvasRect = GetCanvasRectTransform();
+            if (canvasRect != null)
+            {
+                Camera uiCamera = GetUICamera();
+                bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvasRect, mousePosition, uiCamera, out canvasPosition);
+
+                if (success)
+                {
+                    // 触发按压开始事件
+                    OnCardPressStart?.Invoke(card, canvasPosition);
+                }
+                else
+                {
+                    LogWarning("无法转换鼠标坐标到Canvas坐标");
+                    OnCardPressStart?.Invoke(card, mousePosition);
+                }
+            }
+            else
+            {
+                // 使用原始屏幕坐标
+                OnCardPressStart?.Invoke(card, mousePosition);
+            }
+        }
+
+        /// <summary>
+        /// 结束卡牌按压
+        /// </summary>
+        private void EndCardPress()
+        {
+            if (pressedCard != null)
+            {
+                LogDebug($"结束按压卡牌: {pressedCard.name}");
+
+                // 触发按压结束事件
+                OnCardPressEnd?.Invoke(pressedCard);
+            }
+
+            // 清理按压状态
+            pressedCard = null;
+            pressStartPosition = Vector2.zero;
+            pressStartTime = 0f;
+            isPressing = false;
+        }
+
+        /// <summary>
+        /// 获取鼠标下的卡牌
+        /// </summary>
+        private GameObject GetCardUnderMouse(Vector2 mousePosition)
+        {
+            // 使用EventSystem进行Raycast检测
+            PointerEventData eventData = new PointerEventData(EventSystem.current)
+            {
+                position = mousePosition
+            };
+
+            List<RaycastResult> results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(eventData, results);
+
+            // 查找第一个匹配的卡牌
+            foreach (var result in results)
+            {
+                GameObject obj = result.gameObject;
+
+                // 检查是否是当前的卡牌UI
+                if (currentCardUIs.Contains(obj))
+                {
+                    return obj;
+                }
+
+                // 检查父对象是否是卡牌UI
+                Transform parent = obj.transform.parent;
+                while (parent != null)
+                {
+                    if (currentCardUIs.Contains(parent.gameObject))
+                    {
+                        return parent.gameObject;
+                    }
+                    parent = parent.parent;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 获取UI摄像机
+        /// </summary>
+        private Camera GetUICamera()
+        {
+            Canvas canvas = GetCanvasRectTransform()?.GetComponent<Canvas>();
+            return canvas?.worldCamera;
+        }
+
         #endregion
 
         #region 状态管理
@@ -355,6 +533,12 @@ namespace Cards.UI
             {
                 if (currentState != DisplayState.Disabled)
                 {
+                    // 清理按压状态
+                    if (isPressing)
+                    {
+                        EndCardPress();
+                    }
+
                     SetState(DisplayState.Disabled);
                     LogDebug("禁用CardDisplayUI");
                 }
@@ -379,6 +563,12 @@ namespace Cards.UI
             {
                 StopCoroutine(hoverCoroutine);
                 hoverCoroutine = null;
+            }
+
+            // 清理按压状态
+            if (isPressing)
+            {
+                EndCardPress();
             }
 
             // 清理扇形卡牌
@@ -425,6 +615,12 @@ namespace Cards.UI
             if (hoverCoroutine != null)
             {
                 StopCoroutine(hoverCoroutine);
+            }
+
+            // 清理按压状态
+            if (isPressing)
+            {
+                EndCardPress();
             }
 
             // 清理所有UI
@@ -941,11 +1137,7 @@ namespace Cards.UI
             pointerExit.callback.AddListener((eventData) => OnCardPointerExit(cardUI));
             eventTrigger.triggers.Add(pointerExit);
 
-            // 鼠标点击事件
-            EventTrigger.Entry pointerClick = new EventTrigger.Entry();
-            pointerClick.eventID = EventTriggerType.PointerClick;
-            pointerClick.callback.AddListener((eventData) => OnCardPointerClick(cardUI));
-            eventTrigger.triggers.Add(pointerClick);
+            // 注意：这里不再添加点击事件，因为我们改为按压检测
         }
 
         /// <summary>
@@ -996,19 +1188,6 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 卡牌点击事件
-        /// </summary>
-        private void OnCardPointerClick(GameObject cardUI)
-        {
-            if (currentState != DisplayState.FanDisplay) return;
-
-            // 触发选择事件
-            OnCardSelected?.Invoke(cardUI);
-
-            LogDebug($"卡牌被选择: {cardUI.name}");
-        }
-
-        /// <summary>
         /// 悬停缩放动画
         /// </summary>
         private IEnumerator HoverScaleAnimation(GameObject cardUI, float targetScale)
@@ -1041,6 +1220,12 @@ namespace Cards.UI
         /// </summary>
         private void DisableAllInteractions()
         {
+            // 清理按压状态
+            if (isPressing)
+            {
+                EndCardPress();
+            }
+
             LogDebug("禁用所有交互");
         }
 
