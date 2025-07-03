@@ -12,6 +12,7 @@ namespace UI
     /// <summary>
     /// 简化版NetworkUI - 只动态生成PlayerConsole
     /// PlayerList为预设的静态UI
+    /// 添加了对外接口供ArrowManager调用
     /// </summary>
     public class NetworkUI : MonoBehaviour
     {
@@ -60,6 +61,19 @@ namespace UI
             public TMP_Text iconText;         // 玩家名称首字母
             public TMP_Text hpText;           // 当前血量
             public TMP_Text nameText;         // 玩家名称
+        }
+
+        // ✅ 新增：对外公开的PlayerConsole信息结构
+        [System.Serializable]
+        public class PlayerConsoleInfo
+        {
+            public ushort playerId;
+            public string playerName;
+            public bool isAlive;
+            public bool isCurrentTurn;
+            public GameObject consoleObject;
+            public Image beChoosenImage;      // 直接暴露BeChoosen Image
+            public RectTransform consoleRect; // Console的RectTransform
         }
 
         // 私有字段
@@ -359,6 +373,111 @@ namespace UI
 
         #endregion
 
+        #region 对外公共接口（供ArrowManager调用）
+        /// <summary>
+        /// 根据玩家ID获取PlayerConsole信息
+        /// </summary>
+        public PlayerConsoleInfo GetPlayerConsoleInfo(ushort playerId)
+        {
+            if (!playerUIItems.ContainsKey(playerId) || !gamePlayerStates.ContainsKey(playerId))
+            {
+                return null;
+            }
+
+            var components = playerUIItems[playerId];
+            var playerState = gamePlayerStates[playerId];
+
+            if (components.itemObject == null)
+            {
+                return null;
+            }
+
+            return new PlayerConsoleInfo
+            {
+                playerId = playerId,
+                playerName = playerState.playerName,
+                isAlive = playerState.isAlive,
+                isCurrentTurn = playerState.isCurrentTurn,
+                consoleObject = components.itemObject,
+                beChoosenImage = components.beChoosenImage,
+                consoleRect = components.itemObject.GetComponent<RectTransform>()
+            };
+        }
+
+        /// <summary>
+        /// 显示指定玩家的BeChoosen效果
+        /// </summary>
+        public bool ShowPlayerBeChosenEffect(ushort playerId)
+        {
+            var consoleInfo = GetPlayerConsoleInfo(playerId);
+            if (consoleInfo == null || consoleInfo.beChoosenImage == null)
+            {
+                LogDebug($"无法显示玩家{playerId}的BeChoosen效果：Console或Image不存在");
+                return false;
+            }
+
+            consoleInfo.beChoosenImage.gameObject.SetActive(true);
+            LogDebug($"显示玩家{playerId}的BeChoosen效果");
+            return true;
+        }
+
+        /// <summary>
+        /// 隐藏指定玩家的BeChoosen效果
+        /// </summary>
+        public bool HidePlayerBeChosenEffect(ushort playerId)
+        {
+            var consoleInfo = GetPlayerConsoleInfo(playerId);
+            if (consoleInfo == null || consoleInfo.beChoosenImage == null)
+            {
+                return false;
+            }
+
+            consoleInfo.beChoosenImage.gameObject.SetActive(false);
+            LogDebug($"隐藏玩家{playerId}的BeChoosen效果");
+            return true;
+        }
+
+        /// <summary>
+        /// 检查点是否在指定PlayerConsole范围内
+        /// </summary>
+        public bool IsPointInPlayerConsole(Vector2 screenPoint, ushort playerId, Camera uiCamera = null)
+        {
+            var consoleInfo = GetPlayerConsoleInfo(playerId);
+            if (consoleInfo == null || consoleInfo.consoleRect == null)
+            {
+                return false;
+            }
+
+            // 转换为本地坐标进行检测
+            Vector2 localPoint;
+            bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                consoleInfo.consoleRect, screenPoint, uiCamera, out localPoint);
+
+            if (!success) return false;
+
+            // 检查是否在矩形范围内
+            Rect rect = consoleInfo.consoleRect.rect;
+            return rect.Contains(localPoint);
+        }
+
+        /// <summary>
+        /// 检查点是否在任意PlayerConsole范围内
+        /// </summary>
+        public ushort GetPlayerConsoleAtPoint(Vector2 screenPoint, Camera uiCamera = null)
+        {
+            foreach (var kvp in playerUIItems)
+            {
+                ushort playerId = kvp.Key;
+                if (IsPointInPlayerConsole(screenPoint, playerId, uiCamera))
+                {
+                    return playerId;
+                }
+            }
+            return 0; // 未找到
+        }
+
+        #endregion
+
         #region 数据同步
 
         public void SyncFromHostGameManager()
@@ -581,36 +700,11 @@ namespace UI
         }
 
         /// <summary>
-        /// 清空所有Console并重建
-        /// </summary>
-        public void RebuildPlayerList()
-        {
-            ClearPlayerUIItems();
-            UpdateGamePlayerListUI();
-        }
-
-        /// <summary>
         /// 检查玩家列表是否显示
         /// </summary>
         public bool IsPlayerListActive()
         {
             return playerListPanel != null && playerListPanel.activeInHierarchy;
-        }
-
-        /// <summary>
-        /// 获取玩家数量
-        /// </summary>
-        public int GetPlayerCount()
-        {
-            return gamePlayerStates.Count;
-        }
-
-        /// <summary>
-        /// 获取存活玩家数量
-        /// </summary>
-        public int GetAlivePlayerCount()
-        {
-            return gamePlayerStates.Values.Count(p => p.isAlive);
         }
 
         // 兼容性接口

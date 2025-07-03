@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,69 +8,69 @@ using UI;
 namespace Cards.UI
 {
     /// <summary>
-    /// ¼ıÍ·¹ÜÀíÆ÷ - ¸ºÔğ±´Èû¶û¼ıÍ·µÄÉúÃüÖÜÆÚºÍÄ¿±ê¼ì²â
+    /// ç®­å¤´ç®¡ç†å™¨ - è´Ÿè´£è´å¡å°”ç®­å¤´çš„ç”Ÿå‘½å‘¨æœŸå’Œç›®æ ‡æ£€æµ‹
+    /// ä½¿ç”¨NetworkUIçš„å…¬å…±æ¥å£ç®€åŒ–PlayerConsoleè®¿é—®
     /// </summary>
     public class ArrowManager : MonoBehaviour
     {
-        [Header("¼ıÍ·Ô¤ÖÆÌå")]
-        private GameObject arrowPrefab; // ÓÉCardUIManager´«Èë£¬²»ÔÚInspectorÖĞÉèÖÃ
+        [Header("ç®­å¤´é¢„åˆ¶ä½“")]
+        private GameObject arrowPrefab; // ç”±CardUIManagerä¼ å…¥ï¼Œä¸åœ¨Inspectorä¸­è®¾ç½®
 
-        [Header("Ä¿±ê¼ì²âÉèÖÃ")]
-        [SerializeField] private LayerMask uiLayerMask = -1; // UI¼ì²â²ã¼¶
-        [SerializeField] private float detectionRadius = 50f; // PlayerConsole¼ì²â°ë¾¶
+        [Header("ç›®æ ‡æ£€æµ‹è®¾ç½®")]
+        [SerializeField] private LayerMask uiLayerMask = -1; // UIæ£€æµ‹å±‚çº§
+        [SerializeField] private float detectionRadius = 50f; // PlayerConsoleæ£€æµ‹åŠå¾„
 
-        [Header("ÖĞÑëÇøÓòÉèÖÃ£¨´ÓCardUIManagerÍ¬²½£©")]
+        [Header("ä¸­å¤®åŒºåŸŸè®¾ç½®ï¼ˆä»CardUIManageråŒæ­¥ï¼‰")]
         [SerializeField] private float releaseAreaCenterX = 0.5f;
         [SerializeField] private float releaseAreaCenterY = 0.5f;
         [SerializeField] private float releaseAreaWidth = 0.3f;
         [SerializeField] private float releaseAreaHeight = 0.3f;
 
-        [Header("ÊÓ¾õ·´À¡ÉèÖÃ")]
+        [Header("è§†è§‰åé¦ˆè®¾ç½®")]
         [SerializeField] private Color normalArrowColor = Color.white;
         [SerializeField] private Color validTargetColor = Color.green;
         [SerializeField] private Color invalidTargetColor = Color.gray;
-        [SerializeField] private float beChoosenFadeSpeed = 5f; // BeChoosen½¥±äËÙ¶È
+        [SerializeField] private float beChoosenFadeSpeed = 5f; // BeChoosenæ¸å˜é€Ÿåº¦
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
         [SerializeField] private bool showDebugGizmos = false;
 
-        // Ä¿±êÀàĞÍÃ¶¾Ù
+        // ç›®æ ‡ç±»å‹æšä¸¾
         public enum TargetDetectionResult
         {
-            None,           // ÎŞÄ¿±ê
-            PlayerConsole,  // Ö¸ÏòÍæ¼ÒConsole
-            CenterArea,     // Ö¸ÏòÖĞÑëÇøÓò
-            Invalid         // ÎŞĞ§ÇøÓò
+            None,           // æ— ç›®æ ‡
+            PlayerConsole,  // æŒ‡å‘ç©å®¶Console
+            CenterArea,     // æŒ‡å‘ä¸­å¤®åŒºåŸŸ
+            Invalid         // æ— æ•ˆåŒºåŸŸ
         }
 
-        // ¼ıÍ·×´Ì¬
+        // ç®­å¤´çŠ¶æ€
         private bool isArrowActive = false;
         private GameObject currentArrowInstance = null;
         private BezierArrowRenderer currentArrowRenderer = null;
         private Vector2 arrowStartPosition = Vector2.zero;
 
-        // Ä¿±ê¼ì²âÏà¹Ø
+        // ç›®æ ‡æ£€æµ‹ç›¸å…³
         private TargetDetectionResult currentTargetType = TargetDetectionResult.None;
         private ushort currentTargetPlayerId = 0;
-        private GameObject currentTargetConsole = null;
+        private NetworkUI.PlayerConsoleInfo currentTargetConsole = null;
         private CardData currentCardData = null;
 
-        // ÒÀÀµÒıÓÃ
+        // ä¾èµ–å¼•ç”¨
         private Canvas parentCanvas;
         private NetworkUI networkUI;
         private Camera uiCamera;
 
-        // BeChoosenĞ§¹û¹ÜÀí - ¼ò»¯°æ
-        private Dictionary<GameObject, CanvasGroup> beChoosenCanvasGroups = new Dictionary<GameObject, CanvasGroup>();
+        private ushort currentHighlightedPlayerId = 0;
 
-        // ÊÂ¼ş
-        public System.Action<ushort> OnValidPlayerTargetDetected; // ¼ì²âµ½ÓĞĞ§Íæ¼ÒÄ¿±ê
-        public System.Action OnValidCenterAreaDetected; // ¼ì²âµ½ÓĞĞ§ÖĞÑëÇøÓò
-        public System.Action OnInvalidTargetDetected; // ¼ì²âµ½ÎŞĞ§Ä¿±ê
-        public System.Action OnNoTargetDetected; // ÎŞÄ¿±ê
+        // äº‹ä»¶
+        public System.Action<ushort> OnValidPlayerTargetDetected; // æ£€æµ‹åˆ°æœ‰æ•ˆç©å®¶ç›®æ ‡
+        public System.Action OnValidCenterAreaDetected; // æ£€æµ‹åˆ°æœ‰æ•ˆä¸­å¤®åŒºåŸŸ
+        public System.Action OnInvalidTargetDetected; // æ£€æµ‹åˆ°æ— æ•ˆç›®æ ‡
+        public System.Action OnNoTargetDetected; // æ— ç›®æ ‡
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Update()
         {
@@ -89,60 +89,41 @@ namespace Cards.UI
 
         #endregion
 
-        #region ³õÊ¼»¯ºÍÉèÖÃ
+        #region åˆå§‹åŒ–å’Œè®¾ç½®
 
         /// <summary>
-        /// ÓÉCardUIManagerµ÷ÓÃµÄ³õÊ¼»¯·½·¨
+        /// ç”±CardUIManagerè°ƒç”¨çš„åˆå§‹åŒ–æ–¹æ³•
         /// </summary>
         public void Initialize(Canvas canvas, GameObject arrowPrefabRef)
         {
-            // ÉèÖÃÒÀÀµÒıÓÃ
+            // è®¾ç½®ä¾èµ–å¼•ç”¨
             parentCanvas = canvas;
             arrowPrefab = arrowPrefabRef;
 
-            // ÑéÖ¤±ØÒª×é¼ş
-            if (parentCanvas == null)
-            {
-                LogError("CanvasÒıÓÃÎª¿Õ£¡");
-                return;
-            }
-
-            if (arrowPrefab == null)
-            {
-                LogError("¼ıÍ·Ô¤ÖÆÌåÒıÓÃÎª¿Õ£¡");
-                return;
-            }
-
-            // ÑéÖ¤Canvas²ã¼¶
-            if (parentCanvas.name != "CardCanvas")
-            {
-                LogWarning($"µ±Ç°CanvasÃû³ÆÎª: {parentCanvas.name}£¬½¨ÒéÊ¹ÓÃCardCanvas");
-            }
-
-            // »ñÈ¡UIÉãÏñ»ú
+            // è·å–UIæ‘„åƒæœº
             uiCamera = parentCanvas.worldCamera;
 
-            // ²éÕÒNetworkUI
+            // æŸ¥æ‰¾NetworkUI
             networkUI = FindObjectOfType<NetworkUI>();
             if (networkUI == null)
             {
-                LogWarning("Î´ÕÒµ½NetworkUI×é¼ş£¬Íæ¼ÒÄ¿±ê¼ì²â¿ÉÄÜÎŞ·¨Õı³£¹¤×÷");
+                LogWarning("æœªæ‰¾åˆ°NetworkUIç»„ä»¶ï¼Œç©å®¶ç›®æ ‡æ£€æµ‹å¯èƒ½æ— æ³•æ­£å¸¸å·¥ä½œ");
             }
 
-            LogDebug($"ArrowManager³õÊ¼»¯Íê³É - Canvas: {parentCanvas.name}");
+            LogDebug($"ArrowManageråˆå§‹åŒ–å®Œæˆ - Canvas: {parentCanvas.name}");
         }
 
         /// <summary>
-        /// ÓÉCardUIManagerµ÷ÓÃ£¬ÉèÖÃ¼ıÍ·Ô¤ÖÆÌåÒıÓÃ
+        /// ç”±CardUIManagerè°ƒç”¨ï¼Œè®¾ç½®ç®­å¤´é¢„åˆ¶ä½“å¼•ç”¨
         /// </summary>
         public void SetArrowPrefab(GameObject prefab)
         {
             arrowPrefab = prefab;
-            LogDebug($"¼ıÍ·Ô¤ÖÆÌåÒÑÉèÖÃ: {prefab?.name}");
+            LogDebug($"ç®­å¤´é¢„åˆ¶ä½“å·²è®¾ç½®: {prefab?.name}");
         }
 
         /// <summary>
-        /// ¼ì²éArrowManagerÊÇ·ñÒÑÕıÈ·³õÊ¼»¯
+        /// æ£€æŸ¥ArrowManageræ˜¯å¦å·²æ­£ç¡®åˆå§‹åŒ–
         /// </summary>
         public bool IsInitialized()
         {
@@ -150,7 +131,7 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// Í¬²½ÖĞÑëÇøÓòÉèÖÃ£¨ÓÉCardUIManagerµ÷ÓÃ£©
+        /// åŒæ­¥ä¸­å¤®åŒºåŸŸè®¾ç½®ï¼ˆç”±CardUIManagerè°ƒç”¨ï¼‰
         /// </summary>
         public void SyncCenterAreaSettings(float centerX, float centerY, float width, float height)
         {
@@ -159,53 +140,53 @@ namespace Cards.UI
             releaseAreaWidth = width;
             releaseAreaHeight = height;
 
-            LogDebug($"ÖĞÑëÇøÓòÉèÖÃÒÑÍ¬²½: Center({centerX}, {centerY}), Size({width}, {height})");
+            LogDebug($"ä¸­å¤®åŒºåŸŸè®¾ç½®å·²åŒæ­¥: Center({centerX}, {centerY}), Size({width}, {height})");
         }
 
         #endregion
 
-        #region ¼ıÍ·ÉúÃüÖÜÆÚ¹ÜÀí
+        #region ç®­å¤´ç”Ÿå‘½å‘¨æœŸç®¡ç†
 
         /// <summary>
-        /// ¿ªÊ¼¼ıÍ·Ä¿±êÑ¡Ôñ
+        /// å¼€å§‹ç®­å¤´ç›®æ ‡é€‰æ‹©
         /// </summary>
         public bool StartArrowTargeting(Vector2 startPosition, CardData cardData)
         {
             if (!IsInitialized())
             {
-                LogError("ArrowManagerÎ´ÕıÈ·³õÊ¼»¯£¬ÎŞ·¨¿ªÊ¼¼ıÍ·Ä¿±êÑ¡Ôñ");
+                LogError("ArrowManageræœªæ­£ç¡®åˆå§‹åŒ–ï¼Œæ— æ³•å¼€å§‹ç®­å¤´ç›®æ ‡é€‰æ‹©");
                 return false;
             }
 
             if (isArrowActive)
             {
-                LogWarning("¼ıÍ·ÒÑ¾­´¦ÓÚ¼¤»î×´Ì¬£¬ÎŞ·¨ÖØ¸´¿ªÊ¼");
+                LogWarning("ç®­å¤´å·²ç»å¤„äºæ¿€æ´»çŠ¶æ€ï¼Œæ— æ³•é‡å¤å¼€å§‹");
                 return false;
             }
 
-            LogDebug($"¿ªÊ¼¼ıÍ·Ä¿±êÑ¡Ôñ - Æğµã: {startPosition}, ¿¨ÅÆ: {cardData?.cardName}");
+            LogDebug($"å¼€å§‹ç®­å¤´ç›®æ ‡é€‰æ‹© - èµ·ç‚¹: {startPosition}, å¡ç‰Œ: {cardData?.cardName}");
 
-            // ±£´æ×´Ì¬
+            // ä¿å­˜çŠ¶æ€
             arrowStartPosition = startPosition;
             currentCardData = cardData;
 
-            // ´´½¨¼ıÍ·ÊµÀı
+            // åˆ›å»ºç®­å¤´å®ä¾‹
             if (!CreateArrowInstance())
             {
                 return false;
             }
 
-            // ÉèÖÃ¼ıÍ·Æğµã
+            // è®¾ç½®ç®­å¤´èµ·ç‚¹
             SetArrowStartPosition(startPosition);
 
-            // ¼¤»î¼ıÍ·
+            // æ¿€æ´»ç®­å¤´
             isArrowActive = true;
 
             return true;
         }
 
         /// <summary>
-        /// ½áÊø¼ıÍ·Ä¿±êÑ¡Ôñ
+        /// ç»“æŸç®­å¤´ç›®æ ‡é€‰æ‹©
         /// </summary>
         public TargetDetectionResult EndArrowTargeting(out ushort targetPlayerId)
         {
@@ -213,24 +194,24 @@ namespace Cards.UI
 
             if (!isArrowActive)
             {
-                LogWarning("¼ıÍ·Î´¼¤»î£¬ÎŞ·¨½áÊøÄ¿±êÑ¡Ôñ");
+                LogWarning("ç®­å¤´æœªæ¿€æ´»ï¼Œæ— æ³•ç»“æŸç›®æ ‡é€‰æ‹©");
                 return TargetDetectionResult.None;
             }
 
-            LogDebug($"½áÊø¼ıÍ·Ä¿±êÑ¡Ôñ - ×îÖÕÄ¿±êÀàĞÍ: {currentTargetType}");
+            LogDebug($"ç»“æŸç®­å¤´ç›®æ ‡é€‰æ‹© - æœ€ç»ˆç›®æ ‡ç±»å‹: {currentTargetType}");
 
-            // ±£´æ×îÖÕ½á¹û
+            // ä¿å­˜æœ€ç»ˆç»“æœ
             TargetDetectionResult finalResult = currentTargetType;
             targetPlayerId = currentTargetPlayerId;
 
-            // ÇåÀí×´Ì¬
+            // æ¸…ç†çŠ¶æ€
             CleanupArrow();
 
             return finalResult;
         }
 
         /// <summary>
-        /// È¡Ïû¼ıÍ·Ä¿±êÑ¡Ôñ
+        /// å–æ¶ˆç®­å¤´ç›®æ ‡é€‰æ‹©
         /// </summary>
         public void CancelArrowTargeting()
         {
@@ -239,53 +220,43 @@ namespace Cards.UI
                 return;
             }
 
-            LogDebug("È¡Ïû¼ıÍ·Ä¿±êÑ¡Ôñ");
+            LogDebug("å–æ¶ˆç®­å¤´ç›®æ ‡é€‰æ‹©");
 
-            // ÇåÀí×´Ì¬
+            // æ¸…ç†çŠ¶æ€
             CleanupArrow();
         }
 
         /// <summary>
-        /// ´´½¨¼ıÍ·ÊµÀı
+        /// åˆ›å»ºç®­å¤´å®ä¾‹
         /// </summary>
         private bool CreateArrowInstance()
         {
             if (currentArrowInstance != null)
             {
-                LogWarning("¼ıÍ·ÊµÀıÒÑ´æÔÚ£¬ÏÈÇåÀí¾ÉÊµÀı");
+                LogWarning("ç®­å¤´å®ä¾‹å·²å­˜åœ¨ï¼Œå…ˆæ¸…ç†æ—§å®ä¾‹");
                 DestroyArrowInstance();
             }
 
-            // ÊµÀı»¯¼ıÍ·Ô¤ÖÆÌå£¬Ö±½ÓÔÚCanvasÏÂ¶ø²»ÊÇÔÚArrowManagerÏÂ
+            // å®ä¾‹åŒ–ç®­å¤´é¢„åˆ¶ä½“ï¼Œç›´æ¥åœ¨Canvasä¸‹è€Œä¸æ˜¯åœ¨ArrowManagerä¸‹
             currentArrowInstance = Instantiate(arrowPrefab, parentCanvas.transform);
             currentArrowInstance.name = "ActiveArrow";
 
-            // »ñÈ¡BezierArrowRenderer×é¼ş
             currentArrowRenderer = currentArrowInstance.GetComponent<BezierArrowRenderer>();
-
-            // È·±£¼ıÍ·ÔÚCanvasÏÂÓĞÕıÈ·µÄRectTransformÉèÖÃ
             RectTransform arrowRect = currentArrowInstance.GetComponent<RectTransform>();
-            if (arrowRect == null)
+            if (arrowRect != null)
             {
-                arrowRect = currentArrowInstance.AddComponent<RectTransform>();
+                LogDebug($"ç®­å¤´RectTransformè®¾ç½®: é”šç‚¹({arrowRect.anchorMin}, {arrowRect.anchorMax}), è½´å¿ƒ({arrowRect.pivot}), ä½ç½®({arrowRect.anchoredPosition})");
             }
 
-            // ÉèÖÃRectTransformÊôĞÔ£¬È·±£¼ıÍ·ÄÜÕıÈ·ÏÔÊ¾ÔÚCanvasÖĞ
-            arrowRect.anchorMin = Vector2.zero;
-            arrowRect.anchorMax = Vector2.zero;
-            arrowRect.pivot = Vector2.zero;
-            arrowRect.sizeDelta = Vector2.zero;
-            arrowRect.anchoredPosition = Vector2.zero;
-
-            // ÆôÓÃÍâ²¿¿ØÖÆÄ£Ê½
+            // å¯ç”¨å¤–éƒ¨æ§åˆ¶æ¨¡å¼
             currentArrowRenderer.EnableExternalControl(arrowStartPosition, arrowStartPosition);
 
-            LogDebug($"¼ıÍ·ÊµÀı´´½¨³É¹¦£¬¸¸¶ÔÏó: {currentArrowInstance.transform.parent.name}");
+            LogDebug($"ç®­å¤´å®ä¾‹åˆ›å»ºæˆåŠŸï¼Œçˆ¶å¯¹è±¡: {currentArrowInstance.transform.parent.name}");
             return true;
         }
 
         /// <summary>
-        /// Ïú»Ù¼ıÍ·ÊµÀı
+        /// é”€æ¯ç®­å¤´å®ä¾‹
         /// </summary>
         private void DestroyArrowInstance()
         {
@@ -294,12 +265,12 @@ namespace Cards.UI
                 Destroy(currentArrowInstance);
                 currentArrowInstance = null;
                 currentArrowRenderer = null;
-                LogDebug("¼ıÍ·ÊµÀıÒÑÏú»Ù");
+                LogDebug("ç®­å¤´å®ä¾‹å·²é”€æ¯");
             }
         }
 
         /// <summary>
-        /// ÉèÖÃ¼ıÍ·ÆğµãÎ»ÖÃ
+        /// è®¾ç½®ç®­å¤´èµ·ç‚¹ä½ç½®
         /// </summary>
         private void SetArrowStartPosition(Vector2 position)
         {
@@ -307,24 +278,24 @@ namespace Cards.UI
 
             if (currentArrowRenderer != null)
             {
-                // Ê¹ÓÃBezierArrowRendererµÄĞÂ½Ó¿ÚÉèÖÃÆğµã
+                // ä½¿ç”¨BezierArrowRendererçš„æ–°æ¥å£è®¾ç½®èµ·ç‚¹
                 currentArrowRenderer.SetStartPosition(position);
-                LogDebug($"¼ıÍ·ÆğµãÎ»ÖÃÒÑÉèÖÃ: {position}");
+                LogDebug($"ç®­å¤´èµ·ç‚¹ä½ç½®å·²è®¾ç½®: {position}");
             }
         }
 
         /// <summary>
-        /// ÇåÀí¼ıÍ·Ïà¹Ø×´Ì¬
+        /// æ¸…ç†ç®­å¤´ç›¸å…³çŠ¶æ€
         /// </summary>
         private void CleanupArrow()
         {
-            // ÇåÀíBeChoosenĞ§¹û
-            ClearAllBeChoosenEffects();
+            // æ¸…ç†BeChoosenæ•ˆæœ
+            ClearBeChoosenEffect();
 
-            // Ïú»Ù¼ıÍ·ÊµÀı
+            // é”€æ¯ç®­å¤´å®ä¾‹
             DestroyArrowInstance();
 
-            // ÖØÖÃ×´Ì¬
+            // é‡ç½®çŠ¶æ€
             isArrowActive = false;
             currentTargetType = TargetDetectionResult.None;
             currentTargetPlayerId = 0;
@@ -332,28 +303,28 @@ namespace Cards.UI
             currentCardData = null;
             arrowStartPosition = Vector2.zero;
 
-            LogDebug("¼ıÍ·×´Ì¬ÒÑÇåÀí");
+            LogDebug("ç®­å¤´çŠ¶æ€å·²æ¸…ç†");
         }
 
         #endregion
 
-        #region Ä¿±ê¼ì²â
+        #region ç›®æ ‡æ£€æµ‹
 
         /// <summary>
-        /// ¸üĞÂÄ¿±ê¼ì²â
+        /// æ›´æ–°ç›®æ ‡æ£€æµ‹
         /// </summary>
         private void UpdateTargetDetection()
         {
-            // »ñÈ¡Êó±êÎ»ÖÃ
+            // è·å–é¼ æ ‡ä½ç½®
             Vector2 mouseScreenPos = Input.mousePosition;
 
-            // ¸üĞÂ¼ıÍ·ÖÕµãÎ»ÖÃ
+            // æ›´æ–°ç®­å¤´ç»ˆç‚¹ä½ç½®
             UpdateArrowEndPosition(mouseScreenPos);
 
-            // ÏÈ¼ì²âPlayerConsole
+            // å…ˆæ£€æµ‹PlayerConsole
             TargetDetectionResult newTargetType = TargetDetectionResult.None;
             ushort newTargetPlayerId = 0;
-            GameObject newTargetConsole = null;
+            NetworkUI.PlayerConsoleInfo newTargetConsole = null;
 
             if (DetectPlayerConsoleTarget(mouseScreenPos, out newTargetPlayerId, out newTargetConsole))
             {
@@ -364,7 +335,7 @@ namespace Cards.UI
                 newTargetType = TargetDetectionResult.CenterArea;
             }
 
-            // ÑéÖ¤Ä¿±êÓĞĞ§ĞÔ
+            // éªŒè¯ç›®æ ‡æœ‰æ•ˆæ€§
             if (newTargetType != TargetDetectionResult.None)
             {
                 if (!ValidateTarget(newTargetType, newTargetPlayerId))
@@ -373,18 +344,18 @@ namespace Cards.UI
                 }
             }
 
-            // ¸üĞÂÄ¿±ê×´Ì¬
+            // æ›´æ–°ç›®æ ‡çŠ¶æ€
             UpdateTargetState(newTargetType, newTargetPlayerId, newTargetConsole);
         }
 
         /// <summary>
-        /// ¸üĞÂ¼ıÍ·ÖÕµãÎ»ÖÃ
+        /// æ›´æ–°ç®­å¤´ç»ˆç‚¹ä½ç½®
         /// </summary>
         private void UpdateArrowEndPosition(Vector2 mouseScreenPos)
         {
             if (currentArrowRenderer == null) return;
 
-            // ×ª»»Êó±êÎ»ÖÃÎªCanvas×ø±ê
+            // è½¬æ¢é¼ æ ‡ä½ç½®ä¸ºCanvasåæ ‡
             Vector2 mouseCanvasPos;
             RectTransform canvasRect = parentCanvas.GetComponent<RectTransform>();
             bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
@@ -392,64 +363,56 @@ namespace Cards.UI
 
             if (success)
             {
-                // Ê¹ÓÃBezierArrowRendererµÄĞÂ½Ó¿ÚÉèÖÃÖÕµã
+                // ä½¿ç”¨BezierArrowRendererçš„æ–°æ¥å£è®¾ç½®ç»ˆç‚¹
                 currentArrowRenderer.SetEndPosition(mouseCanvasPos);
             }
         }
 
         /// <summary>
-        /// ¼ì²âPlayerConsoleÄ¿±ê
+        /// æ£€æµ‹PlayerConsoleç›®æ ‡ - âœ… ä½¿ç”¨NetworkUIçš„å…¬å…±æ¥å£
         /// </summary>
-        private bool DetectPlayerConsoleTarget(Vector2 screenPosition, out ushort playerId, out GameObject console)
+        private bool DetectPlayerConsoleTarget(Vector2 screenPosition, out ushort playerId, out NetworkUI.PlayerConsoleInfo consoleInfo)
         {
             playerId = 0;
-            console = null;
+            consoleInfo = null;
 
             if (networkUI == null)
             {
                 return false;
             }
 
-            // »ñÈ¡ËùÓĞPlayerConsole
-            var playerConsoles = GetAllPlayerConsoles();
+            playerId = networkUI.GetPlayerConsoleAtPoint(screenPosition, uiCamera);
 
-            foreach (var consoleData in playerConsoles)
+            if (playerId > 0)
             {
-                if (consoleData.console == null) continue;
-
-                // ¼ì²éÊó±êÊÇ·ñÔÚConsole·¶Î§ÄÚ
-                if (IsPointInConsole(screenPosition, consoleData.console))
-                {
-                    playerId = consoleData.playerId;
-                    console = consoleData.console;
-                    return true;
-                }
+                consoleInfo = networkUI.GetPlayerConsoleInfo(playerId);
+                return consoleInfo != null;
             }
 
             return false;
         }
 
         /// <summary>
-        /// ¼ì²âÖĞÑëÇøÓòÄ¿±ê
+        /// æ£€æµ‹ä¸­å¤®åŒºåŸŸç›®æ ‡
         /// </summary>
         private bool DetectCenterAreaTarget(Vector2 screenPosition)
         {
             Vector2 screenSize = new Vector2(Screen.width, Screen.height);
             Vector2 mousePercent = new Vector2(screenPosition.x / screenSize.x, screenPosition.y / screenSize.y);
 
-            // ¼ÆËãÖĞÑëÇøÓò±ß½ç
+            // è®¡ç®—ä¸­å¤®åŒºåŸŸè¾¹ç•Œ
             float leftBound = releaseAreaCenterX - releaseAreaWidth / 2f;
             float rightBound = releaseAreaCenterX + releaseAreaWidth / 2f;
             float bottomBound = releaseAreaCenterY - releaseAreaHeight / 2f;
             float topBound = releaseAreaCenterY + releaseAreaHeight / 2f;
 
-            // ¼ì²éÊÇ·ñÔÚÇøÓòÄÚ
+            // æ£€æŸ¥æ˜¯å¦åœ¨åŒºåŸŸå†…
             return mousePercent.x >= leftBound && mousePercent.x <= rightBound &&
                    mousePercent.y >= bottomBound && mousePercent.y <= topBound;
         }
 
         /// <summary>
-        /// ÑéÖ¤Ä¿±êÊÇ·ñÓĞĞ§
+        /// éªŒè¯ç›®æ ‡æ˜¯å¦æœ‰æ•ˆ
         /// </summary>
         private bool ValidateTarget(TargetDetectionResult targetType, ushort playerId)
         {
@@ -462,13 +425,13 @@ namespace Cards.UI
             {
                 case TargetType.Self:
                 case TargetType.AllPlayers:
-                    // ×Ô·¢ĞÍ¿¨ÅÆÖ»ÄÜÍÏµ½ÖĞÑëÇøÓò
+                    // è‡ªå‘å‹å¡ç‰Œåªèƒ½æ‹–åˆ°ä¸­å¤®åŒºåŸŸ
                     return targetType == TargetDetectionResult.CenterArea;
 
                 case TargetType.SinglePlayer:
                 case TargetType.AllOthers:
                 case TargetType.Random:
-                    // Ö¸ÏòĞÍ¿¨ÅÆ±ØĞëÖ¸ÏòPlayerConsole
+                    // æŒ‡å‘å‹å¡ç‰Œå¿…é¡»æŒ‡å‘PlayerConsole
                     return targetType == TargetDetectionResult.PlayerConsole && playerId > 0;
 
                 default:
@@ -477,38 +440,37 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// ¸üĞÂÄ¿±ê×´Ì¬
+        /// æ›´æ–°ç›®æ ‡çŠ¶æ€
         /// </summary>
-        private void UpdateTargetState(TargetDetectionResult newTargetType, ushort newPlayerId, GameObject newConsole)
+        private void UpdateTargetState(TargetDetectionResult newTargetType, ushort newPlayerId, NetworkUI.PlayerConsoleInfo newConsole)
         {
-            // ¼ì²éÊÇ·ñÓĞ±ä»¯
+            // æ£€æŸ¥æ˜¯å¦æœ‰å˜åŒ–
             bool targetChanged = currentTargetType != newTargetType ||
-                                currentTargetPlayerId != newPlayerId ||
-                                currentTargetConsole != newConsole;
+                                currentTargetPlayerId != newPlayerId;
 
             if (!targetChanged) return;
 
-            // ¸üĞÂ×´Ì¬
+            // æ›´æ–°çŠ¶æ€
             currentTargetType = newTargetType;
             currentTargetPlayerId = newPlayerId;
             currentTargetConsole = newConsole;
 
-            // ´¥·¢ÏàÓ¦ÊÂ¼ş
+            // è§¦å‘ç›¸åº”äº‹ä»¶
             switch (currentTargetType)
             {
                 case TargetDetectionResult.PlayerConsole:
                     OnValidPlayerTargetDetected?.Invoke(currentTargetPlayerId);
-                    LogDebug($"¼ì²âµ½ÓĞĞ§Íæ¼ÒÄ¿±ê: {currentTargetPlayerId}");
+                    LogDebug($"æ£€æµ‹åˆ°æœ‰æ•ˆç©å®¶ç›®æ ‡: {currentTargetPlayerId}");
                     break;
 
                 case TargetDetectionResult.CenterArea:
                     OnValidCenterAreaDetected?.Invoke();
-                    LogDebug("¼ì²âµ½ÓĞĞ§ÖĞÑëÇøÓòÄ¿±ê");
+                    LogDebug("æ£€æµ‹åˆ°æœ‰æ•ˆä¸­å¤®åŒºåŸŸç›®æ ‡");
                     break;
 
                 case TargetDetectionResult.Invalid:
                     OnInvalidTargetDetected?.Invoke();
-                    LogDebug("¼ì²âµ½ÎŞĞ§Ä¿±ê");
+                    LogDebug("æ£€æµ‹åˆ°æ— æ•ˆç›®æ ‡");
                     break;
 
                 case TargetDetectionResult.None:
@@ -519,268 +481,83 @@ namespace Cards.UI
 
         #endregion
 
-        #region PlayerConsoleÏà¹Ø
+        #region BeChoosenæ•ˆæœç®¡ç†
 
         /// <summary>
-        /// PlayerConsoleÊı¾İ½á¹¹
-        /// </summary>
-        private struct PlayerConsoleData
-        {
-            public ushort playerId;
-            public GameObject console;
-            public UnityEngine.UI.Image beChoosenImage; // Ö±½Ó±£´æBeChoosenµÄImageÒıÓÃ
-        }
-
-        /// <summary>
-        /// »ñÈ¡ËùÓĞPlayerConsole
-        /// </summary>
-        private List<PlayerConsoleData> GetAllPlayerConsoles()
-        {
-            var consoles = new List<PlayerConsoleData>();
-
-            if (networkUI == null) return consoles;
-
-            // Ê¹ÓÃ·´Éä»ñÈ¡NetworkUIµÄplayerUIItems
-            var playerUIItemsField = typeof(NetworkUI).GetField("playerUIItems",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-            if (playerUIItemsField != null)
-            {
-                var playerUIItems = playerUIItemsField.GetValue(networkUI) as System.Collections.IDictionary;
-                if (playerUIItems != null)
-                {
-                    foreach (System.Collections.DictionaryEntry entry in playerUIItems)
-                    {
-                        var playerId = (ushort)entry.Key;
-                        var components = entry.Value;
-
-                        // »ñÈ¡itemObject
-                        var itemObjectField = components.GetType().GetField("itemObject");
-                        var beChoosenImageField = components.GetType().GetField("beChoosenImage");
-
-                        if (itemObjectField != null && beChoosenImageField != null)
-                        {
-                            var itemObject = itemObjectField.GetValue(components) as GameObject;
-                            var beChoosenImage = beChoosenImageField.GetValue(components) as UnityEngine.UI.Image;
-
-                            if (itemObject != null)
-                            {
-                                consoles.Add(new PlayerConsoleData
-                                {
-                                    playerId = playerId,
-                                    console = itemObject,
-                                    beChoosenImage = beChoosenImage // Ö±½Ó»ñÈ¡ImageÒıÓÃ
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-
-            return consoles;
-        }
-
-        /// <summary>
-        /// ¼ì²éµãÊÇ·ñÔÚConsole·¶Î§ÄÚ
-        /// </summary>
-        private bool IsPointInConsole(Vector2 screenPoint, GameObject console)
-        {
-            RectTransform consoleRect = console.GetComponent<RectTransform>();
-            if (consoleRect == null) return false;
-
-            // ×ª»»Îª±¾µØ×ø±ê½øĞĞ¼ì²â
-            Vector2 localPoint;
-            bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                consoleRect, screenPoint, uiCamera, out localPoint);
-
-            if (!success) return false;
-
-            // ¼ì²éÊÇ·ñÔÚ¾ØĞÎ·¶Î§ÄÚ
-            Rect rect = consoleRect.rect;
-            return rect.Contains(localPoint);
-        }
-
-        #endregion
-
-        #region BeChoosenĞ§¹û¹ÜÀí
-
-        /// <summary>
-        /// µ±Ç°¸ßÁÁµÄPlayerConsoleÊı¾İ
-        /// </summary>
-        private PlayerConsoleData? currentHighlightedConsole = null;
-
-        /// <summary>
-        /// ¸üĞÂBeChoosenĞ§¹û
+        /// æ›´æ–°BeChoosenæ•ˆæœ - ä½¿ç”¨NetworkUIçš„å…¬å…±æ¥å£
         /// </summary>
         private void UpdateBeChoosenEffects()
         {
-            // Èç¹ûµ±Ç°Ö¸ÏòPlayerConsole£¬ÏÔÊ¾BeChoosenĞ§¹û
-            if (currentTargetType == TargetDetectionResult.PlayerConsole && currentTargetConsole != null)
+            // å¦‚æœå½“å‰æŒ‡å‘PlayerConsoleï¼Œæ˜¾ç¤ºBeChoosenæ•ˆæœ
+            if (currentTargetType == TargetDetectionResult.PlayerConsole && currentTargetPlayerId > 0)
             {
-                // ²éÕÒ¶ÔÓ¦µÄPlayerConsoleData
-                var consoles = GetAllPlayerConsoles();
-                var targetConsoleData = consoles.FirstOrDefault(c => c.console == currentTargetConsole);
-
-                if (targetConsoleData.console != null)
-                {
-                    ShowBeChoosenEffectDirect(targetConsoleData);
-                }
+                ShowBeChoosenEffect(currentTargetPlayerId);
             }
             else
             {
-                // ÇåÀí¸ßÁÁĞ§¹û
+                // æ¸…ç†é«˜äº®æ•ˆæœ
                 ClearBeChoosenEffect();
             }
         }
 
         /// <summary>
-        /// Ö±½ÓÏÔÊ¾BeChoosenĞ§¹û£¨Ê¹ÓÃÏÖÓĞµÄImageÒıÓÃ£©
+        /// æ˜¾ç¤ºBeChoosenæ•ˆæœ
         /// </summary>
-        private void ShowBeChoosenEffectDirect(PlayerConsoleData consoleData)
+        private void ShowBeChoosenEffect(ushort playerId)
         {
-            // ÏÈÇåÀíÖ®Ç°µÄ¸ßÁÁ
-            if (currentHighlightedConsole.HasValue &&
-                currentHighlightedConsole.Value.playerId != consoleData.playerId)
+            if (networkUI == null) return;
+
+            // å¦‚æœå½“å‰é«˜äº®çš„ç©å®¶ä¸åŒï¼Œå…ˆæ¸…ç†æ—§çš„
+            if (currentHighlightedPlayerId != 0 && currentHighlightedPlayerId != playerId)
             {
-                ClearBeChoosenEffect();
+                networkUI.HidePlayerBeChosenEffect(currentHighlightedPlayerId);
             }
 
-            // ÏÔÊ¾ĞÂµÄ¸ßÁÁ
-            if (consoleData.beChoosenImage != null)
+            // æ˜¾ç¤ºæ–°çš„é«˜äº®
+            if (networkUI.ShowPlayerBeChosenEffect(playerId))
             {
-                consoleData.beChoosenImage.gameObject.SetActive(true);
-
-                // ÉèÖÃ½¥±äĞ§¹û
-                CanvasGroup canvasGroup = consoleData.beChoosenImage.GetComponent<CanvasGroup>();
-                if (canvasGroup == null)
-                {
-                    canvasGroup = consoleData.beChoosenImage.gameObject.AddComponent<CanvasGroup>();
-                }
-
-                // ½¥±äµ½¿É¼û
-                StartCoroutine(FadeBeChoosen(canvasGroup, 1f));
-
-                currentHighlightedConsole = consoleData;
-
-                LogDebug($"ÏÔÊ¾Íæ¼Ò{consoleData.playerId}µÄBeChoosenĞ§¹û");
+                currentHighlightedPlayerId = playerId;
+                LogDebug($"æ˜¾ç¤ºç©å®¶{playerId}çš„BeChoosenæ•ˆæœ");
             }
             else
             {
-                LogWarning($"Íæ¼Ò{consoleData.playerId}µÄbeChoosenImageÎª¿Õ");
+                LogWarning($"æ— æ³•æ˜¾ç¤ºç©å®¶{playerId}çš„BeChoosenæ•ˆæœ");
             }
         }
 
         /// <summary>
-        /// ÇåÀíBeChoosenĞ§¹û
+        /// æ¸…ç†BeChoosenæ•ˆæœ
         /// </summary>
         private void ClearBeChoosenEffect()
         {
-            if (currentHighlightedConsole.HasValue)
-            {
-                var consoleData = currentHighlightedConsole.Value;
-                if (consoleData.beChoosenImage != null)
-                {
-                    // ½¥±äµ½Òş²Ø
-                    CanvasGroup canvasGroup = consoleData.beChoosenImage.GetComponent<CanvasGroup>();
-                    if (canvasGroup != null)
-                    {
-                        StartCoroutine(FadeBeChoosen(canvasGroup, 0f, () => {
-                            if (consoleData.beChoosenImage != null)
-                            {
-                                consoleData.beChoosenImage.gameObject.SetActive(false);
-                            }
-                        }));
-                    }
-                    else
-                    {
-                        consoleData.beChoosenImage.gameObject.SetActive(false);
-                    }
+            if (networkUI == null || currentHighlightedPlayerId == 0) return;
 
-                    LogDebug($"ÇåÀíÍæ¼Ò{consoleData.playerId}µÄBeChoosenĞ§¹û");
-                }
-
-                currentHighlightedConsole = null;
-            }
-        }
-
-        /// <summary>
-        /// ÇåÀíËùÓĞBeChoosenĞ§¹û£¨±£ÁôÔ­·½·¨×÷Îª±¸ÓÃ£©
-        /// </summary>
-        private void ClearAllBeChoosenEffects()
-        {
-            ClearBeChoosenEffect();
-
-            // ÇåÀí¾ÉµÄCanvasGroup×Öµä£¨Èç¹û»¹ÔÚÊ¹ÓÃ£©
-            var keysToRemove = new List<GameObject>();
-            foreach (var kvp in beChoosenCanvasGroups)
-            {
-                if (kvp.Key == null)
-                {
-                    keysToRemove.Add(kvp.Key);
-                    continue;
-                }
-
-                // ½¥±äµ½Òş²Ø
-                StartCoroutine(FadeBeChoosen(kvp.Value, 0f, () => {
-                    if (kvp.Key != null)
-                    {
-                        kvp.Key.SetActive(false);
-                    }
-                }));
-            }
-
-            foreach (var key in keysToRemove)
-            {
-                beChoosenCanvasGroups.Remove(key);
-            }
-
-            beChoosenCanvasGroups.Clear();
-        }
-
-        /// <summary>
-        /// BeChoosen½¥±äĞ­³Ì
-        /// </summary>
-        private System.Collections.IEnumerator FadeBeChoosen(CanvasGroup canvasGroup, float targetAlpha, System.Action onComplete = null)
-        {
-            if (canvasGroup == null) yield break;
-
-            float startAlpha = canvasGroup.alpha;
-            float elapsed = 0f;
-            float duration = 1f / beChoosenFadeSpeed;
-
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = elapsed / duration;
-                canvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, t);
-                yield return null;
-            }
-
-            canvasGroup.alpha = targetAlpha;
-            onComplete?.Invoke();
+            networkUI.HidePlayerBeChosenEffect(currentHighlightedPlayerId);
+            LogDebug($"æ¸…ç†ç©å®¶{currentHighlightedPlayerId}çš„BeChoosenæ•ˆæœ");
+            currentHighlightedPlayerId = 0;
         }
 
         #endregion
 
-        #region ¼ıÍ·ÊÓ¾õ¸üĞÂ
+        #region ç®­å¤´è§†è§‰æ›´æ–°
 
         /// <summary>
-        /// ¸üĞÂ¼ıÍ·ÊÓ¾õĞ§¹û
+        /// æ›´æ–°ç®­å¤´è§†è§‰æ•ˆæœ
         /// </summary>
         private void UpdateArrowVisuals()
         {
             if (currentArrowRenderer == null) return;
 
-            // ¸ù¾İÄ¿±ê×´Ì¬ÉèÖÃ¼ıÍ·ÑÕÉ«
+            // æ ¹æ®ç›®æ ‡çŠ¶æ€è®¾ç½®ç®­å¤´é¢œè‰²
             Color targetColor = GetArrowColorForTarget();
 
-            // TODO: Ó¦ÓÃÑÕÉ«µ½¼ıÍ·½Úµã
-            // ÕâÀïĞèÒª¸ù¾İÄãµÄshaderÊµÏÖÀ´ÉèÖÃÑÕÉ«
-            // Ä¿Ç°ÔİÊ±²»ÊµÏÖ£¬µÈshaderÍê³ÉºóÔÙÌí¼Ó
+            // TODO: åº”ç”¨é¢œè‰²åˆ°ç®­å¤´èŠ‚ç‚¹
+            // è¿™é‡Œéœ€è¦æ ¹æ®ä½ çš„shaderå®ç°æ¥è®¾ç½®é¢œè‰²
+            // ç›®å‰æš‚æ—¶ä¸å®ç°ï¼Œç­‰shaderå®Œæˆåå†æ·»åŠ 
         }
 
         /// <summary>
-        /// ¸ù¾İÄ¿±êÀàĞÍ»ñÈ¡¼ıÍ·ÑÕÉ«
+        /// æ ¹æ®ç›®æ ‡ç±»å‹è·å–ç®­å¤´é¢œè‰²
         /// </summary>
         private Color GetArrowColorForTarget()
         {
@@ -800,87 +577,7 @@ namespace Cards.UI
 
         #endregion
 
-        #region ¹¤¾ß·½·¨
-
-        /// <summary>
-        /// µİ¹é²éÕÒ×Ó¶ÔÏó
-        /// </summary>
-        private Transform FindChildRecursive(Transform parent, string name)
-        {
-            for (int i = 0; i < parent.childCount; i++)
-            {
-                Transform child = parent.GetChild(i);
-                if (child.name == name)
-                    return child;
-            }
-
-            for (int i = 0; i < parent.childCount; i++)
-            {
-                Transform child = parent.GetChild(i);
-                Transform found = FindChildRecursive(child, name);
-                if (found != null)
-                    return found;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// »ñÈ¡µ±Ç°¼ì²â½á¹ûĞÅÏ¢
-        /// </summary>
-        public string GetCurrentTargetInfo()
-        {
-            switch (currentTargetType)
-            {
-                case TargetDetectionResult.PlayerConsole:
-                    return $"Íæ¼ÒÄ¿±ê: {currentTargetPlayerId}";
-                case TargetDetectionResult.CenterArea:
-                    return "ÖĞÑëÇøÓòÄ¿±ê";
-                case TargetDetectionResult.Invalid:
-                    return "ÎŞĞ§Ä¿±ê";
-                default:
-                    return "ÎŞÄ¿±ê";
-            }
-        }
-
-        #endregion
-
-        #region µ÷ÊÔ¹¤¾ß
-
-        private void OnDrawGizmos()
-        {
-            if (!showDebugGizmos) return;
-
-            // »æÖÆÖĞÑëÇøÓò
-            DrawCenterAreaGizmo();
-
-            // »æÖÆ¼ıÍ·Æğµã
-            if (isArrowActive)
-            {
-                Gizmos.color = Color.yellow;
-                Vector3 worldPos = transform.TransformPoint(arrowStartPosition);
-                Gizmos.DrawWireSphere(worldPos, 20f);
-            }
-        }
-
-        /// <summary>
-        /// »æÖÆÖĞÑëÇøÓò
-        /// </summary>
-        private void DrawCenterAreaGizmo()
-        {
-            Vector2 screenSize = new Vector2(Screen.width, Screen.height);
-
-            float leftBound = (releaseAreaCenterX - releaseAreaWidth / 2f) * screenSize.x;
-            float rightBound = (releaseAreaCenterX + releaseAreaWidth / 2f) * screenSize.x;
-            float bottomBound = (releaseAreaCenterY - releaseAreaHeight / 2f) * screenSize.y;
-            float topBound = (releaseAreaCenterY + releaseAreaHeight / 2f) * screenSize.y;
-
-            Gizmos.color = Color.cyan;
-            Vector3 center = new Vector3((leftBound + rightBound) / 2f, (bottomBound + topBound) / 2f, 0f);
-            Vector3 size = new Vector3(rightBound - leftBound, topBound - bottomBound, 1f);
-
-            Gizmos.DrawWireCube(center, size);
-        }
+        #region è°ƒè¯•å·¥å…·
 
         private void LogDebug(string message)
         {
@@ -905,25 +602,25 @@ namespace Cards.UI
 
         #endregion
 
-        #region ¹«¹²ÊôĞÔºÍ½Ó¿Ú
+        #region å…¬å…±å±æ€§å’Œæ¥å£
 
         public bool IsArrowActive => isArrowActive;
         public TargetDetectionResult CurrentTargetType => currentTargetType;
         public ushort CurrentTargetPlayerId => currentTargetPlayerId;
 
         /// <summary>
-        /// ¾²Ì¬¹¤³§·½·¨ - ÓÉCardUIManagerµ÷ÓÃ´´½¨ArrowManagerÊµÀı
+        /// é™æ€å·¥å‚æ–¹æ³• - ç”±CardUIManagerè°ƒç”¨åˆ›å»ºArrowManagerå®ä¾‹
         /// </summary>
         public static ArrowManager CreateArrowManager(Transform parent, Canvas canvas, GameObject arrowPrefab)
         {
-            // ´´½¨ArrowManager GameObject
+            // åˆ›å»ºArrowManager GameObject
             GameObject arrowManagerObj = new GameObject("ArrowManager");
             arrowManagerObj.transform.SetParent(parent, false);
 
-            // Ìí¼ÓArrowManager×é¼ş
+            // æ·»åŠ ArrowManagerç»„ä»¶
             ArrowManager arrowManager = arrowManagerObj.AddComponent<ArrowManager>();
 
-            // ³õÊ¼»¯
+            // åˆå§‹åŒ–
             arrowManager.Initialize(canvas, arrowPrefab);
 
             return arrowManager;
