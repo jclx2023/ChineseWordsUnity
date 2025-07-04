@@ -20,13 +20,11 @@ namespace UI
 
         [Header("设置面板")]
         [SerializeField] private GameObject settingsPanel;
-        [SerializeField] private CustomButton backFromSettingsButton;
         [SerializeField] private Slider volumeSlider;
         [SerializeField] private Toggle fullscreenToggle;
 
         [Header("制作名单面板")]
         [SerializeField] private GameObject creditsPanel;
-        [SerializeField] private CustomButton backFromCreditsButton;
         [SerializeField] private TMP_Text creditsText;
 
         [Header("场景配置")]
@@ -48,12 +46,10 @@ namespace UI
         private void InitializeUI()
         {
             // 绑定主菜单自定义按钮事件
-                enterLobbyButton.AddClickListener(OnEnterLobbyClicked);
-                settingsButton.AddClickListener(OnSettingsClicked);
-                creditsButton.AddClickListener(OnCreditsClicked);
-                exitButton.AddClickListener(OnExitClicked);
-                backFromSettingsButton.AddClickListener(OnBackFromSettingsClicked);
-                backFromCreditsButton.AddClickListener(OnBackFromCreditsClicked);
+            enterLobbyButton.AddClickListener(OnEnterLobbyClicked);
+            settingsButton.AddClickListener(OnSettingsClicked);
+            creditsButton.AddClickListener(OnCreditsClicked);
+            exitButton.AddClickListener(OnExitClicked);
 
             // 初始化设置
             InitializeSettings();
@@ -86,7 +82,7 @@ namespace UI
         }
 
         /// <summary>
-        /// 显示主菜单
+        /// 显示主菜单（只显示主菜单，隐藏其他面板）
         /// </summary>
         private void ShowMainMenu()
         {
@@ -96,21 +92,23 @@ namespace UI
         }
 
         /// <summary>
-        /// 显示设置面板
+        /// 显示设置面板（保持主菜单显示）
         /// </summary>
         private void ShowSettingsPanel()
         {
-            SetPanelActive(mainMenuPanel, false);
+            // 主菜单保持显示，只显示设置面板，隐藏制作名单面板
+            SetPanelActive(mainMenuPanel, true);
             SetPanelActive(settingsPanel, true);
             SetPanelActive(creditsPanel, false);
         }
 
         /// <summary>
-        /// 显示制作名单面板
+        /// 显示制作名单面板（保持主菜单显示）
         /// </summary>
         private void ShowCreditsPanel()
         {
-            SetPanelActive(mainMenuPanel, false);
+            // 主菜单保持显示，只显示制作名单面板，隐藏设置面板
+            SetPanelActive(mainMenuPanel, true);
             SetPanelActive(settingsPanel, false);
             SetPanelActive(creditsPanel, true);
         }
@@ -167,24 +165,6 @@ namespace UI
 #else
             Application.Quit();
 #endif
-        }
-
-        /// <summary>
-        /// 从设置返回按钮点击
-        /// </summary>
-        private void OnBackFromSettingsClicked()
-        {
-            LogDebug("从设置返回主菜单");
-            ShowMainMenu();
-        }
-
-        /// <summary>
-        /// 从制作名单返回按钮点击
-        /// </summary>
-        private void OnBackFromCreditsClicked()
-        {
-            LogDebug("从制作名单返回主菜单");
-            ShowMainMenu();
         }
 
         #endregion
@@ -301,10 +281,6 @@ Riptide
                 creditsButton.RemoveClickListener(OnCreditsClicked);
             if (exitButton != null)
                 exitButton.RemoveClickListener(OnExitClicked);
-            if (backFromSettingsButton != null)
-                backFromSettingsButton.RemoveClickListener(OnBackFromSettingsClicked);
-            if (backFromCreditsButton != null)
-                backFromCreditsButton.RemoveClickListener(OnBackFromCreditsClicked);
 
             // 清理输入事件监听
             if (volumeSlider != null)
