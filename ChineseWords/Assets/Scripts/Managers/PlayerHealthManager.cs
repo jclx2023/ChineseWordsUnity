@@ -108,13 +108,6 @@ namespace Managers
 
         private void DetectGameMode()
         {
-            // 方法1：检查MainMenuManager的游戏模式
-            if (MainMenuManager.SelectedGameMode == MainMenuManager.GameMode.SinglePlayer)
-            {
-                isNetworkMode = false;
-                LogDebug("检测到单机模式");
-                return;
-            }
 
             // 方法2：检查是否存在NetworkManager
             var networkManager = FindObjectOfType<Core.Network.NetworkManager>();

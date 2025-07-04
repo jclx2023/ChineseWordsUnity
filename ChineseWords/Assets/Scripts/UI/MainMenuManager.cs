@@ -6,29 +6,27 @@ using TMPro;
 namespace UI
 {
     /// <summary>
-    /// 简化的主菜单管理器 - 专为多人游戏设计
+    /// 简化的主菜单管理器 - 专为多人游戏设计，支持自定义按钮
     /// 流程：MainMenu → LobbyScene → RoomScene → NetworkGameScene
     /// </summary>
     public class MainMenuManager : MonoBehaviour
     {
-        [Header("主菜单UI")]
+        [Header("主菜单UI - 自定义按钮")]
         [SerializeField] private GameObject mainMenuPanel;
-        [SerializeField] private Button enterLobbyButton;
-        [SerializeField] private Button settingsButton;
-        [SerializeField] private Button creditsButton;
-        [SerializeField] private Button exitButton;
-
-
+        [SerializeField] private CustomButton enterLobbyButton;
+        [SerializeField] private CustomButton settingsButton;
+        [SerializeField] private CustomButton creditsButton;
+        [SerializeField] private CustomButton exitButton;
 
         [Header("设置面板")]
         [SerializeField] private GameObject settingsPanel;
-        [SerializeField] private Button backFromSettingsButton;
+        [SerializeField] private CustomButton backFromSettingsButton;
         [SerializeField] private Slider volumeSlider;
         [SerializeField] private Toggle fullscreenToggle;
 
         [Header("制作名单面板")]
         [SerializeField] private GameObject creditsPanel;
-        [SerializeField] private Button backFromCreditsButton;
+        [SerializeField] private CustomButton backFromCreditsButton;
         [SerializeField] private TMP_Text creditsText;
 
         [Header("场景配置")]
@@ -36,23 +34,6 @@ namespace UI
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
-
-        // 游戏模式枚举（保留以防其他脚本引用）
-        public enum GameMode
-        {
-            SinglePlayer,  // 保留但不使用
-            Host,          // 保留但不使用
-            Client,        // 保留但不使用
-            Multiplayer    // 新的统一多人模式
-        }
-
-        // 静态属性 - 供其他场景使用
-        public static GameMode SelectedGameMode { get; private set; } = GameMode.Multiplayer;
-        public static string PlayerName { get; private set; }
-        public static string RoomName { get; private set; }  // 保留以防其他脚本引用
-        public static string HostIP { get; private set; }    // 保留以防其他脚本引用
-        public static ushort Port { get; private set; }      // 保留以防其他脚本引用
-        public static int MaxPlayers { get; private set; }   // 保留以防其他脚本引用
 
         private void Start()
         {
@@ -66,23 +47,13 @@ namespace UI
         /// </summary>
         private void InitializeUI()
         {
-            // 绑定主菜单按钮事件
-            if (enterLobbyButton != null)
-                enterLobbyButton.onClick.AddListener(OnEnterLobbyClicked);
-            if (settingsButton != null)
-                settingsButton.onClick.AddListener(OnSettingsClicked);
-            if (creditsButton != null)
-                creditsButton.onClick.AddListener(OnCreditsClicked);
-            if (exitButton != null)
-                exitButton.onClick.AddListener(OnExitClicked);
-
-            // 绑定设置面板按钮事件
-            if (backFromSettingsButton != null)
-                backFromSettingsButton.onClick.AddListener(OnBackFromSettingsClicked);
-
-            // 绑定制作名单面板按钮事件
-            if (backFromCreditsButton != null)
-                backFromCreditsButton.onClick.AddListener(OnBackFromCreditsClicked);
+            // 绑定主菜单自定义按钮事件
+                enterLobbyButton.AddClickListener(OnEnterLobbyClicked);
+                settingsButton.AddClickListener(OnSettingsClicked);
+                creditsButton.AddClickListener(OnCreditsClicked);
+                exitButton.AddClickListener(OnExitClicked);
+                backFromSettingsButton.AddClickListener(OnBackFromSettingsClicked);
+                backFromCreditsButton.AddClickListener(OnBackFromCreditsClicked);
 
             // 初始化设置
             InitializeSettings();
@@ -152,7 +123,6 @@ namespace UI
             if (panel != null)
                 panel.SetActive(active);
         }
-
         #region 按钮事件处理
 
         /// <summary>
@@ -160,9 +130,6 @@ namespace UI
         /// </summary>
         private void OnEnterLobbyClicked()
         {
-            // 设置游戏模式（保留以防其他脚本引用）
-            SelectedGameMode = GameMode.Multiplayer;
-
             LogDebug("进入大厅");
 
             // 进入大厅场景
@@ -248,8 +215,6 @@ namespace UI
 
         #region 辅助方法
 
-
-
         /// <summary>
         /// 加载大厅场景
         /// </summary>
@@ -312,8 +277,6 @@ Riptide
 保留所有权利";
         }
 
-
-
         #endregion
 
         #region Unity生命周期
@@ -329,19 +292,19 @@ Riptide
 
         private void OnDestroy()
         {
-            // 清理按钮事件监听
+            // 清理自定义按钮事件监听
             if (enterLobbyButton != null)
-                enterLobbyButton.onClick.RemoveAllListeners();
+                enterLobbyButton.RemoveClickListener(OnEnterLobbyClicked);
             if (settingsButton != null)
-                settingsButton.onClick.RemoveAllListeners();
+                settingsButton.RemoveClickListener(OnSettingsClicked);
             if (creditsButton != null)
-                creditsButton.onClick.RemoveAllListeners();
+                creditsButton.RemoveClickListener(OnCreditsClicked);
             if (exitButton != null)
-                exitButton.onClick.RemoveAllListeners();
+                exitButton.RemoveClickListener(OnExitClicked);
             if (backFromSettingsButton != null)
-                backFromSettingsButton.onClick.RemoveAllListeners();
+                backFromSettingsButton.RemoveClickListener(OnBackFromSettingsClicked);
             if (backFromCreditsButton != null)
-                backFromCreditsButton.onClick.RemoveAllListeners();
+                backFromCreditsButton.RemoveClickListener(OnBackFromCreditsClicked);
 
             // 清理输入事件监听
             if (volumeSlider != null)
@@ -365,16 +328,6 @@ Riptide
             {
                 Debug.Log($"[MainMenuManager] {message}");
             }
-        }
-
-        [ContextMenu("重置游戏设置")]
-        public void ResetGameSettings()
-        {
-            PlayerPrefs.DeleteKey("MasterVolume");
-            PlayerPrefs.DeleteKey("Fullscreen");
-            PlayerPrefs.Save();
-
-            LogDebug("游戏设置已重置");
         }
 
         #endregion

@@ -145,23 +145,6 @@ public class CustomButton : Selectable, IPointerClickHandler
     }
 
     /// <summary>
-    /// 设置按钮文字
-    /// </summary>
-    public void SetText(string text)
-    {
-        if (textComponent != null)
-            textComponent.text = text;
-    }
-
-    /// <summary>
-    /// 获取按钮文字
-    /// </summary>
-    public string GetText()
-    {
-        return textComponent != null ? textComponent.text : "";
-    }
-
-    /// <summary>
     /// 添加点击监听
     /// </summary>
     public void AddClickListener(UnityAction action)
