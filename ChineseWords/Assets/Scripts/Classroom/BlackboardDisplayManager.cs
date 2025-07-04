@@ -114,7 +114,6 @@ namespace UI.Blackboard
             else
             {
                 LogDebug("NQMC不可用，尝试订阅NetworkManager事件作为备用");
-                // 备用方案：订阅NetworkManager的题目接收事件
                 if (NetworkManager.Instance != null)
                 {
                     NetworkManager.OnQuestionReceived += OnQuestionReceivedFromNetwork;
@@ -177,7 +176,6 @@ namespace UI.Blackboard
             if (q1 == null && q2 == null) return true;
             if (q1 == null || q2 == null) return false;
 
-            // 简单比较题目文本和类型
             return q1.questionText == q2.questionText && q1.questionType == q2.questionType;
         }
 
@@ -206,7 +204,6 @@ namespace UI.Blackboard
             // 如果有待显示的题目，现在显示它
             if (pendingQuestion != null)
             {
-                LogDebug("显示待处理的题目");
                 DisplayQuestion(pendingQuestion);
                 pendingQuestion = null;
             }
@@ -220,7 +217,6 @@ namespace UI.Blackboard
             LogDebug("收到教室初始化完成事件");
             if (!cameraSetupCompleted)
             {
-                // 备用方案：如果摄像机设置事件没有触发，手动查找摄像机
                 StartCoroutine(FindAndSetCamera());
             }
         }
@@ -312,16 +308,6 @@ namespace UI.Blackboard
                 }
             }
 
-            // 方式4: 查找除了默认主摄像机之外的第一个激活摄像机
-            foreach (var cam in allCameras)
-            {
-                if (cam != Camera.main && cam.enabled && cam.gameObject.activeInHierarchy)
-                {
-                    LogDebug($"找到备用摄像机: {cam.name}");
-                    return cam;
-                }
-            }
-
             return null;
         }
 
@@ -355,57 +341,10 @@ namespace UI.Blackboard
         }
 
         /// <summary>
-        /// 手动设置摄像机（供外部调用，特别是PlayerCameraController）
-        /// </summary>
-        public void SetCamera(Camera camera)
-        {
-            SetBlackboardCamera(camera);
-            cameraSetupCompleted = true;
-        }
-
-        /// <summary>
-        /// 注册玩家摄像机控制器（推荐方式）
-        /// </summary>
-        public void RegisterPlayerCameraController(PlayerCameraController cameraController)
-        {
-            if (cameraController != null && cameraController.IsLocalPlayer && cameraController.PlayerCamera != null)
-            {
-                SetBlackboardCamera(cameraController.PlayerCamera);
-                cameraSetupCompleted = true;
-                LogDebug($"已注册玩家摄像机控制器: {cameraController.PlayerCamera.name}");
-            }
-        }
-
-        /// <summary>
         /// 初始化黑板（验证组件引用）
         /// </summary>
         private void InitializeBlackboard()
         {
-            // 验证必要的组件引用
-            if (blackboardCanvas == null)
-            {
-                Debug.LogError("[BlackboardDisplayManager] BlackboardCanvas引用缺失");
-                return;
-            }
-
-            if (questionText == null)
-            {
-                Debug.LogError("[BlackboardDisplayManager] QuestionText引用缺失");
-                return;
-            }
-
-            if (statusText == null)
-            {
-                Debug.LogError("[BlackboardDisplayManager] StatusText引用缺失");
-                return;
-            }
-
-            if (optionTemplate == null)
-            {
-                Debug.LogError("[BlackboardDisplayManager] OptionTemplate引用缺失");
-                return;
-            }
-
             // 确保模板处于非激活状态
             optionTemplate.SetActive(false);
 
@@ -424,15 +363,8 @@ namespace UI.Blackboard
         /// </summary>
         private void ApplyColorSettings()
         {
-            if (questionText != null)
-            {
-                questionText.color = questionColor;
-            }
-
-            if (statusText != null)
-            {
-                statusText.color = statusColor;
-            }
+            questionText.color = questionColor;
+            statusText.color = statusColor;
         }
 
         /// <summary>
@@ -478,32 +410,8 @@ namespace UI.Blackboard
         /// </summary>
         public void DisplayQuestion(NetworkQuestionData questionData)
         {
-            if (questionData == null)
-            {
-                LogDebug("传入的题目数据为空，清空显示");
-                ClearDisplay();
-                return;
-            }
-
             LogDebug($"收到显示题目请求: {questionData.questionText}");
 
-            // 检查黑板是否已初始化
-            if (!blackboardInitialized)
-            {
-                LogDebug("黑板尚未初始化，等待初始化完成");
-                pendingQuestion = questionData;
-                return;
-            }
-
-            // 检查摄像机是否已设置
-            if (!cameraSetupCompleted)
-            {
-                LogDebug("摄像机尚未设置完成，将题目标记为待显示");
-                pendingQuestion = questionData;
-                return;
-            }
-
-            // 执行实际的显示逻辑
             ExecuteDisplayQuestion(questionData);
         }
 
@@ -547,8 +455,6 @@ namespace UI.Blackboard
 
             // 强制更新布局
             StartCoroutine(RefreshLayout());
-
-            LogDebug($"题目显示完成: {questionData.questionType}");
         }
 
         /// <summary>
@@ -556,15 +462,6 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayChoiceQuestion(NetworkQuestionData questionData)
         {
-            LogDebug($"显示选择题，选项数量: {questionData.options?.Length ?? 0}");
-
-            if (questionData.options == null || questionData.options.Length == 0)
-            {
-                LogDebug("选择题没有选项，隐藏选项区域");
-                optionsArea.gameObject.SetActive(false);
-                return;
-            }
-
             // 创建选项文本
             CreateOptionTexts(questionData.options.Length);
 
@@ -582,8 +479,6 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayTrueFalseQuestion(NetworkQuestionData questionData)
         {
-            LogDebug("显示判断题");
-
             CreateOptionTexts(2);
 
             optionTexts[0].text = "A. 正确";
@@ -597,12 +492,8 @@ namespace UI.Blackboard
         /// </summary>
         private void DisplayFillQuestion(NetworkQuestionData questionData)
         {
-            LogDebug("显示填空题");
-
-            // 保持选项区域激活但清空内容，维持布局结构
             optionsArea.gameObject.SetActive(true);
 
-            // 清理现有选项但不禁用区域
             if (optionTexts != null)
             {
                 foreach (var optionText in optionTexts)
@@ -694,11 +585,6 @@ namespace UI.Blackboard
 
             LogDebug("布局刷新完成");
         }
-
-        /// <summary>
-        /// 检查是否正在显示题目
-        /// </summary>
-        public bool IsDisplaying => isDisplaying;
 
         /// <summary>
         /// 获取当前显示的题目

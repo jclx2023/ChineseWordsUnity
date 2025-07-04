@@ -94,7 +94,6 @@ namespace Classroom.Player
         /// <summary>
         /// 初始化玩家网络同步
         /// </summary>
-        /// <param name="playerID">玩家ID</param>
         public void Initialize(ushort playerID)
         {
             playerId = playerID;

@@ -6,37 +6,37 @@ using Cards.Integration;
 namespace Cards.Effects
 {
     /// <summary>
-    /// ËùÓÐ¿¨ÅÆÐ§¹ûµÄ¾ßÌåÊµÏÖ
-    /// ¸üÐÂ°æ - Ö§³ÖÐÂµÄ12ÕÅ¿¨ÅÆÐ§¹û
+    /// ï¿½ï¿½ï¿½Ð¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½Ä¾ï¿½ï¿½ï¿½Êµï¿½ï¿½
+    /// ï¿½ï¿½ï¿½Â°ï¿½ - Ö§ï¿½ï¿½ï¿½Âµï¿½12ï¿½Å¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
     /// </summary>
 
-    #region ÉúÃüÖµÀàÐ§¹û
+    #region ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½Ð§ï¿½ï¿½
 
     /// <summary>
-    /// µ¥Ìå»ØÑª¿¨Ð§¹û - ID1: Å£ÄÌºÐ
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½Ð§ï¿½ï¿½ - ID1: Å£ï¿½Ìºï¿½
     /// </summary>
     public class HealEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // Í¨¹ýCardGameBridgeÐÞ¸ÄÍæ¼ÒÉúÃüÖµ
+            // Í¨ï¿½ï¿½CardGameBridgeï¿½Þ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?
             bool success = CardGameBridge.ModifyPlayerHealth(request.userId, (int)cardData.effectValue);
 
             if (success)
             {
-                CardUtilities.LogDebug($"Íæ¼Ò{request.userId}»Ø¸´{cardData.effectValue}µãÉúÃüÖµ");
-                return new CardEffectResult(true, $"»Ø¸´ÁË{cardData.effectValue}µãÉúÃüÖµ");
+                CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½Ø¸ï¿½{cardData.effectValue}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ");
+                return new CardEffectResult(true, $"ï¿½Ø¸ï¿½ï¿½ï¿½{cardData.effectValue}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ");
             }
             else
             {
-                CardUtilities.LogDebug($"Íæ¼Ò{request.userId}»ØÑªÊ§°Ü - ¿ÉÄÜÒÑÂúÑª»òÒÑËÀÍö");
-                return new CardEffectResult(false, "»ØÑªÊ§°Ü");
+                CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½ï¿½ÑªÊ§ï¿½ï¿½ - ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
+                return new CardEffectResult(false, "ï¿½ï¿½ÑªÊ§ï¿½ï¿½");
             }
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // ¼ì²éÍæ¼ÒÊÇ·ñ»¹»î×Å
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ñ»¹»ï¿½ï¿½ï¿½
             return CardGameBridge.IsPlayerAlive(request.userId);
         }
 
@@ -47,7 +47,7 @@ namespace Cards.Effects
     }
 
     /// <summary>
-    /// ÈºÌå»ØÑª¿¨Ð§¹û - ID7: ÎÄÒÕ»ãÑÝ
+    /// Èºï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½Ð§ï¿½ï¿½ - ID7: ï¿½ï¿½ï¿½Õ»ï¿½ï¿½ï¿½
     /// </summary>
     public class GroupHealEffect : ICardEffect
     {
@@ -66,21 +66,21 @@ namespace Cards.Effects
                 }
             }
 
-            CardUtilities.LogDebug($"ÈºÌå»ØÑª£º{successCount}/{allPlayerIds.Count}ÃûÍæ¼Ò»Ø¸´{healAmount}µãÉúÃüÖµ");
+            CardUtilities.LogDebug($"Èºï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½{successCount}/{allPlayerIds.Count}ï¿½ï¿½ï¿½ï¿½Ò»Ø¸ï¿½{healAmount}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ");
 
             if (successCount > 0)
             {
-                return new CardEffectResult(true, $"ËùÓÐÍæ¼Ò»Ø¸´ÁË{healAmount}µãÉúÃüÖµ");
+                return new CardEffectResult(true, $"ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»Ø¸ï¿½ï¿½ï¿½{healAmount}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ");
             }
             else
             {
-                return new CardEffectResult(false, "ÈºÌå»ØÑªÊ§°Ü");
+                return new CardEffectResult(false, "Èºï¿½ï¿½ï¿½ï¿½?Ê§ï¿½ï¿½");
             }
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // Ö»ÒªÓÐÍæ¼Ò´æ»î¾Í¿ÉÒÔÊ¹ÓÃ
+            // Ö»Òªï¿½ï¿½ï¿½ï¿½Ò´ï¿½ï¿½Í¿ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½?
             var alivePlayerIds = CardGameBridge.GetAllAlivePlayerIds();
             return alivePlayerIds.Count > 0;
         }
@@ -92,17 +92,17 @@ namespace Cards.Effects
     }
 
     /// <summary>
-    /// ¼Ó±¶ÉËº¦¿¨Ð§¹û - ID3: Á½¸ù·Û±Ê
+    /// ï¿½Ó±ï¿½ï¿½Ëºï¿½ï¿½ï¿½Ð§ï¿½ï¿½ - ID3: ï¿½ï¿½ï¿½ï¿½ï¿½Û±ï¿½
     /// </summary>
     public class DamageMultiplierEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // ÉèÖÃÉËº¦±¶Êý±ê¼Ç
+            // ï¿½ï¿½ï¿½ï¿½ï¿½Ëºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?
             CardGameBridge.SetGlobalDamageMultiplier(cardData.effectValue);
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}Ê¹ÓÃ¼Ó±¶¿¨£¬ÏÂ´Î´íÎóÉËº¦x{cardData.effectValue}");
-            return new CardEffectResult(true, $"ÏÂ´Î´íÎóÉËº¦½«·­{cardData.effectValue}±¶");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}Ê¹ï¿½Ã¼Ó±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â´Î´ï¿½ï¿½ï¿½ï¿½Ëºï¿½x{cardData.effectValue}");
+            return new CardEffectResult(true, $"ï¿½Â´Î´ï¿½ï¿½ï¿½ï¿½Ëºï¿½ï¿½ï¿½ï¿½ï¿½{cardData.effectValue}ï¿½ï¿½");
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
@@ -117,42 +117,42 @@ namespace Cards.Effects
     }
 
     /// <summary>
-    /// ¸ÅÂÊÉËº¦¿¨Ð§¹û - ID9: ¶ªÖ½ÍÅ
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½Ëºï¿½ï¿½ï¿½Ð§ï¿½ï¿½ - ID9: ï¿½ï¿½Ö½ï¿½ï¿½
     /// </summary>
     public class ProbabilityDamageEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            float hitChance = cardData.effectValue; // effectValue±íÊ¾ÃüÖÐ¸ÅÂÊ(0.5 = 50%)
+            float hitChance = cardData.effectValue; // effectValueï¿½ï¿½Ê¾ï¿½ï¿½ï¿½Ð¸ï¿½ï¿½ï¿½(0.5 = 50%)
             float randomValue = Random.Range(0f, 1f);
 
             if (randomValue <= hitChance)
             {
-                // ÃüÖÐ£¡Ôì³É1µãÉËº¦
+                // ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½ï¿½?1ï¿½ï¿½ï¿½Ëºï¿½
                 bool success = CardGameBridge.ModifyPlayerHealth(request.targetPlayerId, -10);
 
-                CardUtilities.LogDebug($"Íæ¼Ò{request.userId}µÄ¶ªÖ½ÍÅÃüÖÐÍæ¼Ò{request.targetPlayerId}£¡Ôì³É10µãÉËº¦");
+                CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½Ä¶ï¿½Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½{request.targetPlayerId}ï¿½ï¿½ï¿½ï¿½ï¿½?10ï¿½ï¿½ï¿½Ëºï¿½");
 
                 if (success)
                 {
-                    return new CardEffectResult(true, "Ö½ÍÅÃüÖÐ£¡Ä¿±êÍæ¼ÒÊÜµ½10µãÉËº¦");
+                    return new CardEffectResult(true, "Ö½ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Üµï¿½?10ï¿½ï¿½ï¿½Ëºï¿½");
                 }
                 else
                 {
-                    return new CardEffectResult(false, "Ö½ÍÅÃüÖÐÁË£¬µ«Ä¿±êÍæ¼ÒÒÑËÀÍö");
+                    return new CardEffectResult(false, "Ö½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë£ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?");
                 }
             }
             else
             {
-                // Î´ÃüÖÐ
-                CardUtilities.LogDebug($"Íæ¼Ò{request.userId}µÄ¶ªÖ½ÍÅÎ´ÃüÖÐÍæ¼Ò{request.targetPlayerId}");
-                return new CardEffectResult(true, "Ö½ÍÅÃ»ÓÐÃüÖÐÄ¿±ê");
+                // Î´ï¿½ï¿½ï¿½ï¿½
+                CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½Ä¶ï¿½Ö½ï¿½ï¿½Î´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½{request.targetPlayerId}");
+                return new CardEffectResult(true, "Ö½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½");
             }
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // ¼ì²éÄ¿±êÍæ¼ÒÊÇ·ñÓÐÐ§ÇÒ´æ»î£¬ÇÒ²»ÊÇ×Ô¼º
+            // ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½Ð§ï¿½Ò´ï¿½ï¿½?ï¿½Ò²ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½
             return request.targetPlayerId > 0 &&
                    request.targetPlayerId != request.userId &&
                    CardGameBridge.IsPlayerAlive(request.targetPlayerId);
@@ -166,20 +166,20 @@ namespace Cards.Effects
 
     #endregion
 
-    #region Ê±¼äÀàÐ§¹û
+    #region Ê±ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
 
     /// <summary>
-    /// ¼ÓÊ±¿¨Ð§¹û - ID4: ÔÙÏëÏë
+    /// ï¿½ï¿½Ê±ï¿½ï¿½Ð§ï¿½ï¿½ - ID4: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     public class AddTimeEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // ÎªÊ¹ÓÃÕß»º´æ¼ÓÊ±Ð§¹û
+            // ÎªÊ¹ï¿½ï¿½ï¿½ß»ï¿½ï¿½ï¿½ï¿½Ê±Ð§ï¿½ï¿½?
             CardGameBridge.SetPlayerTimeBonus(request.userId, cardData.effectValue);
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}»ñµÃ{cardData.effectValue}Ãë¼ÓÊ±");
-            return new CardEffectResult(true, $"ÏÂ´Î´ðÌâ½«»ñµÃ{cardData.effectValue}Ãë¶îÍâÊ±¼ä");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½ï¿½ï¿½{cardData.effectValue}ï¿½ï¿½ï¿½ï¿½?");
+            return new CardEffectResult(true, $"ï¿½Â´Î´ï¿½ï¿½â½«ï¿½ï¿½ï¿½{cardData.effectValue}ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½?");
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
@@ -194,22 +194,22 @@ namespace Cards.Effects
     }
 
     /// <summary>
-    /// ¼õÊ±¿¨Ð§¹û - ID10: ¼õÊ±¿¨
+    /// ï¿½ï¿½Ê±ï¿½ï¿½Ð§ï¿½ï¿½ - ID10: ï¿½ï¿½Ê±ï¿½ï¿½
     /// </summary>
     public class ReduceTimeEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // ÎªÄ¿±êÍæ¼ÒÉèÖÃ¼õÊ±Ð§¹û
+            // ÎªÄ¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¼ï¿½Ê±Ð§ï¿½ï¿½?
             CardGameBridge.SetPlayerTimePenalty(request.targetPlayerId, cardData.effectValue);
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.targetPlayerId}±»¼õÉÙ{cardData.effectValue}Ãë´ðÌâÊ±¼ä");
-            return new CardEffectResult(true, $"Ä¿±êÍæ¼ÒÏÂ´Î´ðÌâ½«¼õÉÙ{cardData.effectValue}ÃëÊ±¼ä");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.targetPlayerId}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½{cardData.effectValue}ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½?");
+            return new CardEffectResult(true, $"Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â´Î´ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½{cardData.effectValue}ï¿½ï¿½Ê±ï¿½ï¿½");
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // ¼ì²éÄ¿±êÍæ¼ÒÊÇ·ñÓÐÐ§ÇÒ´æ»î£¬ÇÒ²»ÊÇ×Ô¼º
+            // ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½Ð§ï¿½Ò´ï¿½ï¿½?ï¿½Ò²ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½
             return request.targetPlayerId > 0 &&
                    request.targetPlayerId != request.userId &&
                    CardGameBridge.IsPlayerAlive(request.targetPlayerId);
@@ -223,20 +223,20 @@ namespace Cards.Effects
 
     #endregion
 
-    #region ÌâÄ¿ÀàÐ§¹û
+    #region ï¿½ï¿½Ä¿ï¿½ï¿½Ð§ï¿½ï¿½
 
     /// <summary>
-    /// Ìø¹ý¿¨Ð§¹û - ID2: Çë¼ÙÌõ
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ - ID2: ï¿½ï¿½ï¿½ï¿½ï¿½?
     /// </summary>
     public class SkipQuestionEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // ÎªÊ¹ÓÃÕßÉèÖÃÌø¹ý±ê¼Ç
+            // ÎªÊ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?
             CardGameBridge.SetPlayerSkipFlag(request.userId, true);
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}ÏÂ´Î´ðÌâ½«±»Ìø¹ý");
-            return new CardEffectResult(true, "ÏÂ´ÎÂÖµ½ÄãÊ±½«×Ô¶¯Ìø¹ý");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½Â´Î´ï¿½ï¿½â½«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
+            return new CardEffectResult(true, "ï¿½Â´ï¿½ï¿½Öµï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½");
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
@@ -251,17 +251,17 @@ namespace Cards.Effects
     }
 
     /// <summary>
-    /// ³ÉÓï½ÓÁúÐ§¹û - ID5: ³ÉÓï½ÓÁú
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½? - ID5: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?
     /// </summary>
     public class ChengYuChainEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // ÎªÊ¹ÓÃÕßÉèÖÃÏÂ´ÎÌâÄ¿ÀàÐÍ
+            // ÎªÊ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â´ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½
             CardGameBridge.SetPlayerNextQuestionType(request.userId, "IdiomChain");
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}ÏÂ´Î´ðÌâ½«ÊÇ³ÉÓï½ÓÁú");
-            return new CardEffectResult(true, "ÏÂ´Î´ðÌâ½«ÊÇ³ÉÓï½ÓÁúÌâÄ¿");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½Â´Î´ï¿½ï¿½â½«ï¿½Ç³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?");
+            return new CardEffectResult(true, "ï¿½Â´Î´ï¿½ï¿½â½«ï¿½Ç³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?");
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
@@ -276,17 +276,17 @@ namespace Cards.Effects
     }
 
     /// <summary>
-    /// ÅÐ¶ÏÌâÐ§¹û - ID6: ÅÐ¶ÏÌâ
+    /// ï¿½Ð¶ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ - ID6: ï¿½Ð¶ï¿½ï¿½ï¿½
     /// </summary>
     public class JudgeQuestionEffect : ICardEffect
     {
         public CardEffectResult Execute(CardUseRequest request, CardData cardData)
         {
-            // ÎªÊ¹ÓÃÕßÉèÖÃÏÂ´ÎÌâÄ¿ÀàÐÍ
+            // ÎªÊ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â´ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½
             CardGameBridge.SetPlayerNextQuestionType(request.userId, "TrueFalse");
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}ÏÂ´Î´ðÌâ½«ÊÇÅÐ¶ÏÌâ");
-            return new CardEffectResult(true, "ÏÂ´Î´ðÌâ½«ÊÇÅÐ¶ÏÌâ");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½Â´Î´ï¿½ï¿½â½«ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½ï¿½");
+            return new CardEffectResult(true, "ï¿½Â´Î´ï¿½ï¿½â½«ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½ï¿½");
         }
 
         public bool CanUse(CardUseRequest request, CardData cardData)
@@ -302,13 +302,13 @@ namespace Cards.Effects
 
     #endregion
 
-    #region ¿¨ÅÆ²Ù×÷Ð§¹û
+    #region ï¿½ï¿½ï¿½Æ²ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
 
     /// <summary>
-    /// Í³Ò»µÄ¿¨ÅÆ²Ù×÷Ð§¹û - ´¦ÀíËùÓÐ EffectType.GetCard µÄÇé¿ö
-    /// ID8: ¿ÎÍâ²¹Ï° (Ëæ»ú»ñµÃÁ½ÕÅ¿¨ÅÆ)
-    /// ID11: ½èÏÂÏðÆ¤ (´ÓÖ¸¶¨Íæ¼ÒÍµÈ¡Ò»ÕÅ¿¨)
-    /// ID12: Ò»ºÐ·Û±Ê (»ñµÃÁ½ÕÅ¼Ó±¶¿¨)
+    /// Í³Ò»ï¿½Ä¿ï¿½ï¿½Æ²ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ - ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ EffectType.GetCard ï¿½ï¿½ï¿½ï¿½ï¿½?
+    /// ID8: ï¿½ï¿½ï¿½â²¹Ï° (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¿ï¿½ï¿½ï¿½)
+    /// ID11: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¤ (ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ÍµÈ¡Ò»ï¿½Å¿ï¿½?)
+    /// ID12: Ò»ï¿½Ð·Û±ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¼Ó±ï¿½ï¿½ï¿½?)
     /// </summary>
     public class CardManipulationEffect : ICardEffect
     {
@@ -316,20 +316,20 @@ namespace Cards.Effects
         {
             int effectValue = (int)cardData.effectValue;
 
-            // ¸ù¾Ý¿¨ÅÆIDºÍeffectValueÅÐ¶Ï¾ßÌåÐÐÎª
+            // ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½IDï¿½ï¿½effectValueï¿½Ð¶Ï¾ï¿½ï¿½ï¿½ï¿½ï¿½Îª
             switch (cardData.cardId)
             {
-                case 8: // ¿ÎÍâ²¹Ï°£ºËæ»ú»ñµÃÁ½ÕÅ¿¨ÅÆ
+                case 8: // ï¿½ï¿½ï¿½â²¹Ï°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¿ï¿½ï¿½ï¿½
                     return ExecuteDrawRandomCards(request, cardData);
 
-                case 11: // ½èÏÂÏðÆ¤£ºÍµÈ¡¿¨ÅÆ (effectValue = -1)
+                case 11: // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¤ï¿½ï¿½ÍµÈ¡ï¿½ï¿½ï¿½ï¿½ (effectValue = -1)
                     return ExecuteStealCard(request, cardData);
 
-                case 12: // Ò»ºÐ·Û±Ê£º»ñµÃÁ½ÕÅ¼Ó±¶¿¨ (effectValue = 3£¬±íÊ¾¼Ó±¶¿¨µÄID)
+                case 12: // Ò»ï¿½Ð·Û±Ê£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¼Ó±ï¿½ï¿½ï¿½? (effectValue = 3ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½Ó±ï¿½ï¿½ï¿½ï¿½ï¿½ID)
                     return ExecuteDrawSpecificCards(request, cardData);
 
                 default:
-                    // ¶µµ×Âß¼­£º¸ù¾ÝeffectValueÅÐ¶Ï
+                    // ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½effectValueï¿½Ð¶ï¿½
                     if (effectValue < 0)
                     {
                         return ExecuteStealCard(request, cardData);
@@ -343,31 +343,31 @@ namespace Cards.Effects
 
         public bool CanUse(CardUseRequest request, CardData cardData)
         {
-            // ¸ù¾Ý¿¨ÅÆIDÅÐ¶ÏÊ¹ÓÃÌõ¼þ
+            // ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½IDï¿½Ð¶ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             switch (cardData.cardId)
             {
-                case 8: // ¿ÎÍâ²¹Ï°£º×Ô·¢ÐÍ£¬×ÜÊÇ¿ÉÓÃ
-                case 12: // Ò»ºÐ·Û±Ê£º×Ô·¢ÐÍ£¬×ÜÊÇ¿ÉÓÃ
+                case 8: // ï¿½ï¿½ï¿½â²¹Ï°ï¿½ï¿½ï¿½Ô·ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½Ç¿ï¿½ï¿½ï¿½
+                case 12: // Ò»ï¿½Ð·Û±Ê£ï¿½ï¿½Ô·ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½Ç¿ï¿½ï¿½ï¿½
                     return true;
 
-                case 11: // ½èÏÂÏðÆ¤£ºÖ¸ÏòÐÍ£¬ÐèÒªÓÐÐ§Ä¿±ê
+                case 11: // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¤ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½Í£ï¿½ï¿½ï¿½Òªï¿½ï¿½Ð§Ä¿ï¿½ï¿½
                     return request.targetPlayerId > 0 &&
                            request.targetPlayerId != request.userId &&
                            CardGameBridge.IsPlayerAlive(request.targetPlayerId);
 
                 default:
-                    // ¶µµ×Âß¼­
+                    // ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½
                     int effectValue = (int)cardData.effectValue;
                     if (effectValue < 0)
                     {
-                        // ÍµÈ¡Àà£ºÐèÒªÓÐÐ§Ä¿±ê
+                        // ÍµÈ¡ï¿½à£ºï¿½ï¿½Òªï¿½ï¿½Ð§Ä¿ï¿½ï¿½
                         return request.targetPlayerId > 0 &&
                                request.targetPlayerId != request.userId &&
                                CardGameBridge.IsPlayerAlive(request.targetPlayerId);
                     }
                     else
                     {
-                        // »ñµÃÀà£º×ÜÊÇ¿ÉÓÃ
+                        // ï¿½ï¿½ï¿½ï¿½à£ºï¿½ï¿½ï¿½Ç¿ï¿½ï¿½ï¿½?
                         return true;
                     }
             }
@@ -378,30 +378,30 @@ namespace Cards.Effects
             return cardData.description;
         }
 
-        #region ¾ßÌåÐÐÎªÊµÏÖ
+        #region ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÎªÊµï¿½ï¿½
 
         /// <summary>
-        /// Ö´ÐÐ»ñµÃËæ»ú¿¨ÅÆ - ID8: ¿ÎÍâ²¹Ï°
+        /// Ö´ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ - ID8: ï¿½ï¿½ï¿½â²¹Ï°
         /// </summary>
         private CardEffectResult ExecuteDrawRandomCards(CardUseRequest request, CardData cardData)
         {
             int cardCount = (int)cardData.effectValue;
-            bool success = CardGameBridge.GiveCardToPlayer(request.userId, 0, cardCount); // cardId=0±íÊ¾Ëæ»ú
+            bool success = CardGameBridge.GiveCardToPlayer(request.userId, 0, cardCount); // cardId=0ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½?
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}»ñµÃ{cardCount}ÕÅËæ»ú¿¨ÅÆ£¬³É¹¦:{success}");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½ï¿½ï¿½{cardCount}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ£ï¿½ï¿½É¹ï¿½?:{success}");
 
             if (success)
             {
-                return new CardEffectResult(true, $"»ñµÃÁË{cardCount}ÕÅ¿¨ÅÆ");
+                return new CardEffectResult(true, $"ï¿½ï¿½ï¿½ï¿½ï¿½{cardCount}ï¿½Å¿ï¿½ï¿½ï¿½");
             }
             else
             {
-                return new CardEffectResult(false, "ÊÖÅÆÒÑÂú£¬ÎÞ·¨»ñµÃ¸ü¶à¿¨ÅÆ");
+                return new CardEffectResult(false, "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½?ï¿½ï¿½");
             }
         }
 
         /// <summary>
-        /// Ö´ÐÐÍµÈ¡¿¨ÅÆ - ID11: ½èÏÂÏðÆ¤
+        /// Ö´ï¿½ï¿½ÍµÈ¡ï¿½ï¿½ï¿½ï¿½ - ID11: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¤
         /// </summary>
         private CardEffectResult ExecuteStealCard(CardUseRequest request, CardData cardData)
         {
@@ -409,40 +409,40 @@ namespace Cards.Effects
 
             if (stolenCard.HasValue)
             {
-                CardUtilities.LogDebug($"Íæ¼Ò{request.userId}´ÓÍæ¼Ò{request.targetPlayerId}ÍµÈ¡ÁË¿¨ÅÆ{stolenCard.Value}");
+                CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½ï¿½ï¿½ï¿½ï¿½{request.targetPlayerId}ÍµÈ¡ï¿½Ë¿ï¿½ï¿½ï¿½{stolenCard.Value}");
 
                 var stolenCardData = CardGameBridge.GetCardDataById(stolenCard.Value);
-                string cardName = stolenCardData?.cardName ?? "Î´Öª¿¨ÅÆ";
+                string cardName = stolenCardData?.cardName ?? "Î´Öªï¿½ï¿½ï¿½ï¿½";
 
-                return new CardEffectResult(true, $"³É¹¦ÍµÈ¡ÁËÄ¿±êÍæ¼ÒµÄÒ»ÕÅ¿¨ÅÆ£º{cardName}");
+                return new CardEffectResult(true, $"ï¿½É¹ï¿½ÍµÈ¡ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½Òµï¿½Ò»ï¿½Å¿ï¿½ï¿½Æ£ï¿½{cardName}");
             }
             else
             {
-                CardUtilities.LogDebug($"Íæ¼Ò{request.targetPlayerId}Ã»ÓÐ¿¨ÅÆ¿ÉÍµÈ¡");
-                return new CardEffectResult(false, "Ä¿±êÍæ¼ÒÃ»ÓÐ¿¨ÅÆ¿ÉÍµÈ¡");
+                CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.targetPlayerId}Ã»ï¿½Ð¿ï¿½ï¿½Æ¿ï¿½ÍµÈ¡");
+                return new CardEffectResult(false, "Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½Ð¿ï¿½ï¿½Æ¿ï¿½Íµï¿½?");
             }
         }
 
         /// <summary>
-        /// Ö´ÐÐ»ñµÃÌØ¶¨¿¨ÅÆ - ID12: Ò»ºÐ·Û±Ê
+        /// Ö´ï¿½Ð»ï¿½ï¿½ï¿½Ø¶ï¿½ï¿½ï¿½ï¿½ï¿½? - ID12: Ò»ï¿½Ð·Û±ï¿½
         /// </summary>
         private CardEffectResult ExecuteDrawSpecificCards(CardUseRequest request, CardData cardData)
         {
-            // Ò»ºÐ·Û±Ê£º»ñµÃ2ÕÅ¼Ó±¶¿¨(ID=3)
-            int targetCardId = 3; // ¼Ó±¶¿¨µÄID
-            int cardCount = 2;    // »ñµÃ2ÕÅ
+            // Ò»ï¿½Ð·Û±Ê£ï¿½ï¿½ï¿½ï¿½?2ï¿½Å¼Ó±ï¿½ï¿½ï¿½(ID=3)
+            int targetCardId = 3; // ï¿½Ó±ï¿½ï¿½ï¿½ï¿½ï¿½ID
+            int cardCount = 2;    // ï¿½ï¿½ï¿½?2ï¿½ï¿½
 
             bool success = CardGameBridge.GiveCardToPlayer(request.userId, targetCardId, cardCount);
 
-            CardUtilities.LogDebug($"Íæ¼Ò{request.userId}»ñµÃ{cardCount}ÕÅ¼Ó±¶¿¨£¬³É¹¦:{success}");
+            CardUtilities.LogDebug($"ï¿½ï¿½ï¿½{request.userId}ï¿½ï¿½ï¿½{cardCount}ï¿½Å¼Ó±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É¹ï¿½:{success}");
 
             if (success)
             {
-                return new CardEffectResult(true, "»ñµÃÁË2ÕÅ¼Ó±¶¿¨");
+                return new CardEffectResult(true, "ï¿½ï¿½ï¿½ï¿½ï¿½?2ï¿½Å¼Ó±ï¿½ï¿½ï¿½");
             }
             else
             {
-                return new CardEffectResult(false, "ÊÖÅÆÒÑÂú£¬ÎÞ·¨»ñµÃ¼Ó±¶¿¨");
+                return new CardEffectResult(false, "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½Ã¼Ó±ï¿½ï¿½ï¿½?");
             }
         }
 
@@ -451,113 +451,44 @@ namespace Cards.Effects
 
     #endregion
 
-    #region Ð§¹û×¢²áÆ÷
+    #region Ð§ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½
 
     /// <summary>
-    /// Ð§¹û×¢²áÆ÷ - ¸ºÔð×¢²áËùÓÐÐ§¹ûµ½ÏµÍ³
-    /// ¸üÐÂ°æ - Ö§³ÖÐÂµÄÐ§¹ûÀàÐÍ
+    /// Ð§ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½ - ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ÏµÍ³
+    /// ï¿½ï¿½ï¿½Â°ï¿½ - Ö§ï¿½ï¿½ï¿½Âµï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     public static class CardEffectRegistrar
     {
         /// <summary>
-        /// ×¢²áËùÓÐÄ¬ÈÏÐ§¹û
+        /// ×¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½Ð§ï¿½ï¿½
         /// </summary>
         public static void RegisterAllEffects(CardEffectSystem system)
         {
             if (system == null)
             {
-                CardUtilities.LogError("CardEffectSystemÎª¿Õ£¬ÎÞ·¨×¢²áÐ§¹û");
+                CardUtilities.LogError("CardEffectSystemÎªï¿½Õ£ï¿½ï¿½Þ·ï¿½×¢ï¿½ï¿½Ð§ï¿½ï¿½");
                 return;
             }
 
-            // ÉúÃüÖµÀà
-            system.RegisterEffect(EffectType.Heal, new HealEffect());                    // ID1: Å£ÄÌºÐ
-            system.RegisterEffect(EffectType.GroupHeal, new GroupHealEffect());          // ID7: ÎÄÒÕ»ãÑÝ
-            system.RegisterEffect(EffectType.Damage, new DamageMultiplierEffect());     // ID3: Á½¸ù·Û±Ê
-            system.RegisterEffect(EffectType.ProbabilityDamage, new ProbabilityDamageEffect()); // ID9: ¶ªÖ½ÍÅ
+            // ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½
+            system.RegisterEffect(EffectType.Heal, new HealEffect());                    // ID1: Å£ï¿½Ìºï¿½
+            system.RegisterEffect(EffectType.GroupHeal, new GroupHealEffect());          // ID7: ï¿½ï¿½ï¿½Õ»ï¿½ï¿½ï¿½
+            system.RegisterEffect(EffectType.Damage, new DamageMultiplierEffect());     // ID3: ï¿½ï¿½ï¿½ï¿½ï¿½Û±ï¿½
+            system.RegisterEffect(EffectType.ProbabilityDamage, new ProbabilityDamageEffect()); // ID9: ï¿½ï¿½Ö½ï¿½ï¿½
 
-            // Ê±¼äÀà
-            system.RegisterEffect(EffectType.AddTime, new AddTimeEffect());             // ID4: ÔÙÏëÏë
-            system.RegisterEffect(EffectType.ReduceTime, new ReduceTimeEffect());       // ID10: ¼õÊ±¿¨
+            // Ê±ï¿½ï¿½ï¿½ï¿½
+            system.RegisterEffect(EffectType.AddTime, new AddTimeEffect());             // ID4: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            system.RegisterEffect(EffectType.ReduceTime, new ReduceTimeEffect());       // ID10: ï¿½ï¿½Ê±ï¿½ï¿½
 
-            // ÌâÄ¿Àà
-            system.RegisterEffect(EffectType.SkipQuestion, new SkipQuestionEffect());   // ID2: Çë¼ÙÌõ
-            system.RegisterEffect(EffectType.ChengYuChain, new ChengYuChainEffect());   // ID5: ³ÉÓï½ÓÁú
-            system.RegisterEffect(EffectType.JudgeQuestion, new JudgeQuestionEffect()); // ID6: ÅÐ¶ÏÌâ
+            // ï¿½ï¿½Ä¿ï¿½ï¿½
+            system.RegisterEffect(EffectType.SkipQuestion, new SkipQuestionEffect());   // ID2: ï¿½ï¿½ï¿½ï¿½ï¿½?
+            system.RegisterEffect(EffectType.ChengYuChain, new ChengYuChainEffect());   // ID5: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?
+            system.RegisterEffect(EffectType.JudgeQuestion, new JudgeQuestionEffect()); // ID6: ï¿½Ð¶ï¿½ï¿½ï¿½
 
-            // ¿¨ÅÆ²Ù×÷Àà
-            system.RegisterEffect(EffectType.GetCard, new CardManipulationEffect());    // ID8: ¿ÎÍâ²¹Ï°, ID11: ½èÏÂÏðÆ¤, ID12: Ò»ºÐ·Û±Ê
+            // ï¿½ï¿½ï¿½Æ²ï¿½ï¿½ï¿½ï¿½ï¿½
+            system.RegisterEffect(EffectType.GetCard, new CardManipulationEffect());    // ID8: ï¿½ï¿½ï¿½â²¹Ï°, ID11: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¤, ID12: Ò»ï¿½Ð·Û±ï¿½
 
-            CardUtilities.LogDebug("ËùÓÐ¿¨ÅÆÐ§¹û×¢²áÍê³É");
-        }
-    }
-
-    #endregion
-
-    #region ¹¤¾ßÀàÀ©Õ¹
-
-    /// <summary>
-    /// ¿¨ÅÆ¹¤¾ßÀàÀ©Õ¹
-    /// </summary>
-    public static class CardEffectUtilities
-    {
-        /// <summary>
-        /// µ÷ÊÔÈÕÖ¾Êä³ö
-        /// </summary>
-        public static void LogDebug(string message)
-        {
-            Debug.Log($"[CardEffects] {message}");
-        }
-
-        /// <summary>
-        /// ´íÎóÈÕÖ¾Êä³ö
-        /// </summary>
-        public static void LogError(string message)
-        {
-            Debug.LogError($"[CardEffects] {message}");
-        }
-
-        /// <summary>
-        /// ¼ÆËã¸ÅÂÊÊÇ·ñÃüÖÐ
-        /// </summary>
-        public static bool RollProbability(float chance)
-        {
-            return Random.Range(0f, 1f) <= chance;
-        }
-
-        /// <summary>
-        /// »ñÈ¡Ð§¹ûÃèÊö£¨´øÊýÖµ£©
-        /// </summary>
-        public static string GetEffectDescription(CardData cardData)
-        {
-            if (cardData.showEffectValue && cardData.effectValue > 0)
-            {
-                switch (cardData.effectType)
-                {
-                    case EffectType.Heal:
-                    case EffectType.GroupHeal:
-                        return $"{cardData.description} ({cardData.effectValue}µãÉúÃüÖµ)";
-
-                    case EffectType.AddTime:
-                        return $"{cardData.description} ({cardData.effectValue}Ãë)";
-
-                    case EffectType.ReduceTime:
-                        return $"{cardData.description} ({cardData.effectValue}Ãë)";
-
-                    case EffectType.Damage:
-                        return $"{cardData.description} (¡Á{cardData.effectValue})";
-
-                    case EffectType.ProbabilityDamage:
-                        return $"{cardData.description} ({cardData.effectValue * 100}%ÃüÖÐÂÊ)";
-
-                    case EffectType.GetCard:
-                        if (cardData.effectValue > 0)
-                            return $"{cardData.description} ({cardData.effectValue}ÕÅ)";
-                        break;
-                }
-            }
-
-            return cardData.description;
+            CardUtilities.LogDebug("ï¿½ï¿½ï¿½Ð¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½?");
         }
     }
 

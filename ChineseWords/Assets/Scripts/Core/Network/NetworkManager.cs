@@ -619,6 +619,7 @@ namespace Core.Network
             }
         }
 
+    
         [PunRPC]
         void OnPlayerHandCardsReceived_RPC(int playerId, int[] cardIds)
         {
@@ -1104,9 +1105,7 @@ namespace Core.Network
         /// </summary>
         private System.Collections.IEnumerator HandleReturnToRoom(string reason)
         {
-            LogDebug($"开始执行返回房间逻辑: {reason}");
 
-            // 等待1秒让UI显示完成
             yield return new WaitForSeconds(1f);
             try
             {
@@ -1132,7 +1131,6 @@ namespace Core.Network
             catch (System.Exception e)
             {
                 Debug.LogError($"[NetworkManager] 返回房间失败: {e.Message}");
-
                 // 备用方案：离开房间
                 if (PhotonNetwork.InRoom)
                 {
@@ -1143,8 +1141,6 @@ namespace Core.Network
         }
 
         #endregion
-
-        #region 辅助方法
 
         /// <summary>
         /// 根据ID获取玩家对象
@@ -1163,47 +1159,8 @@ namespace Core.Network
             return null;
         }
 
-        /// <summary>
-        /// 获取房间状态信息
-        /// </summary>
-        public string GetRoomStatus()
-        {
-            if (!PhotonNetwork.InRoom)
-                return "未在房间中";
 
-            return $"房间: {RoomName} | 玩家: {PlayerCount}/{MaxPlayers} | 准备: {GetReadyPlayerCount()}/{PlayerCount} | Host: {IsHost}";
-        }
-
-        /// <summary>
-        /// 检查是否具备RPC发送条件
-        /// </summary>
-        private bool CanSendRPC()
-        {
-            var persistentManager = PersistentNetworkManager.Instance;
-            if (persistentManager == null)
-            {
-                Debug.LogError("[NetworkManager] PersistentNetworkManager实例不存在");
-                return false;
-            }
-
-            if (persistentManager.photonView == null)
-            {
-                Debug.LogError("[NetworkManager] PersistentNetworkManager的PhotonView不存在");
-                return false;
-            }
-
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.LogWarning("[NetworkManager] 未在房间中，无法发送RPC");
-                return false;
-            }
-
-            return true;
-        }
-
-        #endregion
-
-        #region 组件通知方法（减少耦合）
+        #region 组件通知方法
 
         /// <summary>
         /// 通知NQMC收到题目
@@ -1340,54 +1297,31 @@ namespace Core.Network
 
         #endregion
 
-        #region 场景适配方法
-
-        public void RegisterSceneNetworkListeners()
+        #region 玩家查询方法
+        /// <summary>
+        /// 获取所有在线玩家的ID列表
+        /// </summary>
+        public List<ushort> GetAllOnlinePlayerIds()
         {
-            LogDebug("为当前场景注册网络事件监听");
-            // 这里可以根据当前场景自动注册相应的UI更新监听
-        }
+            var playerIds = new List<ushort>();
+            if (!PhotonNetwork.InRoom) return playerIds;
 
-        public void UnregisterSceneNetworkListeners()
-        {
-            LogDebug("取消当前场景的网络事件监听");
-            // 这里可以清理场景相关的事件监听
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                playerIds.Add((ushort)player.ActorNumber);
+            }
+            return playerIds;
         }
 
         /// <summary>
-        /// 检查网络管理器是否可用于当前场景
+        /// 获取玩家名称
         /// </summary>
-        public bool IsAvailableForCurrentScene()
+        public string GetPlayerName(ushort playerId)
         {
-            // 检查当前场景是否需要网络功能
-            string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-            bool needsNetworking = currentScene.Contains("Room") || currentScene.Contains("Game") || currentScene.Contains("Network");
-
-            LogDebug($"当前场景: {currentScene}, 需要网络功能: {needsNetworking}");
-            return needsNetworking;
+            var player = GetPlayerById(playerId);
+            return player?.NickName ?? $"Player_{playerId}";
         }
-
-        #endregion
-
-        #region 持久化状态管理
-
-        public void SaveNetworkState()
-        {
-            LogDebug("保存网络状态");
-            // 可以在这里保存游戏状态、玩家准备状态等
-        }
-        public void RestoreNetworkState()
-        {
-            LogDebug("恢复网络状态");
-            // 可以在这里恢复之前保存的状态
-        }
-        public void ResetNetworkState()
-        {
-            LogDebug("重置网络状态");
-            // 清理临时状态，但保持连接
-        }
-
-        #endregion
+        #endregion 
 
         #region 调试方法
 
@@ -1397,20 +1331,6 @@ namespace Core.Network
             {
                 Debug.Log($"[NetworkManager-Fixed] {message}");
             }
-        }
-
-        [ContextMenu("显示网络管理器状态")]
-        public void ShowNetworkManagerStatus()
-        {
-            string status = "=== NetworkManager状态（修复版） ===\n";
-            status += $"可用于当前场景: {IsAvailableForCurrentScene()}\n";
-            status += $"房间状态: {GetRoomStatus()}\n";
-            status += $"RPC发送条件: {(CanSendRPC() ? "✓" : "✗")}\n";
-            status += $"是否Host: {IsHost}\n";
-            status += $"玩家ID: {ClientId}\n";
-            status += $"NQMC可用: {(NetworkQuestionManagerController.Instance != null ? "✓" : "✗")}\n";
-
-            Debug.Log(status);
         }
 
         #endregion

@@ -6,30 +6,30 @@ using Cards.Core;
 namespace Cards.Effects
 {
     /// <summary>
-    /// ¿¨ÅÆÐ§¹ûÏµÍ³ºËÐÄ£¨¼ò»¯°æ£©
-    /// ¸ºÔðÐ§¹ûµÄ×¢²áºÍÖ´ÐÐ£¬Ä¿±êÑ¡ÔñÓÉUI²ã´¦Àí
-    /// ¸üÐÂ°æ - Ö§³ÖÐÂµÄ12ÕÅ¿¨ÅÆÐ§¹û
+    /// ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ÏµÍ³ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ò»¯°æ£©
+    /// ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½ï¿½Ö´ï¿½Ð£ï¿½Ä¿ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½UIï¿½ã´¦ï¿½ï¿½
+    /// ï¿½ï¿½ï¿½Â°ï¿½ - Ö§ï¿½ï¿½ï¿½Âµï¿½12ï¿½Å¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
     /// </summary>
     public class CardEffectSystem : MonoBehaviour
     {
-        [Header("ÏµÍ³ÉèÖÃ")]
+        [Header("ÏµÍ³ï¿½ï¿½ï¿½ï¿½")]
         [SerializeField] private bool enableDebugLogs = true;
         [SerializeField] private float effectExecutionTimeout = 10f;
 
-        // Ð§¹û×¢²á±í
+        // Ð§ï¿½ï¿½×¢ï¿½ï¿½ï¿½
         private Dictionary<EffectType, ICardEffect> registeredEffects;
 
-        // Ð§¹ûÖ´ÐÐÆ÷
+        // Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½
         private CardEffectExecutor effectExecutor;
 
-        // µ¥ÀýÊµÀý
+        // ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½
         public static CardEffectSystem Instance { get; private set; }
 
-        #region ÉúÃüÖÜÆÚ
+        #region ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         private void Awake()
         {
-            LogDebug($"{GetType().Name} ×é¼þÒÑ´´½¨£¬µÈ´ýµ¥ÀýÉèÖÃ");
+            LogDebug($"{GetType().Name} ï¿½ï¿½ï¿½ï¿½Ñ´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
             InitializeSystem();
         }
 
@@ -44,30 +44,30 @@ namespace Cards.Effects
 
         #endregion
 
-        #region ÏµÍ³³õÊ¼»¯
+        #region ÏµÍ³ï¿½ï¿½Ê¼ï¿½ï¿½
 
         /// <summary>
-        /// ³õÊ¼»¯Ð§¹ûÏµÍ³
+        /// ï¿½ï¿½Ê¼ï¿½ï¿½Ð§ï¿½ï¿½ÏµÍ³
         /// </summary>
         private void InitializeSystem()
         {
-            LogDebug("³õÊ¼»¯¿¨ÅÆÐ§¹ûÏµÍ³");
+            LogDebug("ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ÏµÍ³");
 
-            // ³õÊ¼»¯×é¼þ
+            // ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½
             registeredEffects = new Dictionary<EffectType, ICardEffect>();
             effectExecutor = new CardEffectExecutor();
 
-            // ÅäÖÃ×é¼þ
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             effectExecutor.SetTimeout(effectExecutionTimeout);
 
-            // ×¢²áÊÂ¼þ
+            // ×¢ï¿½ï¿½ï¿½Â¼ï¿½
             RegisterEvents();
 
-            LogDebug("¿¨ÅÆÐ§¹ûÏµÍ³³õÊ¼»¯Íê³É");
+            LogDebug("ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ÏµÍ³ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½");
         }
 
         /// <summary>
-        /// ×¢²áÊÂ¼þ
+        /// ×¢ï¿½ï¿½ï¿½Â¼ï¿½
         /// </summary>
         private void RegisterEvents()
         {
@@ -75,7 +75,7 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ×¢ÏúÊÂ¼þ
+        /// ×¢ï¿½ï¿½ï¿½Â¼ï¿½
         /// </summary>
         private void UnregisterEvents()
         {
@@ -84,10 +84,10 @@ namespace Cards.Effects
 
         #endregion
 
-        #region Ð§¹û×¢²á¹ÜÀí
+        #region Ð§ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½
 
         /// <summary>
-        /// ×¢²áÐ§¹ûÊµÏÖ
+        /// ×¢ï¿½ï¿½Ð§ï¿½ï¿½Êµï¿½ï¿½
         /// </summary>
         public void RegisterEffect(EffectType effectType, ICardEffect effect)
         {
@@ -95,22 +95,22 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ×¢ÏúÐ§¹ûÊµÏÖ
+        /// ×¢ï¿½ï¿½Ð§ï¿½ï¿½Êµï¿½ï¿½
         /// </summary>
         public void UnregisterEffect(EffectType effectType)
         {
             if (registeredEffects.Remove(effectType))
             {
-                LogDebug($"Ð§¹ûÒÑ×¢Ïú: {effectType}");
+                LogDebug($"Ð§ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½: {effectType}");
             }
             else
             {
-                LogWarning($"³¢ÊÔ×¢Ïú²»´æÔÚµÄÐ§¹û: {effectType}");
+                LogWarning($"ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Ð§ï¿½ï¿½: {effectType}");
             }
         }
 
         /// <summary>
-        /// »ñÈ¡ÒÑ×¢²áµÄÐ§¹û
+        /// ï¿½ï¿½È¡ï¿½ï¿½×¢ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
         /// </summary>
         public ICardEffect GetEffect(EffectType effectType)
         {
@@ -119,7 +119,7 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ¼ì²éÐ§¹ûÊÇ·ñÒÑ×¢²á
+        /// ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½×¢ï¿½ï¿½
         /// </summary>
         public bool IsEffectRegistered(EffectType effectType)
         {
@@ -127,7 +127,7 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// »ñÈ¡ËùÓÐÒÑ×¢²áµÄÐ§¹ûÀàÐÍ
+        /// ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         public List<EffectType> GetRegisteredEffectTypes()
         {
@@ -136,11 +136,11 @@ namespace Cards.Effects
 
         #endregion
 
-        #region Ð§¹ûÖ´ÐÐÈë¿Ú
+        #region Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½ï¿½
 
         /// <summary>
-        /// Ê¹ÓÃ¿¨ÅÆ£¨Ö÷ÒªÈë¿Ú£©
-        /// Ä¿±êÒÑÍ¨¹ýUIÍÏ×§È·¶¨£¬Ö±½ÓÖ´ÐÐÐ§¹û
+        /// Ê¹ï¿½Ã¿ï¿½ï¿½Æ£ï¿½ï¿½ï¿½Òªï¿½ï¿½Ú£ï¿½
+        /// Ä¿ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½UIï¿½ï¿½×§È·ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ï¿½Ö´ï¿½ï¿½Ð§ï¿½ï¿½
         /// </summary>
         public void UseCard(CardUseRequest request, CardData cardData)
         {
@@ -149,64 +149,64 @@ namespace Cards.Effects
                 return;
             }
 
-            LogDebug($"¿ªÊ¼Ê¹ÓÃ¿¨ÅÆ: {cardData.cardName} (Íæ¼Ò{request.userId})");
+            LogDebug($"ï¿½ï¿½Ê¼Ê¹ï¿½Ã¿ï¿½ï¿½ï¿½: {cardData.cardName} (ï¿½ï¿½ï¿½{request.userId})");
 
-            // ¸ù¾Ý¿¨ÅÆÀàÐÍÉèÖÃÄ¿±ê
+            // ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½
             SetupCardTarget(request, cardData);
 
-            // Ö±½ÓÖ´ÐÐÐ§¹û
+            // Ö±ï¿½ï¿½Ö´ï¿½ï¿½Ð§ï¿½ï¿½
             ExecuteCardEffect(request, cardData);
         }
 
         /// <summary>
-        /// ÉèÖÃ¿¨ÅÆÄ¿±ê
+        /// ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½
         /// </summary>
         private void SetupCardTarget(CardUseRequest request, CardData cardData)
         {
             switch (cardData.cardType)
             {
                 case CardType.SelfTarget:
-                    // ×Ô·¢ÐÍ¿¨ÅÆ£¬Ä¿±êÊÇÊ¹ÓÃÕß×Ô¼º
+                    // ï¿½Ô·ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½
                     request.targetPlayerId = request.userId;
-                    LogDebug($"×Ô·¢ÐÍ¿¨ÅÆ£¬Ä¿±êÉèÖÃÎªÊ¹ÓÃÕß: {request.userId}");
+                    LogDebug($"ï¿½Ô·ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÎªÊ¹ï¿½ï¿½ï¿½ï¿½: {request.userId}");
                     break;
 
                 case CardType.PlayerTarget:
-                    // Ö¸ÏòÐÍ¿¨ÅÆ£¬UI²ãÓ¦¸ÃÒÑ¾­ÉèÖÃÁËtargetPlayerId
+                    // Ö¸ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½UIï¿½ï¿½Ó¦ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½targetPlayerId
                     if (request.targetPlayerId <= 0)
                     {
-                        LogError("Ö¸ÏòÐÍ¿¨ÅÆÈ±ÉÙÓÐÐ§Ä¿±ê");
+                        LogError("Ö¸ï¿½ï¿½ï¿½Í¿ï¿½ï¿½ï¿½È±ï¿½ï¿½ï¿½ï¿½Ð§Ä¿ï¿½ï¿½");
                         return;
                     }
-                    LogDebug($"Ö¸ÏòÐÍ¿¨ÅÆ£¬Ä¿±êÍæ¼Ò: {request.targetPlayerId}");
+                    LogDebug($"Ö¸ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½: {request.targetPlayerId}");
                     break;
 
                 case CardType.Special:
-                    // ÌØÊâÐÍ¿¨ÅÆ£¬¸ù¾Ý¾ßÌåÐ§¹û´¦Àí
-                    LogDebug("ÌØÊâÐÍ¿¨ÅÆ£¬Ä¿±êÓÉÐ§¹ûÂß¼­´¦Àí");
+                    // ï¿½ï¿½ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½ï¿½ï¿½ï¿½Ý¾ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+                    LogDebug("ï¿½ï¿½ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½ï¿½ï¿½");
                     break;
             }
         }
 
         /// <summary>
-        /// ÑéÖ¤¿¨ÅÆÊ¹ÓÃÇëÇó
+        /// ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         private bool ValidateCardUseRequest(CardUseRequest request, CardData cardData)
         {
 
-            // ¼ì²éÐ§¹ûÊÇ·ñÒÑ×¢²á
+            // ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½×¢ï¿½ï¿½
             if (!IsEffectRegistered(cardData.effectType))
             {
-                LogError($"Ð§¹ûÎ´×¢²á: {cardData.effectType}");
+                LogError($"Ð§ï¿½ï¿½Î´×¢ï¿½ï¿½: {cardData.effectType}");
                 return false;
             }
 
-            // ÑéÖ¤Ä¿±ê£¨¶ÔÓÚÖ¸ÏòÐÍ¿¨ÅÆ£©
+            // ï¿½ï¿½Ö¤Ä¿ï¿½ê£¨ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ£ï¿½
             if (cardData.cardType == CardType.PlayerTarget)
             {
                 if (!IsValidTarget(request.targetPlayerId, request.userId, cardData))
                 {
-                    LogError($"ÎÞÐ§µÄÄ¿±êÍæ¼Ò: {request.targetPlayerId}");
+                    LogError($"ï¿½ï¿½Ð§ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½: {request.targetPlayerId}");
                     return false;
                 }
             }
@@ -215,27 +215,27 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ÑéÖ¤Ä¿±êÊÇ·ñÓÐÐ§£¨¸üÐÂ°æ£¬Ö§³ÖÐÂ¿¨ÅÆ£©
+        /// ï¿½ï¿½Ö¤Ä¿ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½Â°æ£¬Ö§ï¿½ï¿½ï¿½Â¿ï¿½ï¿½Æ£ï¿½
         /// </summary>
         private bool IsValidTarget(int targetId, int userId, CardData cardData)
         {
             if (targetId <= 0)
             {
-                LogError("Ä¿±êIDÎÞÐ§");
+                LogError("Ä¿ï¿½ï¿½IDï¿½ï¿½Ð§");
                 return false;
             }
 
-            // Ö¸ÏòÐÍ¿¨ÅÆ²»ÄÜÑ¡Ôñ×Ô¼º×÷ÎªÄ¿±ê
+            // Ö¸ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ²ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ÎªÄ¿ï¿½ï¿½
             if (targetId == userId)
             {
-                LogError($"Ö¸ÏòÐÍ¿¨ÅÆ²»ÄÜÑ¡Ôñ×Ô¼º×÷ÎªÄ¿±ê£º{cardData.cardName}");
+                LogError($"Ö¸ï¿½ï¿½ï¿½Í¿ï¿½ï¿½Æ²ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ÎªÄ¿ï¿½ê£º{cardData.cardName}");
                 return false;
             }
 
-            // Í¨¹ýCardGameBridge¼ì²éÄ¿±êÍæ¼ÒÊÇ·ñ´æ»î
+            // Í¨ï¿½ï¿½CardGameBridgeï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½
             if (!Cards.Integration.CardGameBridge.IsPlayerAlive(targetId))
             {
-                LogError($"Ä¿±êÍæ¼Ò{targetId}ÒÑËÀÍö»ò²»´æÔÚ");
+                LogError($"Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½{targetId}ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ò²»´ï¿½ï¿½ï¿½");
                 return false;
             }
 
@@ -244,52 +244,52 @@ namespace Cards.Effects
 
         #endregion
 
-        #region Ð§¹ûÖ´ÐÐ
+        #region Ð§ï¿½ï¿½Ö´ï¿½ï¿½
 
         /// <summary>
-        /// Ö´ÐÐ¿¨ÅÆÐ§¹û
+        /// Ö´ï¿½Ð¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
         /// </summary>
         private void ExecuteCardEffect(CardUseRequest request, CardData cardData)
         {
-            LogDebug($"Ö´ÐÐ¿¨ÅÆÐ§¹û: {cardData.cardName} ({cardData.effectType})");
+            LogDebug($"Ö´ï¿½Ð¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½: {cardData.cardName} ({cardData.effectType})");
 
-            // »ñÈ¡Ð§¹ûÊµÏÖ
+            // ï¿½ï¿½È¡Ð§ï¿½ï¿½Êµï¿½ï¿½
             var effect = GetEffect(cardData.effectType);
             if (effect == null)
             {
-                LogError($"Ð§¹ûÊµÏÖÎ´ÕÒµ½: {cardData.effectType}");
+                LogError($"Ð§ï¿½ï¿½Êµï¿½ï¿½Î´ï¿½Òµï¿½: {cardData.effectType}");
                 return;
             }
 
-            // ×îÖÕÑéÖ¤
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¤
             if (!effect.CanUse(request, cardData))
             {
-                LogWarning($"Ð§¹ûÑéÖ¤Ê§°Ü£¬ÎÞ·¨Ê¹ÓÃ¿¨ÅÆ: {cardData.cardName}");
-                CardEvents.OnCardMessage?.Invoke("µ±Ç°ÎÞ·¨Ê¹ÓÃ¸Ã¿¨ÅÆ");
+                LogWarning($"Ð§ï¿½ï¿½ï¿½ï¿½Ö¤Ê§ï¿½Ü£ï¿½ï¿½Þ·ï¿½Ê¹ï¿½Ã¿ï¿½ï¿½ï¿½: {cardData.cardName}");
+                CardEvents.OnCardMessage?.Invoke("ï¿½ï¿½Ç°ï¿½Þ·ï¿½Ê¹ï¿½Ã¸Ã¿ï¿½ï¿½ï¿½");
                 return;
             }
 
-            // Ö´ÐÐÐ§¹û
+            // Ö´ï¿½ï¿½Ð§ï¿½ï¿½
             effectExecutor.ExecuteEffect(effect, request, cardData, OnEffectCompleted);
         }
 
         /// <summary>
-        /// Ð§¹ûÖ´ÐÐÍê³É»Øµ÷
+        /// Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½É»Øµï¿½
         /// </summary>
         private void OnEffectCompleted(CardUseRequest request, CardData cardData, CardEffectResult result)
         {
-            LogDebug($"¿¨ÅÆÐ§¹ûÖ´ÐÐÍê³É: {cardData.cardName}, ³É¹¦: {result.success}, ÏûÏ¢: {result.message}");
+            LogDebug($"ï¿½ï¿½ï¿½ï¿½Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½ï¿½: {cardData.cardName}, ï¿½É¹ï¿½: {result.success}, ï¿½ï¿½Ï¢: {result.message}");
 
-            // ´¥·¢Ê¹ÓÃÍê³ÉÊÂ¼þ
+            // ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½
             CardEvents.OnCardUsed?.Invoke(request, cardData, result);
 
-            // ÏÔÊ¾½á¹ûÏûÏ¢
+            // ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
             if (!string.IsNullOrEmpty(result.message))
             {
                 CardEvents.OnCardMessage?.Invoke(result.message);
             }
 
-            // Èç¹û³É¹¦Ê¹ÓÃ£¬¹ã²¥¿¨ÅÆÊ¹ÓÃÐÅÏ¢£¨ÓÃÓÚÍøÂçÍ¬²½£©
+            // ï¿½ï¿½ï¿½ï¿½É¹ï¿½Ê¹ï¿½Ã£ï¿½ï¿½ã²¥ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½
             if (result.success)
             {
                 BroadcastCardUsage(request, cardData);
@@ -297,11 +297,11 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ¹ã²¥¿¨ÅÆÊ¹ÓÃÐÅÏ¢
+        /// ï¿½ã²¥ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½Ï¢
         /// </summary>
         private void BroadcastCardUsage(CardUseRequest request, CardData cardData)
         {
-            // Í¨¹ýCardGameBridge¹ã²¥¿¨ÅÆÊ¹ÓÃÏûÏ¢
+            // Í¨ï¿½ï¿½CardGameBridgeï¿½ã²¥ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½Ï¢
             Cards.Integration.CardGameBridge.BroadcastCardUsage(
                 request.userId,
                 request.cardId,
@@ -312,10 +312,10 @@ namespace Cards.Effects
 
         #endregion
 
-        #region ¿¨ÅÆÊ¹ÓÃÇëÇó´¦Àí
+        #region ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         /// <summary>
-        /// ´¦Àí¿¨ÅÆÊ¹ÓÃÇëÇó£¨ÊÂ¼þ»Øµ÷£©
+        /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ï¿½Øµï¿½ï¿½ï¿½
         /// </summary>
         private void HandleCardUseRequest(CardUseRequest request, CardData cardData)
         {
@@ -324,42 +324,16 @@ namespace Cards.Effects
 
         #endregion
 
-        #region ÏµÍ³²éÑ¯½Ó¿Ú
-
         /// <summary>
-        /// ¼ì²éÏµÍ³ÊÇ·ñ×¼±¸¾ÍÐ÷
+        /// ï¿½ï¿½ï¿½ÏµÍ³ï¿½Ç·ï¿½×¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         /// </summary>
         public bool IsSystemReady()
         {
             return registeredEffects != null && registeredEffects.Count > 0;
         }
 
-        /// <summary>
-        /// »ñÈ¡ÏµÍ³×´Ì¬ÐÅÏ¢
-        /// </summary>
-        public string GetSystemStatus()
-        {
-            var status = $"=== ¿¨ÅÆÐ§¹ûÏµÍ³×´Ì¬ ===\n";
-            status += $"ÒÑ×¢²áÐ§¹ûÊýÁ¿: {registeredEffects?.Count ?? 0}\n";
-            status += $"ÏµÍ³¾ÍÐ÷: {IsSystemReady()}\n";
-            status += $"µ÷ÊÔÈÕÖ¾: {(enableDebugLogs ? "¿ªÆô" : "¹Ø±Õ")}\n";
-            status += $"Ö´ÐÐ³¬Ê±: {effectExecutionTimeout}Ãë\n";
 
-            if (registeredEffects != null && registeredEffects.Count > 0)
-            {
-                status += "\nÒÑ×¢²áµÄÐ§¹û:\n";
-                foreach (var kvp in registeredEffects)
-                {
-                    status += $"- {kvp.Key}: {kvp.Value.GetType().Name}\n";
-                }
-            }
-
-            return status;
-        }
-
-        #endregion
-
-        #region ÈÕÖ¾·½·¨
+        #region ï¿½ï¿½Ö¾ï¿½ï¿½ï¿½ï¿½
 
         private void LogDebug(string message)
         {
@@ -388,18 +362,18 @@ namespace Cards.Effects
         #endregion
     }
 
-    #region Ð§¹ûÖ´ÐÐÆ÷
+    #region Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½
 
     /// <summary>
-    /// Ð§¹ûÖ´ÐÐÆ÷£¨¼ò»¯°æ£©
-    /// ¸ºÔð°²È«Ö´ÐÐ¿¨ÅÆÐ§¹û
+    /// Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ò»¯°æ£©
+    /// ï¿½ï¿½ï¿½ï¿½È«Ö´ï¿½Ð¿ï¿½ï¿½ï¿½Ð§ï¿½ï¿½
     /// </summary>
     public class CardEffectExecutor
     {
         private float timeout = 10f;
 
         /// <summary>
-        /// ÉèÖÃ³¬Ê±Ê±¼ä
+        /// ï¿½ï¿½ï¿½Ã³ï¿½Ê±Ê±ï¿½ï¿½
         /// </summary>
         public void SetTimeout(float timeoutSeconds)
         {
@@ -407,34 +381,34 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// Ö´ÐÐÐ§¹û
+        /// Ö´ï¿½ï¿½Ð§ï¿½ï¿½
         /// </summary>
         public void ExecuteEffect(ICardEffect effect, CardUseRequest request, CardData cardData,
             System.Action<CardUseRequest, CardData, CardEffectResult> onCompleted)
         {
             try
             {
-                CardUtilities.LogDebug($"¿ªÊ¼Ö´ÐÐÐ§¹û: {cardData.effectType} - {cardData.cardName}");
+                CardUtilities.LogDebug($"ï¿½ï¿½Ê¼Ö´ï¿½ï¿½Ð§ï¿½ï¿½: {cardData.effectType} - {cardData.cardName}");
 
-                // ¼ÇÂ¼Ö´ÐÐ¿ªÊ¼Ê±¼ä
+                // ï¿½ï¿½Â¼Ö´ï¿½Ð¿ï¿½Ê¼Ê±ï¿½ï¿½
                 float startTime = Time.time;
 
-                // Ö´ÐÐÐ§¹û
+                // Ö´ï¿½ï¿½Ð§ï¿½ï¿½
                 var result = effect.Execute(request, cardData);
 
-                // ¼ÇÂ¼Ö´ÐÐÊ±¼ä
+                // ï¿½ï¿½Â¼Ö´ï¿½ï¿½Ê±ï¿½ï¿½
                 float executionTime = Time.time - startTime;
-                CardUtilities.LogDebug($"Ð§¹ûÖ´ÐÐÍê³É£¬ºÄÊ±: {executionTime:F3}Ãë");
+                CardUtilities.LogDebug($"Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ï¿½É£ï¿½ï¿½ï¿½Ê±: {executionTime:F3}ï¿½ï¿½");
 
-                // µ÷ÓÃÍê³É»Øµ÷
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É»Øµï¿½
                 onCompleted?.Invoke(request, cardData, result);
             }
             catch (System.Exception e)
             {
-                CardUtilities.LogError($"Ð§¹ûÖ´ÐÐÒì³£ [{cardData.cardName}]: {e.Message}");
-                CardUtilities.LogError($"Òì³£¶ÑÕ»: {e.StackTrace}");
+                CardUtilities.LogError($"Ð§ï¿½ï¿½Ö´ï¿½ï¿½ï¿½ì³£ [{cardData.cardName}]: {e.Message}");
+                CardUtilities.LogError($"ï¿½ì³£ï¿½ï¿½Õ»: {e.StackTrace}");
 
-                var errorResult = new CardEffectResult(false, $"Ö´ÐÐÊ§°Ü: {e.Message}");
+                var errorResult = new CardEffectResult(false, $"Ö´ï¿½ï¿½Ê§ï¿½ï¿½: {e.Message}");
                 onCompleted?.Invoke(request, cardData, errorResult);
             }
         }

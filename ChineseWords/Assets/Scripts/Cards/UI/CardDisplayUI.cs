@@ -8,14 +8,17 @@ using Classroom.Player;
 namespace Cards.UI
 {
     /// <summary>
-    /// 卡牌展示UI控制器 - 箭头系统重构版
+    /// 卡牌展示UI控制器 - 手动容器配置版
     /// 负责管理卡牌的视觉展示状态：缩略图 <-> 扇形展示
     /// 支持按压事件替代点击事件
     /// </summary>
     public class CardDisplayUI : MonoBehaviour
     {
+        [Header("容器引用 (自动查找)")]
+        [SerializeField] private Transform thumbnailContainer; // 缩略图容器 (自动查找)
+        [SerializeField] private Transform fanDisplayContainer; // 扇形展示容器 (自动查找)
+
         [Header("缩略图设置")]
-        [SerializeField] private Transform thumbnailContainer; // 缩略图容器
         [SerializeField] private Vector2 thumbnailPosition = new Vector2(110f, 0f); // 调整到合适的位置
         [SerializeField] private float thumbnailRotation = -10f; // 缩略图容器旋转角度
         [SerializeField] private float thumbnailScale = 0.6f; // 缩略图缩放（从0.4增大到0.6）
@@ -24,11 +27,10 @@ namespace Cards.UI
         [SerializeField] private int maxThumbnailCards = 3; // 最多显示3张缩略图
 
         [Header("扇形展示设置")]
-        [SerializeField] private Transform fanDisplayContainer; // 扇形展示容器
-        [SerializeField] private float fanRadius = 200f; // 扇形半径
-        [SerializeField] private float fanAngleSpread = 60f; // 扇形角度范围
-        [SerializeField] private float bottomMargin = -200f; // 距离屏幕底部的边距
-        [SerializeField] private float cardHeight = 200f; // 卡牌高度（用于计算位置）
+        [SerializeField] private float fanRadius = 400f; // 扇形半径（增大让卡牌更平）
+        [SerializeField] private float fanAngleSpread = 40f; // 扇形角度范围（减小让卡牌更紧密）
+        [SerializeField] private float fanCenterOffsetY = 200f; // 扇形中心超出屏幕底部的距离
+        [SerializeField] private float cardOverlapRatio = 0.85f; // 卡牌露出屏幕的比例（0.7表示露出70%）
 
         [Header("悬停交互设置")]
         [SerializeField] private float hoverScale = 1.2f; // 悬停时的放大倍数
@@ -107,6 +109,13 @@ namespace Cards.UI
             cardUIComponents = uiComponents;
             playerCameraController = cameraController;
 
+            // 验证容器设置
+            if (!ValidateContainers())
+            {
+                LogError("容器设置无效，无法初始化");
+                return;
+            }
+
             // 初始化UI组件
             InitializeUIComponents();
 
@@ -118,54 +127,58 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 初始化UI组件
+        /// 验证容器设置
         /// </summary>
-        private void InitializeUIComponents()
+        private bool ValidateContainers()
         {
-            // 确保CardDisplayUI本身有RectTransform
-            RectTransform selfRect = GetComponent<RectTransform>();
-            if (selfRect == null)
+            // 自动查找容器
+            FindContainers();
+
+            if (thumbnailContainer == null)
             {
-                selfRect = gameObject.AddComponent<RectTransform>();
-                selfRect.anchorMin = Vector2.zero;
-                selfRect.anchorMax = Vector2.one;
-                selfRect.sizeDelta = Vector2.zero;
-                selfRect.anchoredPosition = Vector2.zero;
+                LogError("找不到ThumbnailContainer！请确保CardCanvas下存在该容器");
+                return false;
             }
 
             if (fanDisplayContainer == null)
             {
-                GameObject container = new GameObject("FanDisplayContainer");
-                container.transform.SetParent(transform, false);
-
-                // 添加RectTransform组件
-                RectTransform containerRect = container.AddComponent<RectTransform>();
-                containerRect.anchorMin = Vector2.zero;
-                containerRect.anchorMax = Vector2.one;
-                containerRect.sizeDelta = Vector2.zero;
-                containerRect.anchoredPosition = Vector2.zero;
-
-                fanDisplayContainer = container.transform;
+                LogError("找不到FanDisplayContainer！请确保CardCanvas下存在该容器");
+                return false;
             }
 
-            if (thumbnailContainer == null)
+            LogDebug("容器设置验证通过");
+            return true;
+        }
+
+        /// <summary>
+        /// 查找容器
+        /// </summary>
+        private void FindContainers()
+        {
+            // 查找CardCanvas
+            Canvas cardCanvas = GetComponentInParent<Canvas>();
+            if (cardCanvas == null)
             {
-                GameObject thumbContainer = new GameObject("ThumbnailContainer");
-                thumbContainer.transform.SetParent(transform, false);
-
-                // 设置缩略图容器的RectTransform
-                RectTransform thumbRect = thumbContainer.AddComponent<RectTransform>();
-                thumbRect.anchoredPosition = thumbnailPosition;
-                thumbRect.localScale = Vector3.one * thumbnailScale;
-                thumbRect.localEulerAngles = new Vector3(0, 0, thumbnailRotation); // 应用旋转
-                // 设置锚点和尺寸
-                thumbRect.anchorMin = Vector2.zero;
-                thumbRect.anchorMax = Vector2.zero;
-                thumbRect.sizeDelta = new Vector2(500, 400); // 增大尺寸（从400x300到500x400）
-
-                thumbnailContainer = thumbContainer.transform;
+                LogError("找不到父Canvas");
+                return;
             }
 
+            // 在CardCanvas下查找容器
+            thumbnailContainer = cardCanvas.transform.Find("ThumbnailContainer");
+            fanDisplayContainer = cardCanvas.transform.Find("FanDisplayContainer");
+
+            if (thumbnailContainer != null)
+                LogDebug($"找到缩略图容器: {thumbnailContainer.name}");
+
+            if (fanDisplayContainer != null)
+                LogDebug($"找到扇形展示容器: {fanDisplayContainer.name}");
+        }
+
+        /// <summary>
+        /// 初始化UI组件
+        /// </summary>
+        private void InitializeUIComponents()
+        {
             // 验证容器层级
             ValidateContainerHierarchy();
 
@@ -187,6 +200,7 @@ namespace Cards.UI
                 parentCanvas = current.GetComponent<Canvas>();
                 current = current.parent;
             }
+
             if (parentCanvas != null)
             {
                 LogDebug($"CardDisplayUI层级验证通过，Canvas: {parentCanvas.name}");
@@ -196,6 +210,7 @@ namespace Cards.UI
                 LogWarning("CardDisplayUI未找到父Canvas，可能会导致UI显示问题");
             }
         }
+
         #endregion
 
         #region Unity生命周期
@@ -491,6 +506,48 @@ namespace Cards.UI
         }
 
         /// <summary>
+        /// 更新扇形展示（卡牌使用后调用）
+        /// </summary>
+        public bool UpdateFanDisplayWithCards(List<CardDisplayData> cardDataList)
+        {
+            if (currentState != DisplayState.FanDisplay)
+            {
+                LogWarning("当前不在扇形展示状态，无法更新扇形展示");
+                return false;
+            }
+
+            if (cardDataList == null || cardDataList.Count == 0)
+            {
+                LogDebug("卡牌数据为空，返回缩略图状态");
+                ReturnToThumbnail();
+                return true;
+            }
+
+            LogDebug($"更新扇形展示，新的卡牌数量: {cardDataList.Count}");
+
+            // 重新计算动态扇形中心
+            CalculateDynamicFanCenter();
+
+            // 清理当前扇形卡牌
+            ClearFanDisplayCards();
+
+            // 创建新的卡牌UI
+            CreateCardUIs(cardDataList);
+
+            // 重新计算扇形位置
+            CalculateFanPositions(cardDataList.Count);
+
+            // 直接设置到扇形位置（无动画，因为是更新）
+            ShowFanDisplayMode();
+
+            // 同时更新缩略图（为返回做准备）
+            CreateThumbnailCards(cardDataList);
+
+            LogDebug("扇形展示更新完成");
+            return true;
+        }
+
+        /// <summary>
         /// 返回缩略图状态
         /// </summary>
         public void ReturnToThumbnail()
@@ -636,7 +693,7 @@ namespace Cards.UI
         #region 动态位置计算
 
         /// <summary>
-        /// 计算动态扇形中心点（自适应屏幕底部）
+        /// 计算动态扇形中心点（《杀戮尖塔》风格）
         /// </summary>
         private void CalculateDynamicFanCenter()
         {
@@ -645,26 +702,31 @@ namespace Cards.UI
             if (canvasRect == null)
             {
                 LogWarning("无法获取Canvas RectTransform，使用默认位置");
-                dynamicFanCenter = new Vector2(0f, -200f);
+                dynamicFanCenter = new Vector2(0f, -400f);
                 return;
             }
 
             // 获取屏幕尺寸（在Canvas坐标系中）
             Rect canvasSize = canvasRect.rect;
-            float screenWidth = canvasSize.width;
             float screenHeight = canvasSize.height;
 
             // 计算扇形中心位置
             // X轴：屏幕中央
             float centerX = 0f;
 
-            // Y轴：从屏幕底部向上偏移（底部边距 + 卡牌高度的一半 + 扇形半径的部分）
-            // 注意：Canvas坐标系中，屏幕底部是负值
-            float centerY = -screenHeight / 2f + bottomMargin + cardHeight / 2f;
+            // Y轴：屏幕底部 + 向下偏移，让扇形中心在屏幕外
+            // 卡牌高度279，希望露出70%，所以需要让中心在底部下方一定距离
+            float cardHeight = 279f; // 卡牌实际高度
+            float visibleCardHeight = cardHeight * cardOverlapRatio; // 卡牌可见部分
+            float hiddenCardHeight = cardHeight - visibleCardHeight; // 卡牌被遮挡部分
+
+            // 扇形中心Y坐标 = 屏幕底部 - 扇形偏移距离
+            float centerY = -screenHeight / 2f - fanCenterOffsetY;
 
             dynamicFanCenter = new Vector2(centerX, centerY);
 
-            LogDebug($"动态计算扇形中心: {dynamicFanCenter}, 屏幕尺寸: {screenWidth}x{screenHeight}");
+            LogDebug($"《杀戮尖塔》风格扇形中心: {dynamicFanCenter}");
+            LogDebug($"屏幕高度: {screenHeight}, 卡牌可见高度: {visibleCardHeight}");
         }
 
         /// <summary>
@@ -1136,8 +1198,6 @@ namespace Cards.UI
             pointerExit.eventID = EventTriggerType.PointerExit;
             pointerExit.callback.AddListener((eventData) => OnCardPointerExit(cardUI));
             eventTrigger.triggers.Add(pointerExit);
-
-            // 注意：这里不再添加点击事件，因为我们改为按压检测
         }
 
         /// <summary>

@@ -8,6 +8,7 @@ namespace Classroom.Player
 {
     /// <summary>
     /// 座位-玩家绑定器 - 管理玩家与座位的映射关系
+    /// 优化版本：移除自动初始化，改为由ClassroomManager控制初始化时机
     /// 提供座位查询、玩家定位等功能，与CircularSeatingSystem协同工作
     /// </summary>
     public class SeatingPlayerBinder : MonoBehaviour
@@ -17,7 +18,6 @@ namespace Classroom.Player
         [SerializeField] private NetworkPlayerSpawner playerSpawner;
 
         [Header("绑定配置")]
-        [SerializeField] private bool autoBindOnStart = true;
         [SerializeField] private bool maintainBindingOnPlayerLeave = true; // 玩家离开时保持座位绑定
 
         [Header("调试设置")]
@@ -79,14 +79,14 @@ namespace Classroom.Player
                 Debug.LogError("[SeatingPlayerBinder] 未找到CircularSeatingSystem组件");
                 return;
             }
+
+            LogDebug("组件查找完成，等待ClassroomManager控制初始化");
         }
 
         private void Start()
         {
-            if (autoBindOnStart && seatingSystem != null)
-            {
-                Initialize();
-            }
+            // 移除自动初始化逻辑，改为由ClassroomManager控制
+            LogDebug("SeatingPlayerBinder启动，等待外部初始化调用");
         }
 
         private void OnEnable()
@@ -105,12 +105,7 @@ namespace Classroom.Player
 
         private void SubscribeToEvents()
         {
-            if (playerSpawner != null)
-            {
-                NetworkPlayerSpawner.OnCharacterSpawned += OnCharacterSpawned;
-                NetworkPlayerSpawner.OnSeatsGenerated += OnSeatsGenerated;
-            }
-
+            // 只订阅网络事件，不再订阅PlayerSpawner事件（避免重复处理）
             if (NetworkManager.Instance != null)
             {
                 NetworkManager.OnPlayerLeft += OnPlayerLeft;
@@ -120,12 +115,6 @@ namespace Classroom.Player
 
         private void UnsubscribeFromEvents()
         {
-            if (playerSpawner != null)
-            {
-                NetworkPlayerSpawner.OnCharacterSpawned -= OnCharacterSpawned;
-                NetworkPlayerSpawner.OnSeatsGenerated -= OnSeatsGenerated;
-            }
-
             if (NetworkManager.Instance != null)
             {
                 NetworkManager.OnPlayerLeft -= OnPlayerLeft;
@@ -138,7 +127,7 @@ namespace Classroom.Player
         #region 初始化
 
         /// <summary>
-        /// 初始化座位绑定器
+        /// 初始化座位绑定器（由ClassroomManager调用）
         /// </summary>
         public void Initialize()
         {
@@ -150,16 +139,15 @@ namespace Classroom.Player
 
             LogDebug("开始初始化座位绑定器");
 
-            // 清理现有数据
-            ClearAllBindings();
-
-            // 等待座位系统准备就绪
-            if (!seatingSystem.IsInitialized)
+            // 验证前置条件
+            if (!ValidatePrerequisites())
             {
-                LogDebug("等待座位系统初始化...");
-                StartCoroutine(WaitForSeatingSystemReady());
+                LogDebug("前置条件不满足，初始化失败");
                 return;
             }
+
+            // 清理现有数据
+            ClearAllBindings();
 
             // 建立初始绑定
             BuildInitialBindings();
@@ -169,14 +157,30 @@ namespace Classroom.Player
         }
 
         /// <summary>
-        /// 等待座位系统准备就绪
+        /// 验证初始化前置条件
         /// </summary>
-        private System.Collections.IEnumerator WaitForSeatingSystemReady()
+        private bool ValidatePrerequisites()
         {
-            yield return new WaitUntil(() => seatingSystem.IsInitialized);
-            BuildInitialBindings();
-            isInitialized = true;
-            LogDebug("座位绑定器延迟初始化完成");
+            if (seatingSystem == null || !seatingSystem.IsInitialized)
+            {
+                LogDebug("座位系统未准备就绪");
+                return false;
+            }
+
+            if (playerSpawner == null || !playerSpawner.IsInitialized)
+            {
+                LogDebug("玩家生成器未准备就绪");
+                return false;
+            }
+
+            if (!playerSpawner.HasGeneratedSeats)
+            {
+                LogDebug("座位尚未生成");
+                return false;
+            }
+
+            LogDebug("前置条件验证通过");
+            return true;
         }
 
         /// <summary>
@@ -198,8 +202,18 @@ namespace Classroom.Player
                         // 创建空座位绑定
                         CreateEmptySeatBinding(i, seatIdentifier);
                     }
+                    else
+                    {
+                        LogDebug($"警告：座位 {i} 缺少SeatIdentifier组件");
+                    }
+                }
+                else
+                {
+                    LogDebug($"警告：座位 {i} 的实例为空");
                 }
             }
+
+            LogDebug($"成功创建 {seatBindings.Count} 个座位绑定");
         }
 
         /// <summary>
@@ -227,6 +241,12 @@ namespace Classroom.Player
         /// </summary>
         public bool BindPlayerToSeat(ushort playerId, int seatIndex, string playerName = "")
         {
+            if (!isInitialized)
+            {
+                LogDebug("绑定器尚未初始化");
+                return false;
+            }
+
             if (!IsValidSeatIndex(seatIndex))
             {
                 LogDebug($"无效的座位索引: {seatIndex}");
@@ -240,6 +260,14 @@ namespace Classroom.Player
             }
 
             var seatBinding = seatBindings[seatIndex];
+
+            // 检查座位是否已被占用
+            if (seatBinding.isOccupied)
+            {
+                LogDebug($"座位 {seatIndex} 已被玩家 {seatBinding.playerId} 占用");
+                return false;
+            }
+
             var seatIdentifier = seatBinding.seatIdentifier;
 
             // 更新绑定信息
@@ -258,6 +286,22 @@ namespace Classroom.Player
             LogDebug($"玩家 {playerId} ({seatBinding.playerName}) 绑定到座位 {seatIndex}");
 
             return true;
+        }
+
+        /// <summary>
+        /// 绑定玩家到第一个可用座位
+        /// </summary>
+        public bool BindPlayerToAvailableSeat(ushort playerId, string playerName = "")
+        {
+            var availableSeats = GetAvailableSeatIndices();
+            if (availableSeats.Count == 0)
+            {
+                LogDebug($"没有可用座位为玩家 {playerId} 分配");
+                return false;
+            }
+
+            int seatIndex = availableSeats[0];
+            return BindPlayerToSeat(playerId, seatIndex, playerName);
         }
 
         /// <summary>
@@ -318,6 +362,12 @@ namespace Classroom.Player
             // 重新占用座位
             binding.seatIdentifier.OccupySeat(binding.playerName);
 
+            // 重新建立玩家映射
+            if (!playerBindings.ContainsKey(playerId))
+            {
+                playerBindings[playerId] = binding;
+            }
+
             OnPlayerActivated?.Invoke(binding);
             LogDebug($"玩家 {playerId} 重新激活，座位 {binding.seatIndex}");
 
@@ -341,6 +391,23 @@ namespace Classroom.Player
             OnPlayerDeactivated?.Invoke(binding);
             LogDebug($"玩家 {playerId} 已停用，座位 {binding.seatIndex} 保留");
 
+            return true;
+        }
+
+        /// <summary>
+        /// 更新玩家角色引用
+        /// </summary>
+        public bool UpdatePlayerCharacter(ushort playerId, GameObject playerCharacter)
+        {
+            var binding = GetPlayerBinding(playerId);
+            if (binding == null)
+            {
+                LogDebug($"玩家 {playerId} 未绑定座位，无法更新角色引用");
+                return false;
+            }
+
+            binding.playerCharacter = playerCharacter;
+            LogDebug($"更新玩家 {playerId} 的角色引用: {playerCharacter?.name}");
             return true;
         }
 
@@ -442,47 +509,17 @@ namespace Classroom.Player
             return seatBindings.Values.Where(b => !b.isOccupied).Select(b => b.seatIndex).ToList();
         }
 
+        /// <summary>
+        /// 获取所有已绑定但非活跃的玩家（断线玩家）
+        /// </summary>
+        public List<SeatBinding> GetDisconnectedPlayerBindings()
+        {
+            return seatBindings.Values.Where(b => b.isOccupied && !b.isActive).ToList();
+        }
+
         #endregion
 
         #region 事件处理
-
-        /// <summary>
-        /// 座位生成完成事件
-        /// </summary>
-        private void OnSeatsGenerated(int seatCount)
-        {
-            LogDebug($"收到座位生成事件，座位数: {seatCount}");
-
-            if (!isInitialized)
-            {
-                Initialize();
-            }
-            else
-            {
-                // 重新建立绑定
-                BuildInitialBindings();
-            }
-        }
-
-        /// <summary>
-        /// 角色生成完成事件
-        /// </summary>
-        private void OnCharacterSpawned(ushort playerId, GameObject character)
-        {
-            LogDebug($"收到角色生成事件: 玩家 {playerId}");
-
-            // 更新绑定中的角色引用
-            var binding = GetPlayerBinding(playerId);
-            if (binding != null)
-            {
-                binding.playerCharacter = character;
-                LogDebug($"更新玩家 {playerId} 的角色引用");
-            }
-            else
-            {
-                LogDebug($"警告：玩家 {playerId} 没有对应的座位绑定");
-            }
-        }
 
         /// <summary>
         /// 玩家离开事件
@@ -513,7 +550,7 @@ namespace Classroom.Player
             if (existingBinding != null && !existingBinding.isActive)
             {
                 LogDebug($"玩家 {playerId} 有保留座位 {existingBinding.seatIndex}，准备重新激活");
-                // 等待角色生成后再激活
+                // 等待角色生成后再激活，这个会由ClassroomManager处理
             }
         }
 
@@ -546,6 +583,12 @@ namespace Classroom.Player
         {
             LogDebug("强制重建绑定关系");
 
+            if (!ValidatePrerequisites())
+            {
+                LogDebug("前置条件不满足，无法重建绑定");
+                return;
+            }
+
             ClearAllBindings();
             BuildInitialBindings();
         }
@@ -557,11 +600,13 @@ namespace Classroom.Player
         {
             var activePlayers = GetActivePlayerBindings();
             var availableSeats = GetAvailableSeatIndices();
+            var disconnectedPlayers = GetDisconnectedPlayerBindings();
 
             string status = $"=== 座位绑定状态 ===\n";
             status += $"总座位数: {TotalSeats}\n";
             status += $"已占用: {OccupiedSeats}\n";
             status += $"活跃玩家: {ActivePlayers}\n";
+            status += $"断线玩家: {disconnectedPlayers.Count}\n";
             status += $"可用座位: {availableSeats.Count}\n\n";
 
             status += "活跃玩家列表:\n";
@@ -570,7 +615,46 @@ namespace Classroom.Player
                 status += $"  座位 {binding.seatIndex}: 玩家 {binding.playerId} ({binding.playerName})\n";
             }
 
+            if (disconnectedPlayers.Count > 0)
+            {
+                status += "\n断线玩家列表:\n";
+                foreach (var binding in disconnectedPlayers)
+                {
+                    status += $"  座位 {binding.seatIndex}: 玩家 {binding.playerId} ({binding.playerName}) [离线]\n";
+                }
+            }
+
             return status;
+        }
+
+        /// <summary>
+        /// 批量绑定玩家列表
+        /// </summary>
+        public int BatchBindPlayers(List<ushort> playerIds)
+        {
+            if (!isInitialized)
+            {
+                LogDebug("绑定器尚未初始化，无法批量绑定");
+                return 0;
+            }
+
+            int successCount = 0;
+            var availableSeats = GetAvailableSeatIndices();
+
+            for (int i = 0; i < playerIds.Count && i < availableSeats.Count; i++)
+            {
+                var playerId = playerIds[i];
+                var seatIndex = availableSeats[i];
+                string playerName = $"Player_{playerId}";
+
+                if (BindPlayerToSeat(playerId, seatIndex, playerName))
+                {
+                    successCount++;
+                }
+            }
+
+            LogDebug($"批量绑定完成：成功绑定 {successCount}/{playerIds.Count} 个玩家");
+            return successCount;
         }
 
         #endregion
@@ -600,30 +684,36 @@ namespace Classroom.Player
         [ContextMenu("显示所有绑定详情")]
         public void ShowAllBindingDetails()
         {
-            string details = "=== 详细绑定信息 ===\n";
+            string details = GetBindingStatus();
+            Debug.Log(details);
+        }
 
-            foreach (var kvp in seatBindings)
+        [ContextMenu("测试自动绑定")]
+        public void TestAutoBinding()
+        {
+            if (!isInitialized)
             {
-                var binding = kvp.Value;
-                details += $"座位 {binding.seatIndex}: ";
-
-                if (binding.isOccupied)
-                {
-                    details += $"玩家 {binding.playerId} ({binding.playerName}) ";
-                    details += $"- {(binding.isActive ? "活跃" : "离线")}";
-                }
-                else
-                {
-                    details += "空闲";
-                }
-
-                details += "\n";
+                LogDebug("绑定器未初始化，无法测试");
+                return;
             }
 
-            Debug.Log(details);
+            // 模拟绑定几个测试玩家
+            var testPlayers = new List<ushort> { 1, 2, 3, 4 };
+            BatchBindPlayers(testPlayers);
+            ShowAllBindingDetails();
         }
 
         #endregion
 
+        #region 生命周期管理
+
+        private void OnDestroy()
+        {
+            UnsubscribeFromEvents();
+            ClearAllBindings();
+            LogDebug("SeatingPlayerBinder已销毁");
+        }
+
+        #endregion
     }
 }
