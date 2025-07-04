@@ -402,7 +402,6 @@ namespace Core.Network
         {
             ushort playerIdUShort = (ushort)playerId;
             LogDebug($"收到返回房间请求: 玩家{playerIdUShort} - {reason}");
-
             // 触发返回房间请求事件
             OnReturnToRoomRequest?.Invoke(playerIdUShort, reason);
         }
@@ -411,7 +410,7 @@ namespace Core.Network
         void OnForceReturnToRoom_RPC(string reason)
         {
             LogDebug($"收到强制返回房间通知: {reason}");
-
+            MessageNotifier.Show("强制返回房间", MessageType.System);
             // 触发强制返回房间事件
             OnForceReturnToRoom?.Invoke(reason);
 
@@ -426,7 +425,6 @@ namespace Core.Network
             ushort targetPlayerIdUShort = (ushort)targetPlayerId;
 
             LogDebug($"收到卡牌使用RPC: 玩家{playerIdUShort}使用{cardName}(ID:{cardId}), 目标:{targetPlayerIdUShort}");
-
             // 触发静态事件
             OnCardUsed?.Invoke(playerIdUShort, cardId, targetPlayerIdUShort, cardName);
 

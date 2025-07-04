@@ -310,7 +310,11 @@ namespace Cards.UI
         #endregion
 
         #region 目标检测
-
+        private bool IsMousePositionValid(Vector2 mousePos)
+        {
+            return mousePos.x >= 0 && mousePos.x <= Screen.width &&
+                   mousePos.y >= 0 && mousePos.y <= Screen.height;
+        }
         /// <summary>
         /// 更新目标检测
         /// </summary>
@@ -319,7 +323,7 @@ namespace Cards.UI
             // 获取鼠标位置
             Vector2 mouseScreenPos = Input.mousePosition;
 
-            // 🔧 添加边界检查
+            // 边界检查
             if (!IsMousePositionValid(mouseScreenPos))
             {
                 UpdateTargetState(TargetDetectionResult.None, 0, null);
@@ -329,12 +333,12 @@ namespace Cards.UI
             // 更新箭头终点位置
             UpdateArrowEndPosition(mouseScreenPos);
 
-            // 先检测PlayerConsole
+            // 检测目标
             TargetDetectionResult newTargetType = TargetDetectionResult.None;
             ushort newTargetPlayerId = 0;
             NetworkUI.PlayerConsoleInfo newTargetConsole = null;
 
-            // 🔧 修复4: 添加详细的检测日志
+            // 检测PlayerConsole (使用back图像)
             bool playerDetected = DetectPlayerConsoleTarget(mouseScreenPos, out newTargetPlayerId, out newTargetConsole);
 
             if (playerDetected)
@@ -361,11 +365,6 @@ namespace Cards.UI
             // 更新目标状态
             UpdateTargetState(newTargetType, newTargetPlayerId, newTargetConsole);
         }
-        private bool IsMousePositionValid(Vector2 mousePos)
-        {
-            return mousePos.x >= 0 && mousePos.x <= Screen.width &&
-                   mousePos.y >= 0 && mousePos.y <= Screen.height;
-        }
 
         /// <summary>
         /// 更新箭头终点位置
@@ -388,7 +387,7 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 检测PlayerConsole目标 - ✅ 使用NetworkUI的公共接口
+        /// 检测PlayerConsole目标 - 直接使用back图像检测
         /// </summary>
         private bool DetectPlayerConsoleTarget(Vector2 screenPosition, out ushort playerId, out NetworkUI.PlayerConsoleInfo consoleInfo)
         {
@@ -397,12 +396,13 @@ namespace Cards.UI
 
             if (networkUI == null) return false;
 
-            // 直接调用NetworkUI检测，让它处理摄像机逻辑
+            // 直接使用back图像区域检测
             playerId = networkUI.GetPlayerConsoleAtPoint(screenPosition, uiCamera);
 
             if (playerId > 0)
             {
                 consoleInfo = networkUI.GetPlayerConsoleInfo(playerId);
+                LogDebug($"检测到玩家目标: {playerId} (back图像区域)");
                 return consoleInfo != null;
             }
 

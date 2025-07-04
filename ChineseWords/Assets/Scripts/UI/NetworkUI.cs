@@ -72,8 +72,10 @@ namespace UI
             public bool isAlive;
             public bool isCurrentTurn;
             public GameObject consoleObject;
-            public Image beChoosenImage;      // 直接暴露BeChoosen Image
-            public RectTransform consoleRect; // Console的RectTransform
+            public Image beChoosenImage;      // BeChoosen效果Image
+            public RectTransform consoleRect; // 整个Console的RectTransform
+            public Image backImage;           // back图像组件
+            public RectTransform backRect;    // back图像的RectTransform（用于检测）
         }
 
         // 私有字段
@@ -400,7 +402,9 @@ namespace UI
                 isCurrentTurn = playerState.isCurrentTurn,
                 consoleObject = components.itemObject,
                 beChoosenImage = components.beChoosenImage,
-                consoleRect = components.itemObject.GetComponent<RectTransform>()
+                consoleRect = components.itemObject.GetComponent<RectTransform>(),
+                backImage = components.backImage,
+                backRect = components.backImage.GetComponent<RectTransform>()
             };
         }
 
@@ -443,7 +447,7 @@ namespace UI
         public bool IsPointInPlayerConsole(Vector2 screenPoint, ushort playerId, Camera uiCamera = null)
         {
             var consoleInfo = GetPlayerConsoleInfo(playerId);
-            if (consoleInfo?.consoleRect == null) return false;
+            if (consoleInfo?.backRect == null) return false;
 
             Canvas canvas = GetComponentInParent<Canvas>();
             if (canvas == null) return false;
@@ -454,21 +458,19 @@ namespace UI
             // 根据Canvas模式选择检测方法
             if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
             {
-                // Overlay模式：不用摄像机
                 success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    consoleInfo.consoleRect, screenPoint, null, out localPoint);
+                    consoleInfo.backRect, screenPoint, null, out localPoint);
             }
             else
             {
-                // Camera/WorldSpace模式：使用摄像机
                 Camera targetCamera = uiCamera ?? canvas.worldCamera ?? Camera.main;
                 success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    consoleInfo.consoleRect, screenPoint, targetCamera, out localPoint);
+                    consoleInfo.backRect, screenPoint, targetCamera, out localPoint);
             }
 
             if (!success) return false;
 
-            return consoleInfo.consoleRect.rect.Contains(localPoint);
+            return consoleInfo.backRect.rect.Contains(localPoint);
         }
 
         /// <summary>
