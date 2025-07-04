@@ -668,12 +668,10 @@ namespace Core.Network
             hasReceivedTurnChange = true;
 
             LogDebug($"回合变更: {(isMyTurn ? "轮到我了" : $"轮到玩家{playerId}")}");
-            MessageNotifier.Show("轮到我了", MessageType.Turn);
             if (isMyTurn)
             {
                 currentDisplayState = QuestionDisplayState.MyTurn;
-                LogDebug("状态变更为：MyTurn");
-
+                MessageNotifier.Show("轮到我了", MessageType.Turn);
                 if (!wasMyTurn)
                 {
                     LogDebug("轮到我答题，等待HostGameManager发送题目");
