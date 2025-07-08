@@ -56,10 +56,19 @@ MonoBehaviour:
   controlPoint2Position: 0.67
   curveIntensity: 0.2
   invertCurve: 1
+  refControlPoint1Height: 200
+  controlPoint1LengthRatio: 0.6
+  controlPoint2LengthRatio: 0.5
+  controlPoint1Height: 0
+  controlPoint2Height: 100
+  controlPoint3Height: 200
+  enableFloatingEffect: 0
+  floatingSpeed: 0.1
+  floatingThresholdMax: 0.5
   useLogarithmicDistribution: 0
   distributionPower: 2
   minScale: 0.2
   maxScale: 1
   useExternalControl: 0
-  externalStartPosition: {x: 0, y: 0}
-  externalEndPosition: {x: 0, y: 0}
+  externalStartPosition: {x: 0, y: 0, z: 0}
+  externalEndPosition: {x: 0, y: 0, z: 0}

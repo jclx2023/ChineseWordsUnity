@@ -381,7 +381,7 @@ namespace Managers
                 UpdateClockColor(false);
             }
 
-            LogDebug($"时钟更新: 剩余时间{currentTime}秒, 旋转角度{rotationAngle}度");
+            //LogDebug($"时钟更新: 剩余时间{currentTime}秒, 旋转角度{rotationAngle}度");
         }
 
         /// <summary>

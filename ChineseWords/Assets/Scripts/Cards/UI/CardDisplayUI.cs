@@ -693,7 +693,7 @@ namespace Cards.UI
         #region 动态位置计算
 
         /// <summary>
-        /// 计算动态扇形中心点（《杀戮尖塔》风格）
+        /// 计算动态扇形中心点
         /// </summary>
         private void CalculateDynamicFanCenter()
         {
@@ -725,7 +725,6 @@ namespace Cards.UI
 
             dynamicFanCenter = new Vector2(centerX, centerY);
 
-            LogDebug($"《杀戮尖塔》风格扇形中心: {dynamicFanCenter}");
             LogDebug($"屏幕高度: {screenHeight}, 卡牌可见高度: {visibleCardHeight}");
         }
 
@@ -757,11 +756,6 @@ namespace Cards.UI
         /// </summary>
         private void CreateThumbnailCards(List<CardDisplayData> cardDataList)
         {
-            if (cardUIComponents == null)
-            {
-                LogError("CardUIComponents未设置，无法创建缩略图");
-                return;
-            }
 
             // 清理现有缩略图
             ClearThumbnailCards();
@@ -887,11 +881,6 @@ namespace Cards.UI
         /// </summary>
         private void CreateCardUIs(List<CardDisplayData> cardDataList)
         {
-            if (cardUIComponents == null)
-            {
-                LogError("CardUIComponents未设置，无法创建扇形卡牌");
-                return;
-            }
 
             // 清理现有卡牌
             ClearFanDisplayCards();

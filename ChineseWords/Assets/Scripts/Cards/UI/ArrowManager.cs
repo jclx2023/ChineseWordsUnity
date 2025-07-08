@@ -344,12 +344,10 @@ namespace Cards.UI
             if (playerDetected)
             {
                 newTargetType = TargetDetectionResult.PlayerConsole;
-                LogDebug($"检测到玩家目标: {newTargetPlayerId}");
             }
             else if (DetectCenterAreaTarget(mouseScreenPos))
             {
                 newTargetType = TargetDetectionResult.CenterArea;
-                LogDebug("检测到中央区域目标");
             }
 
             // 验证目标有效性
@@ -358,7 +356,6 @@ namespace Cards.UI
                 if (!ValidateTarget(newTargetType, newTargetPlayerId))
                 {
                     newTargetType = TargetDetectionResult.Invalid;
-                    LogDebug($"目标无效 - 类型: {newTargetType}, 玩家: {newTargetPlayerId}");
                 }
             }
 
@@ -402,7 +399,6 @@ namespace Cards.UI
             if (playerId > 0)
             {
                 consoleInfo = networkUI.GetPlayerConsoleInfo(playerId);
-                LogDebug($"检测到玩家目标: {playerId} (back图像区域)");
                 return consoleInfo != null;
             }
 
@@ -533,11 +529,9 @@ namespace Cards.UI
             if (networkUI.ShowPlayerBeChosenEffect(playerId))
             {
                 currentHighlightedPlayerId = playerId;
-                LogDebug($"显示玩家{playerId}的BeChoosen效果");
             }
             else
             {
-                LogWarning($"无法显示玩家{playerId}的BeChoosen效果");
             }
         }
 
@@ -549,7 +543,6 @@ namespace Cards.UI
             if (networkUI == null || currentHighlightedPlayerId == 0) return;
 
             networkUI.HidePlayerBeChosenEffect(currentHighlightedPlayerId);
-            LogDebug($"清理玩家{currentHighlightedPlayerId}的BeChoosen效果");
             currentHighlightedPlayerId = 0;
         }
 

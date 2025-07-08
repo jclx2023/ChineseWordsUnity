@@ -67,6 +67,13 @@ MonoBehaviour:
   - OnSeatsAndCharacters_RPC
   - OnPlayerHandCardsReceived_RPC
   - OnPlayerHealthChangeRequested_RPC
+  - OnGiveCardToPlayerRequested_RPC
+  - OnSetGlobalDamageMultiplierRequested_RPC
+  - OnSetPlayerNextQuestionTypeRequested_RPC
+  - OnSetPlayerSkipFlagRequested_RPC
+  - OnSetPlayerTimeBonusRequested_RPC
+  - OnSetPlayerTimePenaltyRequested_RPC
+  - OnStealRandomCardRequested_RPC
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1
