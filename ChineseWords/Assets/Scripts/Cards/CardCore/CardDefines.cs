@@ -350,7 +350,7 @@ namespace Cards.Core
         };
 
         // »’÷æ±Í«©
-        public const string LOG_TAG = "[CardSystem]";
+        public const string LOG_TAG = "[CardSystemManager]";
         public const string LOG_TAG_EFFECT = "[CardEffect]";
         public const string LOG_TAG_UI = "[CardUI]";
         public const string LOG_TAG_NETWORK = "[CardNetwork]";

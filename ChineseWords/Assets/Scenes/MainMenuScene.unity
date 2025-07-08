@@ -4250,6 +4250,10 @@ PrefabInstance:
       value: "\u8FDB\u5165\u5927\u5385"
       objectReference: {fileID: 0}
     - target: {fileID: 2699989958232248942, guid: 90abeac83916a504393dce6907d68fac, type: 3}
+      propertyPath: m_fontAsset
+      value: 
+      objectReference: {fileID: 11400000, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
+    - target: {fileID: 2699989958232248942, guid: 90abeac83916a504393dce6907d68fac, type: 3}
       propertyPath: m_fontStyle
       value: 1
       objectReference: {fileID: 0}
@@ -4266,8 +4270,16 @@ PrefabInstance:
       value: 0.19607843
       objectReference: {fileID: 0}
     - target: {fileID: 2699989958232248942, guid: 90abeac83916a504393dce6907d68fac, type: 3}
+      propertyPath: m_sharedMaterial
+      value: 
+      objectReference: {fileID: 4633198236633052663, guid: 9a8779ce46de8f04ea744d9c6e4576ed, type: 2}
+    - target: {fileID: 2699989958232248942, guid: 90abeac83916a504393dce6907d68fac, type: 3}
       propertyPath: m_fontColor32.rgba
       value: 4280036146
+      objectReference: {fileID: 0}
+    - target: {fileID: 2699989958232248942, guid: 90abeac83916a504393dce6907d68fac, type: 3}
+      propertyPath: m_hasFontAssetChanged
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3074295712309297999, guid: 90abeac83916a504393dce6907d68fac, type: 3}
       propertyPath: m_Pivot.x

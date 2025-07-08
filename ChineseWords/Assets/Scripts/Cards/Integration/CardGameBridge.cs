@@ -8,22 +8,20 @@ using Cards.Effects;
 using Cards.Player;
 using Managers;
 using UI;
-using Photon.Pun;
 
 namespace Cards.Integration
 {
     /// <summary>
-    /// 卡牌游戏桥接器
+    /// 卡牌游戏桥接器 - 完全解耦版
     /// 负责连接卡牌系统与现有游戏系统，实现卡牌效果的具体执行
-    /// 不负责效果注册，只提供效果执行的具体实现
-    /// 使用事件驱动的初始化方式
+    /// 修复：彻底解耦PUN依赖，使用HostGameManager状态判断，移除单例模式
     /// </summary>
     public class CardGameBridge : MonoBehaviour
     {
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // 单例实例
+        // 静态实例引用（非单例模式）
         public static CardGameBridge Instance { get; private set; }
 
         // 初始化状态
@@ -42,9 +40,9 @@ namespace Cards.Integration
 
         #endregion
 
-        #region 效果状态缓存
+        #region Host端效果状态缓存（只在Host端有效）
 
-        // 持续性效果状态
+        // 持续性效果状态 - 只在Host端维护
         private Dictionary<int, float> playerTimeBonuses;      // 玩家ID -> 时间加成
         private Dictionary<int, float> playerTimePenalties;    // 玩家ID -> 时间减成
         private Dictionary<int, bool> playerSkipFlags;         // 玩家ID -> 跳过标记
@@ -55,19 +53,13 @@ namespace Cards.Integration
 
         #endregion
 
-        private static Dictionary<ushort, PlayerHPState> localPlayerStates = new Dictionary<ushort, PlayerHPState>();
-        private class PlayerHPState
-        {
-            public int currentHealth;
-            public int maxHealth;
-            public bool isAlive;
-        }
-
         #region Unity生命周期
 
         private void Awake()
         {
-            LogDebug($"{GetType().Name} 组件已创建，等待单例设置");
+            // 设置静态引用（由CardSystemManager管理生命周期）
+            Instance = this;
+            LogDebug($"{GetType().Name} 静态引用已设置，由CardSystemManager管理");
             InitializeStateCaches();
         }
 
@@ -79,10 +71,12 @@ namespace Cards.Integration
 
         private void OnDestroy()
         {
+            // 清理静态引用
             if (Instance == this)
             {
                 UnsubscribeFromAllEvents();
                 Instance = null;
+                LogDebug("CardGameBridge静态引用已清理");
             }
         }
 
@@ -342,32 +336,42 @@ namespace Cards.Integration
 
         #endregion
 
-        #region 系统访问代理 - 供CardEffects使用
+        #region 网络化的系统访问代理 - 供CardEffects使用
 
         /// <summary>
-        /// 修改玩家生命值 - 网络同步版本
+        /// 检查当前端是否为Host端（通过HostGameManager是否启用判断）
+        /// </summary>
+        private static bool IsHostSide()
+        {
+            var hostManager = HostGameManager.Instance;
+            return hostManager != null && hostManager.enabled && hostManager.IsInitialized;
+        }
+
+        /// <summary>
+        /// 修改玩家生命值 - 网络同步版本（解耦版）
         /// </summary>
         public static bool ModifyPlayerHealth(int playerId, int healthChange)
         {
-            // 如果是Host端且hpManager可用，直接执行
-            if (PhotonNetwork.IsMasterClient && Instance?.hpManager != null)
+            // 如果是Host端且可以直接执行，直接执行
+            if (IsHostSide() && Instance?.hpManager != null)
             {
-                Instance?.LogDebug($"Host直接执行血量修改: 玩家{playerId}, 变化{healthChange}");
+                Instance?.LogDebug($"Host端直接执行血量修改: 玩家{playerId}, 变化{healthChange}");
                 return ExecuteHealthChangeLocally(playerId, healthChange);
             }
 
-            // 如果是客户端，通过网络请求Host执行
+            // 如果是客户端或无法直接执行，通过网络请求Host执行
             if (NetworkManager.Instance != null)
             {
-                Instance?.LogDebug($"客户端请求血量修改: 玩家{playerId}, 变化{healthChange}");
+                Instance?.LogDebug($"通过网络请求血量修改: 玩家{playerId}, 变化{healthChange}");
                 string reason = healthChange > 0 ? "卡牌治疗效果" : "卡牌伤害效果";
                 NetworkManager.Instance.RequestPlayerHealthChange(playerId, healthChange, reason);
                 return true; // 假设成功，实际结果通过网络同步回来
             }
 
-            Instance?.LogDebug("无法修改玩家血量 - 既不是Host也无法发送网络请求");
+            Instance?.LogDebug("无法修改玩家血量 - 既无法直接执行也无法发送网络请求");
             return false;
         }
+
         /// <summary>
         /// 在Host端执行血量修改
         /// </summary>
@@ -397,115 +401,304 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// 设置玩家时间加成
+        /// 设置玩家时间加成 - 网络化修复版（解耦版）
         /// </summary>
         public static void SetPlayerTimeBonus(int playerId, float bonusTime)
         {
-            if (Instance == null) return;
+            // Host端直接设置
+            if (IsHostSide() && Instance != null)
+            {
+                Instance.playerTimeBonuses[playerId] = bonusTime;
+                Instance.LogDebug($"Host端直接设置玩家{playerId}时间加成:{bonusTime}秒");
+                return;
+            }
 
-            Instance.playerTimeBonuses[playerId] = bonusTime;
-            Instance.LogDebug($"设置玩家{playerId}时间加成:{bonusTime}秒");
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestSetPlayerTimeBonus(playerId, bonusTime);
+                Instance?.LogDebug($"请求设置玩家{playerId}时间加成:{bonusTime}秒");
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法设置时间加成");
+            }
         }
 
         /// <summary>
-        /// 设置玩家时间减成
+        /// 设置玩家时间减成 - 网络化修复版（解耦版）
         /// </summary>
         public static void SetPlayerTimePenalty(int playerId, float penaltyTime)
         {
-            if (Instance == null) return;
+            // Host端直接设置
+            if (IsHostSide() && Instance != null)
+            {
+                Instance.playerTimePenalties[playerId] = penaltyTime;
+                Instance.LogDebug($"Host端直接设置玩家{playerId}时间减成:{penaltyTime}秒");
+                return;
+            }
 
-            Instance.playerTimePenalties[playerId] = penaltyTime;
-            Instance.LogDebug($"设置玩家{playerId}时间减成:{penaltyTime}秒");
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestSetPlayerTimePenalty(playerId, penaltyTime);
+                Instance?.LogDebug($"请求设置玩家{playerId}时间减成:{penaltyTime}秒");
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法设置时间减成");
+            }
         }
 
         /// <summary>
-        /// 设置玩家跳过标记
+        /// 设置玩家跳过标记 - 网络化修复版（解耦版）
         /// </summary>
         public static void SetPlayerSkipFlag(int playerId, bool shouldSkip = true)
         {
-            if (Instance == null) return;
+            // Host端直接设置
+            if (IsHostSide() && Instance != null)
+            {
+                Instance.playerSkipFlags[playerId] = shouldSkip;
+                Instance.LogDebug($"Host端直接设置玩家{playerId}跳过标记:{shouldSkip}");
+                return;
+            }
 
-            Instance.playerSkipFlags[playerId] = shouldSkip;
-            Instance.LogDebug($"设置玩家{playerId}跳过标记:{shouldSkip}");
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestSetPlayerSkipFlag(playerId, shouldSkip);
+                Instance?.LogDebug($"请求设置玩家{playerId}跳过标记:{shouldSkip}");
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法设置跳过标记");
+            }
         }
 
         /// <summary>
-        /// 设置玩家下次题目类型
+        /// 设置玩家下次题目类型 - 网络化修复版（解耦版）
         /// </summary>
         public static void SetPlayerNextQuestionType(int playerId, string questionType)
         {
-            if (Instance == null) return;
+            // Host端直接设置
+            if (IsHostSide() && Instance != null)
+            {
+                Instance.playerQuestionTypes[playerId] = questionType;
+                Instance.LogDebug($"Host端直接设置玩家{playerId}下次题目类型:{questionType}");
+                return;
+            }
 
-            Instance.playerQuestionTypes[playerId] = questionType;
-            Instance.LogDebug($"设置玩家{playerId}下次题目类型:{questionType}");
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestSetPlayerNextQuestionType(playerId, questionType);
+                Instance?.LogDebug($"请求设置玩家{playerId}下次题目类型:{questionType}");
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法设置题目类型");
+            }
         }
 
         /// <summary>
-        /// 设置答题代理
-        /// </summary>
-        public static void SetAnswerDelegate(int originalPlayerId, int delegatePlayerId)
-        {
-            if (Instance == null) return;
-
-            Instance.playerAnswerDelegates[originalPlayerId] = delegatePlayerId;
-            Instance.LogDebug($"设置玩家{originalPlayerId}的答题代理为玩家{delegatePlayerId}");
-        }
-
-        /// <summary>
-        /// 设置玩家额外提示
-        /// </summary>
-        public static void SetPlayerExtraHint(int playerId, bool hasExtraHint = true)
-        {
-            if (Instance == null) return;
-
-            Instance.playerExtraHints[playerId] = hasExtraHint;
-            Instance.LogDebug($"设置玩家{playerId}额外提示:{hasExtraHint}");
-        }
-
-        /// <summary>
-        /// 设置全局伤害倍数
+        /// 设置全局伤害倍数 - 网络化修复版（解耦版）
         /// </summary>
         public static void SetGlobalDamageMultiplier(float multiplier)
         {
-            if (Instance == null) return;
+            // Host端直接设置
+            if (IsHostSide() && Instance != null)
+            {
+                Instance.globalDamageMultiplier = multiplier;
+                Instance.LogDebug($"Host端直接设置全局伤害倍数:{multiplier}");
+                return;
+            }
 
-            Instance.globalDamageMultiplier = multiplier;
-            Instance.LogDebug($"设置全局伤害倍数:{multiplier}");
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestSetGlobalDamageMultiplier(multiplier);
+                Instance?.LogDebug($"请求设置全局伤害倍数:{multiplier}");
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法设置伤害倍数");
+            }
         }
 
         /// <summary>
-        /// 给玩家添加卡牌
+        /// 给玩家添加卡牌 - 网络化修复版（解耦版）
         /// </summary>
         public static bool GiveCardToPlayer(int playerId, int cardId = 0, int count = 1)
         {
-            if (Instance?.playerCardManager == null) return false;
+            // Host端直接执行
+            if (IsHostSide() && Instance?.playerCardManager != null)
+            {
+                bool success = true;
+                for (int i = 0; i < count; i++)
+                {
+                    if (!Instance.playerCardManager.GiveCardToPlayer(playerId, cardId))
+                    {
+                        success = false;
+                        break;
+                    }
+                }
+                Instance.LogDebug($"Host端直接给玩家{playerId}添加{count}张卡牌(ID:{cardId})，成功:{success}");
+                return success;
+            }
+
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestGiveCardToPlayer(playerId, cardId, count);
+                Instance?.LogDebug($"请求给玩家{playerId}添加{count}张卡牌(ID:{cardId})");
+                return true; // 假设成功，实际结果通过网络同步回来
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法添加卡牌");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 偷取玩家卡牌 - 网络化修复版（解耦版）
+        /// </summary>
+        public static int? StealRandomCardFromPlayer(int fromPlayerId, int toPlayerId)
+        {
+            // Host端直接执行
+            if (IsHostSide() && Instance?.playerCardManager != null)
+            {
+                var fromPlayerHand = Instance.playerCardManager.GetPlayerHand(fromPlayerId);
+                if (fromPlayerHand.Count == 0)
+                {
+                    Instance.LogDebug($"Host端：玩家{fromPlayerId}没有可偷取的卡牌");
+                    return null;
+                }
+
+                // 随机选择一张卡牌
+                int randomIndex = Random.Range(0, fromPlayerHand.Count);
+                int stolenCardId = fromPlayerHand[randomIndex];
+
+                // 执行转移
+                bool success = Instance.playerCardManager.TransferCard(fromPlayerId, toPlayerId, stolenCardId);
+
+                if (success)
+                {
+                    Instance.LogDebug($"Host端成功从玩家{fromPlayerId}偷取卡牌{stolenCardId}到玩家{toPlayerId}");
+                    return stolenCardId;
+                }
+                else
+                {
+                    Instance.LogDebug($"Host端偷取卡牌失败");
+                    return null;
+                }
+            }
+
+            // Client端通过网络请求
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RequestStealRandomCard(fromPlayerId, toPlayerId);
+                Instance?.LogDebug($"请求从玩家{fromPlayerId}偷取卡牌到玩家{toPlayerId}");
+                return 0; // 返回占位值，实际结果通过网络同步回来
+            }
+            else
+            {
+                Instance?.LogDebug("NetworkManager不可用，无法偷取卡牌");
+                return null;
+            }
+        }
+
+        #endregion
+
+        #region Host端RPC接收方法 - 处理来自Client的请求（简化版）
+
+        /// <summary>
+        /// Host端接收并执行时间加成设置
+        /// </summary>
+        public void OnSetPlayerTimeBonusReceived(int playerId, float bonusTime)
+        {
+            if (!IsHostSide()) return;
+
+            playerTimeBonuses[playerId] = bonusTime;
+            LogDebug($"Host端通过RPC设置玩家{playerId}时间加成:{bonusTime}秒");
+        }
+
+        /// <summary>
+        /// Host端接收并执行时间减成设置
+        /// </summary>
+        public void OnSetPlayerTimePenaltyReceived(int playerId, float penaltyTime)
+        {
+            if (!IsHostSide()) return;
+
+            playerTimePenalties[playerId] = penaltyTime;
+            LogDebug($"Host端通过RPC设置玩家{playerId}时间减成:{penaltyTime}秒");
+        }
+
+        /// <summary>
+        /// Host端接收并执行跳过标记设置
+        /// </summary>
+        public void OnSetPlayerSkipFlagReceived(int playerId, bool shouldSkip)
+        {
+            if (!IsHostSide()) return;
+
+            playerSkipFlags[playerId] = shouldSkip;
+            LogDebug($"Host端通过RPC设置玩家{playerId}跳过标记:{shouldSkip}");
+        }
+
+        /// <summary>
+        /// Host端接收并执行题目类型设置
+        /// </summary>
+        public void OnSetPlayerNextQuestionTypeReceived(int playerId, string questionType)
+        {
+            if (!IsHostSide()) return;
+
+            playerQuestionTypes[playerId] = questionType;
+            LogDebug($"Host端通过RPC设置玩家{playerId}下次题目类型:{questionType}");
+        }
+
+        /// <summary>
+        /// Host端接收并执行全局伤害倍数设置
+        /// </summary>
+        public void OnSetGlobalDamageMultiplierReceived(float multiplier)
+        {
+            if (!IsHostSide()) return;
+
+            globalDamageMultiplier = multiplier;
+            LogDebug($"Host端通过RPC设置全局伤害倍数:{multiplier}");
+        }
+
+        /// <summary>
+        /// Host端接收并执行给卡牌请求
+        /// </summary>
+        public void OnGiveCardToPlayerReceived(int playerId, int cardId, int count)
+        {
+            if (!IsHostSide() || playerCardManager == null) return;
 
             bool success = true;
             for (int i = 0; i < count; i++)
             {
-                if (!Instance.playerCardManager.GiveCardToPlayer(playerId, cardId))
+                if (!playerCardManager.GiveCardToPlayer(playerId, cardId))
                 {
                     success = false;
                     break;
                 }
             }
 
-            Instance?.LogDebug($"给玩家{playerId}添加{count}张卡牌(ID:{cardId})，成功:{success}");
-            return success;
+            LogDebug($"Host端通过RPC给玩家{playerId}添加{count}张卡牌(ID:{cardId})，成功:{success}");
         }
 
         /// <summary>
-        /// 偷取玩家卡牌
+        /// Host端接收并执行偷取卡牌请求
         /// </summary>
-        public static int? StealRandomCardFromPlayer(int fromPlayerId, int toPlayerId)
+        public void OnStealRandomCardReceived(int fromPlayerId, int toPlayerId)
         {
-            if (Instance?.playerCardManager == null) return null;
+            if (!IsHostSide() || playerCardManager == null) return;
 
-            var fromPlayerHand = Instance.playerCardManager.GetPlayerHand(fromPlayerId);
+            var fromPlayerHand = playerCardManager.GetPlayerHand(fromPlayerId);
             if (fromPlayerHand.Count == 0)
             {
-                Instance?.LogDebug($"玩家{fromPlayerId}没有可偷取的卡牌");
-                return null;
+                LogDebug($"Host端通过RPC：玩家{fromPlayerId}没有可偷取的卡牌");
+                return;
             }
 
             // 随机选择一张卡牌
@@ -513,23 +706,21 @@ namespace Cards.Integration
             int stolenCardId = fromPlayerHand[randomIndex];
 
             // 执行转移
-            bool success = Instance.playerCardManager.TransferCard(fromPlayerId, toPlayerId, stolenCardId);
+            bool success = playerCardManager.TransferCard(fromPlayerId, toPlayerId, stolenCardId);
 
             if (success)
             {
-                Instance?.LogDebug($"成功从玩家{fromPlayerId}偷取卡牌{stolenCardId}到玩家{toPlayerId}");
-                return stolenCardId;
+                LogDebug($"Host端通过RPC成功从玩家{fromPlayerId}偷取卡牌{stolenCardId}到玩家{toPlayerId}");
             }
             else
             {
-                Instance?.LogDebug($"偷取卡牌失败");
-                return null;
+                LogDebug($"Host端通过RPC偷取卡牌失败");
             }
         }
 
         #endregion
 
-        #region 效果状态查询 - 供游戏系统使用
+        #region 效果状态查询 - 供Host端游戏系统使用（保持不变）
 
         /// <summary>
         /// 获取玩家时间调整（加成-减成）
@@ -566,14 +757,6 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// 检查玩家是否有额外提示
-        /// </summary>
-        public bool HasPlayerExtraHint(int playerId)
-        {
-            return playerExtraHints.ContainsKey(playerId) && playerExtraHints[playerId];
-        }
-
-        /// <summary>
         /// 获取当前伤害倍数
         /// </summary>
         public float GetCurrentDamageMultiplier()
@@ -583,7 +766,7 @@ namespace Cards.Integration
 
         #endregion
 
-        #region 游戏流程集成钩子
+        #region 游戏流程集成钩子 - Host端使用（保持不变）
 
         /// <summary>
         /// 在计时器启动前调用，应用时间调整
@@ -615,15 +798,6 @@ namespace Cards.Integration
                 LogDebug($"玩家{playerId}跳过此题");
                 playerSkipFlags.Remove(playerId); // 清除跳过标记
                 return false; // 返回false表示跳过
-            }
-
-            // 检查答题代理
-            var delegatePlayer = GetPlayerAnswerDelegate(playerId);
-            if (delegatePlayer.HasValue)
-            {
-                actualAnswerPlayerId = delegatePlayer.Value;
-                LogDebug($"玩家{playerId}的答题代理为玩家{actualAnswerPlayerId}");
-                playerAnswerDelegates.Remove(playerId); // 清除代理标记
             }
 
             return true; // 返回true表示正常答题
@@ -665,28 +839,50 @@ namespace Cards.Integration
 
         #endregion
 
-        #region 玩家状态查询 - 供CardEffectSystem使用
+        #region 玩家状态查询 - 供CardEffectSystem使用（修复版）
 
         /// <summary>
-        /// 获取所有存活玩家ID
+        /// 获取所有存活玩家ID - 修复版（使用NetworkUI）
         /// </summary>
         public static List<int> GetAllAlivePlayerIds()
         {
-            if (Instance?.hpManager == null)
-            {
-                Instance?.LogDebug("PlayerHPManager不可用，返回空列表");
-                return new List<int>();
-            }
-
-            var alivePlayerIds = Instance.hpManager.GetAlivePlayerIds();
             var result = new List<int>();
 
-            foreach (var playerId in alivePlayerIds)
+            // 方案1：通过NetworkUI + NetworkManager组合获取（适用于所有端）
+            var networkUI = FindObjectOfType<NetworkUI>();
+            var networkManager = NetworkManager.Instance;
+
+            if (networkUI != null && networkManager != null)
             {
-                result.Add((int)playerId);
+                // 获取所有在线玩家ID
+                var allOnlinePlayerIds = networkManager.GetAllOnlinePlayerIds();
+
+                // 过滤出存活的玩家
+                foreach (var playerId in allOnlinePlayerIds)
+                {
+                    if (networkUI.ContainsPlayer(playerId) && networkUI.IsPlayerAlive(playerId))
+                    {
+                        result.Add((int)playerId);
+                    }
+                }
+
+                Instance?.LogDebug($"从NetworkUI+NetworkManager获取到{result.Count}名存活玩家");
+                return result;
             }
 
-            Instance?.LogDebug($"获取到{result.Count}名存活玩家");
+            // 方案2：Host端直接使用hpManager（向后兼容）
+            if (Instance?.hpManager != null)
+            {
+                var alivePlayerIds = Instance.hpManager.GetAlivePlayerIds();
+                foreach (var playerId in alivePlayerIds)
+                {
+                    result.Add((int)playerId);
+                }
+                Instance?.LogDebug($"从PlayerHPManager获取到{result.Count}名存活玩家");
+                return result;
+            }
+
+            Instance?.LogDebug("所有方法都失败，返回空列表");
             return result;
         }
 
@@ -707,13 +903,13 @@ namespace Cards.Integration
         }
 
         /// <summary>
-        /// 检查玩家是否存活
+        /// 检查玩家是否存活 - 修复版（使用NetworkUI）
         /// </summary>
         public static bool IsPlayerAlive(int playerId)
         {
             ushort playerIdUShort = (ushort)playerId;
 
-            // 从NetworkUI获取状态
+            // 方案1：从NetworkUI获取状态（适用于所有端）
             var networkUI = FindObjectOfType<NetworkUI>();
             if (networkUI != null && networkUI.ContainsPlayer(playerIdUShort))
             {
@@ -721,25 +917,14 @@ namespace Cards.Integration
                 return isAlive;
             }
 
-            // 回退到Host端的hpManager
+            // 方案2：回退到Host端的hpManager
             if (Instance?.hpManager != null)
             {
                 return Instance.hpManager.IsPlayerAlive(playerIdUShort);
             }
 
-            // 最后的回退
+            // 方案3：最后的回退
             return true;
-        }
-
-        /// <summary>
-        /// 获取所有玩家ID（包括死亡的）
-        /// </summary>
-        public static List<int> GetAllPlayerIds()
-        {
-            if (Instance?.playerCardManager == null) return new List<int>();
-
-            var playerStates = Instance.playerCardManager.GetAllPlayerCardSummaries();
-            return playerStates.Keys.ToList();
         }
 
         #endregion
@@ -824,6 +1009,7 @@ namespace Cards.Integration
                 Debug.Log($"[CardGameBridge] {message}");
             }
         }
+
         private void LogWarning(string message)
         {
             if (enableDebugLogs)
@@ -831,34 +1017,10 @@ namespace Cards.Integration
                 Debug.LogWarning($"[CardGameBridge] {message}");
             }
         }
+
         private void LogError(string message)
         {
             Debug.LogError($"[CardGameBridge] {message}");
-        }
-
-        #endregion
-
-        #region 公共接口
-
-        /// <summary>
-        /// 强制刷新系统引用（运行时使用）
-        /// </summary>
-        public void RefreshSystemReferences()
-        {
-            LogDebug("刷新系统引用");
-            AcquireSystemReferences();
-        }
-
-        /// <summary>
-        /// 检查桥接器是否准备就绪
-        /// </summary>
-        public bool IsReady()
-        {
-            return isInitialized &&
-                   playerCardManager != null &&
-                   effectSystem != null &&
-                   effectSystem.IsSystemReady() &&
-                   cardConfig != null;
         }
 
         #endregion
