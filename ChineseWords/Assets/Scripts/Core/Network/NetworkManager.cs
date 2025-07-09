@@ -731,7 +731,7 @@ namespace Core.Network
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
-                Debug.Log($"[NetworkManager-Simplified] {message}");
+                Debug.Log($"[NetworkManager] {message}");
         }
 
         #endregion

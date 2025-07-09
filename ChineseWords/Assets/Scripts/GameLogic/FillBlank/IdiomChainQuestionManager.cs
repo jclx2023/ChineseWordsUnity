@@ -245,17 +245,10 @@ namespace GameLogic.FillBlank
                         }
                     }
                 }
-
-                LogDebug($"已加载 {firstCandidates.Count} 个首题候选成语");
             }
             catch (System.Exception e)
             {
                 LogError($"加载首题候选失败: {e.Message}");
-            }
-
-            if (firstCandidates.Count == 0)
-            {
-                LogError("首题候选列表为空，成语接龙可能无法正常工作");
             }
         }
 

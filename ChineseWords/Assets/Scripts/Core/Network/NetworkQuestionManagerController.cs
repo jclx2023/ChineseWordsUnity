@@ -800,7 +800,7 @@ namespace Core.Network
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[NQMC-Fixed] {message}");
+                Debug.Log($"[NQMC] {message}");
             }
         }
 

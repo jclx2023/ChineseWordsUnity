@@ -215,7 +215,6 @@ namespace GameLogic.FillBlank
         /// </summary>
         protected override void LoadNetworkQuestion(NetworkQuestionData networkData)
         {
-            LogDebug("¼ÓÔØÍøÂçHardFillÌâÄ¿");
 
             if (!ValidateNetworkData(networkData))
             {

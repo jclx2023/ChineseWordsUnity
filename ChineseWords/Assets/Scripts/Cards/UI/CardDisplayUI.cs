@@ -1208,7 +1208,6 @@ namespace Cards.UI
             // 触发事件
             OnCardHoverEnter?.Invoke(cardUI);
 
-            LogDebug($"卡牌悬停进入: {cardUI.name}");
         }
 
         /// <summary>
@@ -1233,7 +1232,6 @@ namespace Cards.UI
             // 触发事件
             OnCardHoverExit?.Invoke(cardUI);
 
-            LogDebug($"卡牌悬停离开: {cardUI.name}");
         }
 
         /// <summary>

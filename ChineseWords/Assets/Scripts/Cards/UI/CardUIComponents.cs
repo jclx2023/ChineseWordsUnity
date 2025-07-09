@@ -72,8 +72,6 @@ namespace Cards.UI
                 }
             }
 
-            LogDebug($"开始创建卡牌UI: {cardData.cardName}");
-
             // 实例化预制体
             GameObject cardInstance = Instantiate(cardUIPrefab, parent);
 

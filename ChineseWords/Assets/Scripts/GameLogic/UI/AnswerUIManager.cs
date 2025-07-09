@@ -6,6 +6,7 @@ using Core;
 using Core.Network;
 using Classroom.Player;
 using UI.Blackboard;
+using UI.MessageSystem;
 
 namespace UI.Answer
 {
@@ -283,6 +284,7 @@ namespace UI.Answer
             if (!CanShowAnswerUI)
             {
                 LogDebug($"无法显示答题UI - 状态: {currentState}, 有题目: {HasValidQuestion()}, 我的回合: {IsMyTurn()}, 摄像机就绪: {cameraControllerReady}");
+                MessageNotifier.Show("现在没法答题哦", MessageType.Info);
                 return false;
             }
 

@@ -330,49 +330,5 @@ namespace UI.MessageSystem
             }
         }
         #endregion
-
-        #region 编辑器测试
-#if UNITY_EDITOR
-        [Header("编辑器测试")]
-        [SerializeField] private string testMessage = "测试消息";
-        [SerializeField] private MessageType testMessageType = MessageType.Info;
-
-        [ContextMenu("测试单条消息")]
-        private void TestMessage()
-        {
-            if (Application.isPlaying)
-                Show(testMessage, testMessageType);
-        }
-
-        [ContextMenu("测试所有类型")]
-        private void TestAllTypes()
-        {
-            if (Application.isPlaying)
-                StartCoroutine(TestAllTypesCoroutine());
-        }
-
-        [ContextMenu("测试队列")]
-        private void TestQueue()
-        {
-            if (Application.isPlaying)
-            {
-                Show("消息 1", MessageType.Info);
-                Show("消息 2", MessageType.Warning);
-                Show("紧急消息", MessageType.Error, 2f, 10);
-                Show("消息 3", MessageType.Success);
-            }
-        }
-
-        private IEnumerator TestAllTypesCoroutine()
-        {
-            var types = (MessageType[])System.Enum.GetValues(typeof(MessageType));
-            foreach (var type in types)
-            {
-                Show($"{type} 类型测试", type);
-                yield return new WaitForSeconds(3.5f);
-            }
-        }
-#endif
-        #endregion
     }
 }
