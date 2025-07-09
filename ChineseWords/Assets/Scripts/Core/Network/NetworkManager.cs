@@ -266,13 +266,27 @@ namespace Core.Network
         {
             if (!IsHost) return;
             SendRPC("OnPlayerAnswerResult_RPC", RpcTarget.All, (int)playerId, isCorrect, answer);
-            FindObjectOfType<PlayerCardManager>()?.ResetPlayerUsageOpportunity(playerId);
+            var cardManager = PlayerCardManager.Instance;
+            if (cardManager != null)
+            {
+                cardManager.ResetPlayerUsageOpportunity(playerId);
+            }
+            else
+            {
+                LogDebug("PlayerCardManager单例不存在，无法重置卡牌使用");
+            }
         }
 
         [PunRPC]
         void OnPlayerAnswerResult_RPC(int playerId, bool isCorrect, string answer)
         {
             NotifyComponent<NetworkUI>("OnPlayerAnswerResultReceived", (ushort)playerId, isCorrect, answer);
+            var cardManager = PlayerCardManager.Instance ?? FindObjectOfType<PlayerCardManager>();
+            if (cardManager != null)
+            {
+                cardManager.ResetPlayerUsageOpportunity(playerId);
+                LogDebug($"Client端也重置了玩家{playerId}的卡牌使用机会");
+            }
         }
 
         #endregion
