@@ -557,12 +557,33 @@ namespace Cards.UI
         {
             if (currentArrowRenderer == null) return;
 
-            // 根据目标状态设置箭头颜色
-            Color targetColor = GetArrowColorForTarget();
+            // 根据目标状态设置箭头描边
+            switch (currentTargetType)
+            {
+                case TargetDetectionResult.PlayerConsole:
+                case TargetDetectionResult.CenterArea:
+                    // 有效目标 - 显示绿色描边
+                    currentArrowRenderer.SetOutlineEnabled(true);
+                    currentArrowRenderer.SetOutlineColor(validTargetColor);
+                    currentArrowRenderer.SetOutlineWidth(2.0f);
+                    LogDebug($"箭头描边设置为有效状态: {validTargetColor}");
+                    break;
 
-            // TODO: 应用颜色到箭头节点
-            // 这里需要根据你的shader实现来设置颜色
-            // 目前暂时不实现，等shader完成后再添加
+                case TargetDetectionResult.Invalid:
+                    // 无效目标 - 显示红色/灰色描边
+                    currentArrowRenderer.SetOutlineEnabled(true);
+                    currentArrowRenderer.SetOutlineColor(invalidTargetColor);
+                    currentArrowRenderer.SetOutlineWidth(2.0f);
+                    LogDebug($"箭头描边设置为无效状态: {invalidTargetColor}");
+                    break;
+
+                case TargetDetectionResult.None:
+                default:
+                    // 无目标 - 关闭描边
+                    currentArrowRenderer.SetOutlineEnabled(false);
+                    LogDebug("箭头描边已关闭");
+                    break;
+            }
         }
 
         /// <summary>

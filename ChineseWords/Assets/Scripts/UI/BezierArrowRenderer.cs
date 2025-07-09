@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 通过三阶贝塞尔曲线绘制选择箭头 - 支持外部控制版本
 /// 融合了DynamicArrowSystem的3D支持、向上弯曲和动态效果
+/// 新增：描边功能支持
 /// </summary>
 public class BezierArrowRenderer : MonoBehaviour
 {
@@ -55,6 +57,10 @@ public class BezierArrowRenderer : MonoBehaviour
     [SerializeField] private Vector3 externalStartPosition = Vector3.zero; // 外部设置的起点 (改为Vector3)
     [SerializeField] private Vector3 externalEndPosition = Vector3.zero; // 外部设置的终点 (改为Vector3)
 
+    [Header("描边设置")]
+    [SerializeField] private Material outlineMaterial; // 描边材质（共享）
+    [SerializeField] private Material originalMaterial; // 原始材质备份
+
     // 内部变量
     private RectTransform origin;
     private List<RectTransform> arrowNodes = new List<RectTransform>();
@@ -63,6 +69,124 @@ public class BezierArrowRenderer : MonoBehaviour
 
     // 外部控制状态
     private bool isExternallyControlled = false;
+
+    // 描边控制状态
+    private bool isOutlineEnabled = false;
+    private Color currentOutlineColor = Color.green;
+    private float currentOutlineWidth = 2.0f;
+
+    #region 描边控制接口
+
+    /// <summary>
+    /// 设置描边启用状态
+    /// </summary>
+    public void SetOutlineEnabled(bool enabled)
+    {
+        if (isOutlineEnabled == enabled) return;
+
+        isOutlineEnabled = enabled;
+        ApplyOutlineSettings();
+
+        Debug.Log($"[BezierArrowRenderer] 描边已{(enabled ? "启用" : "禁用")}");
+    }
+
+    /// <summary>
+    /// 设置描边颜色
+    /// </summary>
+    public void SetOutlineColor(Color color)
+    {
+        currentOutlineColor = color;
+
+        if (isOutlineEnabled && outlineMaterial != null)
+        {
+            outlineMaterial.SetColor("_OutlineColor", color);
+            Debug.Log($"[BezierArrowRenderer] 描边颜色设置为: {color}");
+        }
+    }
+
+    /// <summary>
+    /// 设置描边宽度
+    /// </summary>
+    public void SetOutlineWidth(float width)
+    {
+        currentOutlineWidth = width;
+
+        if (isOutlineEnabled && outlineMaterial != null)
+        {
+            outlineMaterial.SetFloat("_OutlineWidth", width);
+            Debug.Log($"[BezierArrowRenderer] 描边宽度设置为: {width}");
+        }
+    }
+
+    /// <summary>
+    /// 应用描边设置到所有节点
+    /// </summary>
+    private void ApplyOutlineSettings()
+    {
+        Material targetMaterial = isOutlineEnabled ? outlineMaterial : originalMaterial;
+
+        if (targetMaterial == null)
+        {
+            Debug.LogWarning("[BezierArrowRenderer] 目标材质为空，无法应用描边设置");
+            return;
+        }
+
+        // 如果启用描边，设置材质参数
+        if (isOutlineEnabled && outlineMaterial != null)
+        {
+            outlineMaterial.SetColor("_OutlineColor", currentOutlineColor);
+            outlineMaterial.SetFloat("_OutlineWidth", currentOutlineWidth);
+            outlineMaterial.SetFloat("_OutlineEnabled", 1.0f);
+        }
+
+        // 应用到所有节点
+        int appliedCount = 0;
+        foreach (var node in arrowNodes)
+        {
+            if (node != null)
+            {
+                Image nodeImage = node.GetComponent<Image>();
+                if (nodeImage != null)
+                {
+                    nodeImage.material = targetMaterial;
+                    appliedCount++;
+                }
+            }
+        }
+
+        Debug.Log($"[BezierArrowRenderer] 描边设置已应用到 {appliedCount} 个节点");
+    }
+
+    /// <summary>
+    /// 初始化描边材质
+    /// </summary>
+    private void InitializeOutlineMaterials()
+    {
+        // 备份第一个节点的原始材质
+        if (arrowNodes.Count > 0 && arrowNodes[0] != null)
+        {
+            Image firstImage = arrowNodes[0].GetComponent<Image>();
+            if (firstImage != null)
+            {
+                originalMaterial = firstImage.material;
+                Debug.Log($"[BezierArrowRenderer] 原始材质已备份: {originalMaterial?.name ?? "null"}");
+            }
+        }
+
+        // 如果没有设置描边材质，尝试从Resources加载
+        if (outlineMaterial == null)
+        {
+            outlineMaterial = Resources.Load<Material>("Materials/ArrowOutlineMaterial");
+        }
+
+        // 初始化描边为禁用状态
+        if (outlineMaterial != null)
+        {
+            outlineMaterial.SetFloat("_OutlineEnabled", 0.0f);
+        }
+    }
+
+    #endregion
 
     private void Awake()
     {
@@ -90,6 +214,9 @@ public class BezierArrowRenderer : MonoBehaviour
         // 初始化控制点
         for (int i = 0; i < 4; ++i)
             this.controlPoints.Add(Vector3.zero); // 改为Vector3
+
+        // 初始化描边材质
+        InitializeOutlineMaterials();
     }
 
     private void Update()

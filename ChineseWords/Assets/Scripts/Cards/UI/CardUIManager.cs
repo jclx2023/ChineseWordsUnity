@@ -423,14 +423,11 @@ namespace Cards.UI
         /// </summary>
         private void LoadArrowPrefab()
         {
-                LogDebug($"尝试从Resources加载箭头预制体: {arrowPrefabPath}");
-
                 GameObject loadedPrefab = Resources.Load<GameObject>(arrowPrefabPath);
 
                 if (loadedPrefab != null)
                 {
                     arrowPrefab = loadedPrefab;
-                    LogDebug($"成功加载箭头预制体: {loadedPrefab.name}");
                 }
         }
 
@@ -1125,7 +1122,7 @@ namespace Cards.UI
             if (!ValidateCardUsage(cardId))
             {
                 var cardData = GetCardDataById(cardId);
-                LogWarning($"卡牌 {cardData?.cardName ?? cardId.ToString()} 使用条件不满足");
+                LogWarning($"卡牌 {cardData?.cardName ?? "未知"} 使用条件验证失败");
                 return;
             }
 
@@ -1133,19 +1130,28 @@ namespace Cards.UI
             if (playerCardManager != null)
             {
                 bool success = playerCardManager.UseCard(myPlayerId, cardId, targetPlayerId);
+
                 if (success)
                 {
                     LogDebug($"卡牌使用成功: {cardId}");
 
-                    // 触发使用请求事件（供其他系统监听）
-                    OnCardUseRequested?.Invoke(cardId, targetPlayerId);
+                    // 修复：立即更新UI显示
+                    RefreshHandCards();
 
-                    // 关闭卡牌UI
-                    HideCardUI();
+                    // 如果当前在扇形展示状态，更新扇形展示
+                    if (currentUIState == UIState.FanDisplay && cardDisplayUI != null)
+                    {
+                        bool updateSuccess = cardDisplayUI.UpdateFanDisplayWithCards(currentHandCards);
+                        if (!updateSuccess)
+                        {
+                            LogDebug("扇形展示更新后自动返回缩略图状态");
+                            SetUIState(UIState.Thumbnail);
+                        }
+                    }
                 }
                 else
                 {
-                    LogError($"卡牌使用失败: {cardId}");
+                    LogWarning($"卡牌使用失败: {cardId}");
                 }
             }
             else
@@ -1327,7 +1333,13 @@ namespace Cards.UI
                         RefreshHandCards();
                         if (cardDisplayUI != null)
                         {
-                            cardDisplayUI.ShowFanDisplayWithCards(currentHandCards);
+                            bool updateSuccess = cardDisplayUI.UpdateFanDisplayWithCards(currentHandCards);
+                            if (!updateSuccess)
+                            {
+                                LogWarning("扇形展示更新失败，回退到缩略图状态");
+                                SetUIState(UIState.Thumbnail);
+                                RefreshAndShowThumbnailWithDebounce();
+                            }
                         }
                         break;
                 }

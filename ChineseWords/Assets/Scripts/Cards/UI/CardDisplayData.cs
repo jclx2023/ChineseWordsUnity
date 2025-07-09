@@ -24,38 +24,11 @@ namespace Cards.UI
         public float effectValue;         // 效果数值（用于显示）
 
         /// <summary>
-        /// 默认构造函数
-        /// </summary>
-        public CardDisplayData()
-        {
-            cardId = 0;
-            cardName = "未知卡牌";
-            description = "暂无描述";
-            cardFaceSprite = null;
-            backgroundColor = Color.white;
-            showEffectValue = false;
-            effectValue = 0f;
-        }
-
-        /// <summary>
         /// 从CardConfig数据创建显示数据
         /// </summary>
         /// <param name="cardData">原始卡牌数据</param>
         public CardDisplayData(Cards.Core.CardData cardData)
         {
-            if (cardData == null)
-            {
-                Debug.LogError("[CardDisplayData] CardData为空，使用默认值");
-                cardId = 0;
-                cardName = "无效卡牌";
-                description = "数据异常";
-                cardFaceSprite = null;
-                backgroundColor = Color.gray;
-                showEffectValue = false;
-                effectValue = 0f;
-                return;
-            }
-
             cardId = cardData.cardId;
             cardName = cardData.cardName;
             description = cardData.description;

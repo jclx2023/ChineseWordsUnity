@@ -6,30 +6,30 @@ using Cards.Core;
 namespace Cards.Effects
 {
     /// <summary>
-    /// ����Ч��ϵͳ���ģ��򻯰棩
-    /// ����Ч����ע���ִ�У�Ŀ��ѡ����UI�㴦��
-    /// ���°� - ֧���µ�12�ſ���Ч��
+    /// 卡牌效果系统（简化版）
+    /// 负责效果的注册、执行、验证、目标选择及UI交互处理
+    /// 更新版 - 支持新的12种卡牌效果
     /// </summary>
     public class CardEffectSystem : MonoBehaviour
     {
-        [Header("ϵͳ����")]
+        [Header("系统配置")]
         [SerializeField] private bool enableDebugLogs = true;
         [SerializeField] private float effectExecutionTimeout = 10f;
 
-        // Ч��ע���
+        // 效果注册器
         private Dictionary<EffectType, ICardEffect> registeredEffects;
 
-        // Ч��ִ����
+        // 效果执行器
         private CardEffectExecutor effectExecutor;
 
-        // ����ʵ��
+        // 单例实例
         public static CardEffectSystem Instance { get; private set; }
 
-        #region ��������
+        #region 生命周期
 
         private void Awake()
         {
-            LogDebug($"{GetType().Name} ����Ѵ������ȴ���������");
+            LogDebug($"{GetType().Name} 单例已创建，等待进一步初始化");
             InitializeSystem();
         }
 
@@ -44,30 +44,30 @@ namespace Cards.Effects
 
         #endregion
 
-        #region ϵͳ��ʼ��
+        #region 系统初始化
 
         /// <summary>
-        /// ��ʼ��Ч��ϵͳ
+        /// 初始化效果系统
         /// </summary>
         private void InitializeSystem()
         {
-            LogDebug("��ʼ������Ч��ϵͳ");
+            LogDebug("开始初始化卡牌效果系统");
 
-            // ��ʼ�����
+            // 初始化容器
             registeredEffects = new Dictionary<EffectType, ICardEffect>();
             effectExecutor = new CardEffectExecutor();
 
-            // �������
+            // 配置执行器
             effectExecutor.SetTimeout(effectExecutionTimeout);
 
-            // ע���¼�
+            // 注册事件
             RegisterEvents();
 
-            LogDebug("����Ч��ϵͳ��ʼ�����");
+            LogDebug("卡牌效果系统初始化完成");
         }
 
         /// <summary>
-        /// ע���¼�
+        /// 注册事件
         /// </summary>
         private void RegisterEvents()
         {
@@ -75,7 +75,7 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ע���¼�
+        /// 注销事件
         /// </summary>
         private void UnregisterEvents()
         {
@@ -84,10 +84,10 @@ namespace Cards.Effects
 
         #endregion
 
-        #region Ч��ע�����
+        #region 效果注册管理
 
         /// <summary>
-        /// ע��Ч��ʵ��
+        /// 注册效果实例
         /// </summary>
         public void RegisterEffect(EffectType effectType, ICardEffect effect)
         {
@@ -95,22 +95,22 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ע��Ч��ʵ��
+        /// 注销效果实例
         /// </summary>
         public void UnregisterEffect(EffectType effectType)
         {
             if (registeredEffects.Remove(effectType))
             {
-                LogDebug($"Ч����ע��: {effectType}");
+                LogDebug($"效果已注销: {effectType}");
             }
             else
             {
-                LogWarning($"����ע�������ڵ�Ч��: {effectType}");
+                LogWarning($"尝试注销不存在的效果: {effectType}");
             }
         }
 
         /// <summary>
-        /// ��ȡ��ע���Ч��
+        /// 获取已注册效果
         /// </summary>
         public ICardEffect GetEffect(EffectType effectType)
         {
@@ -119,7 +119,7 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ���Ч���Ƿ���ע��
+        /// 检查效果是否已注册
         /// </summary>
         public bool IsEffectRegistered(EffectType effectType)
         {
@@ -127,7 +127,7 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ��ȡ������ע���Ч������
+        /// 获取所有已注册效果类型
         /// </summary>
         public List<EffectType> GetRegisteredEffectTypes()
         {
@@ -136,11 +136,11 @@ namespace Cards.Effects
 
         #endregion
 
-        #region Ч��ִ�����
+        #region 效果执行入口
 
         /// <summary>
-        /// ʹ�ÿ��ƣ���Ҫ��ڣ�
-        /// Ŀ����ͨ��UI��קȷ����ֱ��ִ��Ч��
+        /// 使用卡牌（主要接口）
+        /// 目标应通过UI拖拽确定或直接执行效果
         /// </summary>
         public void UseCard(CardUseRequest request, CardData cardData)
         {
@@ -149,64 +149,64 @@ namespace Cards.Effects
                 return;
             }
 
-            LogDebug($"��ʼʹ�ÿ���: {cardData.cardName} (���{request.userId})");
+            LogDebug($"开始使用卡牌: {cardData.cardName} (玩家{request.userId})");
 
-            // ���ݿ�����������Ŀ��
+            // 根据卡牌类型设置目标
             SetupCardTarget(request, cardData);
 
-            // ֱ��ִ��Ч��
+            // 直接执行效果
             ExecuteCardEffect(request, cardData);
         }
 
         /// <summary>
-        /// ���ÿ���Ŀ��
+        /// 设置卡牌目标
         /// </summary>
         private void SetupCardTarget(CardUseRequest request, CardData cardData)
         {
             switch (cardData.cardType)
             {
                 case CardType.SelfTarget:
-                    // �Է��Ϳ��ƣ�Ŀ����ʹ�����Լ�
+                    // 自发动卡牌，目标是使用者自己
                     request.targetPlayerId = request.userId;
-                    LogDebug($"�Է��Ϳ��ƣ�Ŀ������Ϊʹ����: {request.userId}");
+                    LogDebug($"自发动卡牌，目标设置为使用者: {request.userId}");
                     break;
 
                 case CardType.PlayerTarget:
-                    // ָ���Ϳ��ƣ�UI��Ӧ���Ѿ�������targetPlayerId
+                    // 指定卡牌，UI层应该已经设置了targetPlayerId
                     if (request.targetPlayerId <= 0)
                     {
-                        LogError("ָ���Ϳ���ȱ����ЧĿ��");
+                        LogError("指定卡牌缺少有效目标");
                         return;
                     }
-                    LogDebug($"ָ���Ϳ��ƣ�Ŀ�����: {request.targetPlayerId}");
+                    LogDebug($"指定卡牌，目标玩家: {request.targetPlayerId}");
                     break;
 
                 case CardType.Special:
-                    // �����Ϳ��ƣ����ݾ���Ч������
-                    LogDebug("�����Ϳ��ƣ�Ŀ����Ч���߼�����");
+                    // 特殊卡牌，根据具体效果决定
+                    LogDebug("特殊动卡牌，目标由效果逻辑决定");
                     break;
             }
         }
 
         /// <summary>
-        /// ��֤����ʹ������
+        /// 验证卡牌使用请求
         /// </summary>
         private bool ValidateCardUseRequest(CardUseRequest request, CardData cardData)
         {
 
-            // ���Ч���Ƿ���ע��
+            // 检查效果是否已注册
             if (!IsEffectRegistered(cardData.effectType))
             {
-                LogError($"Ч��δע��: {cardData.effectType}");
+                LogError($"效果未注册: {cardData.effectType}");
                 return false;
             }
 
-            // ��֤Ŀ�꣨����ָ���Ϳ��ƣ�
+            // 验证目标（针对指定动卡牌）
             if (cardData.cardType == CardType.PlayerTarget)
             {
                 if (!IsValidTarget(request.targetPlayerId, request.userId, cardData))
                 {
-                    LogError($"��Ч��Ŀ�����: {request.targetPlayerId}");
+                    LogError($"无效的目标玩家: {request.targetPlayerId}");
                     return false;
                 }
             }
@@ -215,27 +215,27 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ��֤Ŀ���Ƿ���Ч�����°棬֧���¿��ƣ�
+        /// 验证目标是否有效（更新版，支持新卡牌）
         /// </summary>
         private bool IsValidTarget(int targetId, int userId, CardData cardData)
         {
             if (targetId <= 0)
             {
-                LogError("Ŀ��ID��Ч");
+                LogError("目标ID无效");
                 return false;
             }
 
-            // ָ���Ϳ��Ʋ���ѡ���Լ���ΪĿ��
+            // 指定动卡牌不能选择自己作为目标
             if (targetId == userId)
             {
-                LogError($"ָ���Ϳ��Ʋ���ѡ���Լ���ΪĿ�꣺{cardData.cardName}");
+                LogError($"指定动卡牌不能选择自己作为目标：{cardData.cardName}");
                 return false;
             }
 
-            // ͨ��CardGameBridge���Ŀ������Ƿ���
+            // 通过CardGameBridge检查目标玩家是否存活
             if (!Cards.Integration.CardGameBridge.IsPlayerAlive(targetId))
             {
-                LogError($"Ŀ�����{targetId}�������򲻴���");
+                LogError($"目标玩家{targetId}已死亡或不存在");
                 return false;
             }
 
@@ -244,52 +244,52 @@ namespace Cards.Effects
 
         #endregion
 
-        #region Ч��ִ��
+        #region 效果执行
 
         /// <summary>
-        /// ִ�п���Ч��
+        /// 执行卡牌效果
         /// </summary>
         private void ExecuteCardEffect(CardUseRequest request, CardData cardData)
         {
-            LogDebug($"ִ�п���Ч��: {cardData.cardName} ({cardData.effectType})");
+            LogDebug($"执行卡牌效果: {cardData.cardName} ({cardData.effectType})");
 
-            // ��ȡЧ��ʵ��
+            // 获取效果实例
             var effect = GetEffect(cardData.effectType);
             if (effect == null)
             {
-                LogError($"Ч��ʵ��δ�ҵ�: {cardData.effectType}");
+                LogError($"效果实例未找到: {cardData.effectType}");
                 return;
             }
 
-            // ������֤
+            // 前置验证
             if (!effect.CanUse(request, cardData))
             {
-                LogWarning($"Ч����֤ʧ�ܣ��޷�ʹ�ÿ���: {cardData.cardName}");
-                CardEvents.OnCardMessage?.Invoke("��ǰ�޷�ʹ�øÿ���");
+                LogWarning($"效果验证失败，无法使用卡牌: {cardData.cardName}");
+                CardEvents.OnCardMessage?.Invoke("当前无法使用该卡牌");
                 return;
             }
 
-            // ִ��Ч��
+            // 执行效果
             effectExecutor.ExecuteEffect(effect, request, cardData, OnEffectCompleted);
         }
 
         /// <summary>
-        /// Ч��ִ����ɻص�
+        /// 效果执行完成回调
         /// </summary>
         private void OnEffectCompleted(CardUseRequest request, CardData cardData, CardEffectResult result)
         {
-            LogDebug($"����Ч��ִ�����: {cardData.cardName}, �ɹ�: {result.success}, ��Ϣ: {result.message}");
+            LogDebug($"卡牌效果执行完成: {cardData.cardName}, 成功: {result.success}, 消息: {result.message}");
 
-            // ����ʹ������¼�
+            // 触发使用完成事件
             CardEvents.OnCardUsed?.Invoke(request, cardData, result);
 
-            // ��ʾ�����Ϣ
+            // 显示结果消息
             if (!string.IsNullOrEmpty(result.message))
             {
                 CardEvents.OnCardMessage?.Invoke(result.message);
             }
 
-            // ����ɹ�ʹ�ã��㲥����ʹ����Ϣ����������ͬ����
+            // 如果成功使用，广播卡牌使用消息（给其他同步）
             if (result.success)
             {
                 BroadcastCardUsage(request, cardData);
@@ -297,11 +297,11 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// �㲥����ʹ����Ϣ
+        /// 广播卡牌使用消息
         /// </summary>
         private void BroadcastCardUsage(CardUseRequest request, CardData cardData)
         {
-            // ͨ��CardGameBridge�㲥����ʹ����Ϣ
+            // 通过CardGameBridge广播卡牌使用消息
             Cards.Integration.CardGameBridge.BroadcastCardUsage(
                 request.userId,
                 request.cardId,
@@ -312,10 +312,10 @@ namespace Cards.Effects
 
         #endregion
 
-        #region ����ʹ��������
+        #region 卡牌使用事件处理
 
         /// <summary>
-        /// ��������ʹ�������¼��ص���
+        /// 处理卡牌使用请求事件回调函数
         /// </summary>
         private void HandleCardUseRequest(CardUseRequest request, CardData cardData)
         {
@@ -325,7 +325,7 @@ namespace Cards.Effects
         #endregion
 
         /// <summary>
-        /// ���ϵͳ�Ƿ�׼������
+        /// 检查系统是否准备就绪
         /// </summary>
         public bool IsSystemReady()
         {
@@ -333,7 +333,7 @@ namespace Cards.Effects
         }
 
 
-        #region ��־����
+        #region 日志工具
 
         private void LogDebug(string message)
         {
@@ -362,18 +362,18 @@ namespace Cards.Effects
         #endregion
     }
 
-    #region Ч��ִ����
+    #region 效果执行器
 
     /// <summary>
-    /// Ч��ִ�������򻯰棩
-    /// ����ȫִ�п���Ч��
+    /// 效果执行器（简化版）
+    /// 负责安全执行卡牌效果
     /// </summary>
     public class CardEffectExecutor
     {
         private float timeout = 10f;
 
         /// <summary>
-        /// ���ó�ʱʱ��
+        /// 设置超时时间
         /// </summary>
         public void SetTimeout(float timeoutSeconds)
         {
@@ -381,34 +381,34 @@ namespace Cards.Effects
         }
 
         /// <summary>
-        /// ִ��Ч��
+        /// 执行效果
         /// </summary>
         public void ExecuteEffect(ICardEffect effect, CardUseRequest request, CardData cardData,
             System.Action<CardUseRequest, CardData, CardEffectResult> onCompleted)
         {
             try
             {
-                CardUtilities.LogDebug($"��ʼִ��Ч��: {cardData.effectType} - {cardData.cardName}");
+                CardUtilities.LogDebug($"开始执行效果: {cardData.effectType} - {cardData.cardName}");
 
-                // ��¼ִ�п�ʼʱ��
+                // 记录执行开始时间
                 float startTime = Time.time;
 
-                // ִ��Ч��
+                // 执行效果
                 var result = effect.Execute(request, cardData);
 
-                // ��¼ִ��ʱ��
+                // 记录执行时间
                 float executionTime = Time.time - startTime;
-                CardUtilities.LogDebug($"Ч��ִ����ɣ���ʱ: {executionTime:F3}��");
+                CardUtilities.LogDebug($"效果执行完成，耗时: {executionTime:F3}秒");
 
-                // ������ɻص�
+                // 调用完成回调
                 onCompleted?.Invoke(request, cardData, result);
             }
             catch (System.Exception e)
             {
-                CardUtilities.LogError($"Ч��ִ���쳣 [{cardData.cardName}]: {e.Message}");
-                CardUtilities.LogError($"�쳣��ջ: {e.StackTrace}");
+                CardUtilities.LogError($"效果执行异常 [{cardData.cardName}]: {e.Message}");
+                CardUtilities.LogError($"异常堆栈: {e.StackTrace}");
 
-                var errorResult = new CardEffectResult(false, $"ִ��ʧ��: {e.Message}");
+                var errorResult = new CardEffectResult(false, $"执行失败: {e.Message}");
                 onCompleted?.Invoke(request, cardData, errorResult);
             }
         }

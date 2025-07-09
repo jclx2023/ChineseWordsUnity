@@ -442,14 +442,20 @@ namespace Cards.UI
                 return;
             }
 
+            LogDebug($"刷新缩略图显示，手牌数量: {cardDataList?.Count ?? 0}");
+
             if (cardDataList == null || cardDataList.Count == 0)
             {
                 LogDebug("手牌数据为空，清理缩略图显示");
                 ClearThumbnailCards();
+
+                // 确保缩略图容器在空数据时仍然显示（但内容为空）
+                if (currentState == DisplayState.Thumbnail)
+                {
+                    ShowThumbnailMode();
+                }
                 return;
             }
-
-            LogDebug($"刷新缩略图显示，手牌数量: {cardDataList.Count}");
 
             // 重新创建缩略图卡牌
             CreateThumbnailCards(cardDataList);
@@ -519,6 +525,7 @@ namespace Cards.UI
             if (cardDataList == null || cardDataList.Count == 0)
             {
                 LogDebug("卡牌数据为空，返回缩略图状态");
+                UpdateThumbnailForEmptyHand();
                 ReturnToThumbnail();
                 return true;
             }
@@ -540,8 +547,8 @@ namespace Cards.UI
             // 直接设置到扇形位置（无动画，因为是更新）
             ShowFanDisplayMode();
 
-            // 同时更新缩略图（为返回做准备）
-            CreateThumbnailCards(cardDataList);
+            // 同时更新缩略图（为返回做准备）- 修复：确保这里也正确更新
+            RefreshThumbnailCards(cardDataList);
 
             LogDebug("扇形展示更新完成");
             return true;
@@ -573,6 +580,37 @@ namespace Cards.UI
             SetCameraControl(true);
         }
 
+        /// <summary>
+        /// 新增：更新缩略图内容为空手牌状态
+        /// </summary>
+        private void UpdateThumbnailForEmptyHand()
+        {
+            LogDebug("更新缩略图为空手牌状态");
+
+            // 清理现有缩略图
+            ClearThumbnailCards();
+
+            // 不创建任何新的缩略图卡牌，保持容器为空
+            LogDebug("缩略图已清空，准备显示空手牌状态");
+        }
+        /// <summary>
+        /// 新增：刷新缩略图卡牌（确保与当前数据同步）
+        /// </summary>
+        private void RefreshThumbnailCards(List<CardDisplayData> cardDataList)
+        {
+            LogDebug($"刷新缩略图卡牌，数据数量: {cardDataList?.Count ?? 0}");
+
+            // 先清理现有缩略图
+            ClearThumbnailCards();
+
+            // 如果有卡牌数据，重新创建缩略图
+            if (cardDataList != null && cardDataList.Count > 0)
+            {
+                CreateThumbnailCards(cardDataList);
+            }
+
+            LogDebug("缩略图卡牌刷新完成");
+        }
         /// <summary>
         /// 设置启用/禁用状态
         /// </summary>
@@ -1143,7 +1181,7 @@ namespace Cards.UI
             // 清理扇形卡牌UI
             ClearFanDisplayCards();
 
-            // 重新显示缩略图
+            // 修复：确保缩略图容器显示正确的内容
             if (thumbnailContainer != null)
             {
                 thumbnailContainer.gameObject.SetActive(true);
@@ -1153,6 +1191,16 @@ namespace Cards.UI
                 if (thumbnailCanvasGroup != null)
                 {
                     thumbnailCanvasGroup.alpha = 1f;
+                }
+
+                // 修复：检查缩略图内容是否与当前状态匹配
+                if (thumbnailCardUIs.Count == 0)
+                {
+                    LogDebug("转换完成：显示空缩略图状态");
+                }
+                else
+                {
+                    LogDebug($"转换完成：显示 {thumbnailCardUIs.Count} 张缩略图卡牌");
                 }
             }
 

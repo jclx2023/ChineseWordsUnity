@@ -72,3 +72,5 @@ MonoBehaviour:
   useExternalControl: 0
   externalStartPosition: {x: 0, y: 0, z: 0}
   externalEndPosition: {x: 0, y: 0, z: 0}
+  outlineMaterial: {fileID: 2100000, guid: e30785afcbb1410418f57cf601a59bac, type: 2}
+  originalMaterial: {fileID: 0}
