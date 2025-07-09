@@ -18,7 +18,7 @@ namespace Lobby.Core
         [Header("场景配置")]
         [SerializeField] private string mainMenuSceneName = "MainMenuScene";
         [SerializeField] private string roomSceneName = "RoomScene";
-        [SerializeField] private float roomJoinTransitionDelay = 0.5f;
+        [SerializeField] private float roomJoinTransitionDelay = 0.2f;
 
         [Header("数据持久化")]
         [SerializeField] private bool persistPlayerData = true;
@@ -115,9 +115,6 @@ namespace Lobby.Core
             // 初始化UI系统
             InitializeUISystem();
 
-            // 确保SceneTransitionManager存在
-            EnsureSceneTransitionManager();
-
             isInitialized = true;
             LogDebug("Lobby场景初始化完成");
         }
@@ -202,40 +199,6 @@ namespace Lobby.Core
             {
                 LobbyUIManager.Instance.UpdatePlayerInfo(currentPlayerData);
                 LogDebug("已更新LobbyUIManager的玩家信息");
-            }
-            else
-            {
-                Debug.LogWarning("[LobbySceneManager] LobbyUIManager实例不存在");
-            }
-        }
-
-        /// <summary>
-        /// 确保SceneTransitionManager存在
-        /// </summary>
-        private void EnsureSceneTransitionManager()
-        {
-            if (SceneTransitionManager.Instance == null)
-            {
-                LogDebug("SceneTransitionManager不存在，尝试创建");
-
-                // 尝试从Resources加载或创建
-                GameObject stmPrefab = Resources.Load<GameObject>("SceneTransitionManager");
-                if (stmPrefab != null)
-                {
-                    Instantiate(stmPrefab);
-                    LogDebug("从Resources创建了SceneTransitionManager");
-                }
-                else
-                {
-                    // 创建空的GameObject并添加组件
-                    GameObject stmObject = new GameObject("SceneTransitionManager");
-                    stmObject.AddComponent<SceneTransitionManager>();
-                    LogDebug("手动创建了SceneTransitionManager");
-                }
-            }
-            else
-            {
-                LogDebug("SceneTransitionManager已存在");
             }
         }
 
@@ -553,54 +516,6 @@ namespace Lobby.Core
             }
         }
 
-        /// <summary>
-        /// 进入房间场景（手动调用版本）
-        /// </summary>
-        public void EnterRoomScene(LobbyRoomData roomData = null)
-        {
-            if (roomData != null)
-            {
-                LogDebug($"手动进入房间场景: {roomData.roomName}");
-                lastJoinedRoomData = roomData;
-            }
-            else
-            {
-                LogDebug("手动进入房间场景（使用缓存的房间数据）");
-            }
-
-            // 检查是否在Photon房间中
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.LogWarning("[LobbySceneManager] 不在Photon房间中，但仍尝试切换场景");
-            }
-
-            StartRoomSceneTransition();
-        }
-
-        /// <summary>
-        /// 检查场景是否已初始化
-        /// </summary>
-        public bool IsSceneInitialized()
-        {
-            return isInitialized;
-        }
-
-        /// <summary>
-        /// 检查是否正在切换到房间场景
-        /// </summary>
-        public bool IsTransitioningToRoom()
-        {
-            return isTransitioningToRoom;
-        }
-
-        /// <summary>
-        /// 重置房间切换状态（用于错误恢复）
-        /// </summary>
-        public void ResetRoomTransitionState()
-        {
-            LogDebug("重置房间切换状态");
-            isTransitioningToRoom = false;
-        }
 
         #endregion
 
@@ -656,19 +571,6 @@ namespace Lobby.Core
         #region 状态查询和调试
 
         /// <summary>
-        /// 获取场景状态信息
-        /// </summary>
-        public string GetSceneStatusInfo()
-        {
-            return $"初始化: {isInitialized}, " +
-                   $"切换中: {isTransitioningToRoom}, " +
-                   $"网络订阅: {hasSubscribedToNetworkEvents}, " +
-                   $"玩家: {currentPlayerData?.playerName ?? "未设置"}, " +
-                   $"在房间中: {PhotonNetwork.InRoom}, " +
-                   $"网络管理器: {(LobbyNetworkManager.Instance != null ? "存在" : "不存在")}";
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -676,57 +578,6 @@ namespace Lobby.Core
             if (enableDebugLogs)
             {
                 Debug.Log($"[LobbySceneManager] {message}");
-            }
-        }
-
-        #endregion
-
-        #region 调试方法
-
-        [ContextMenu("显示场景状态")]
-        public void ShowSceneStatus()
-        {
-            string status = "=== Lobby场景状态 ===\n";
-            status += GetSceneStatusInfo() + "\n";
-
-            if (lastJoinedRoomData != null)
-            {
-                status += $"最后房间: {lastJoinedRoomData.roomName}\n";
-            }
-
-            if (LobbyNetworkManager.Instance != null)
-            {
-                status += $"网络状态: {LobbyNetworkManager.Instance.GetNetworkStats()}";
-            }
-
-            LogDebug(status);
-        }
-
-        [ContextMenu("强制重置状态")]
-        public void ForceResetState()
-        {
-            isTransitioningToRoom = false;
-            lastJoinedRoomData = null;
-            SceneTransitionManager.ResetTransitionState();
-            LogDebug("已强制重置所有状态");
-        }
-
-        [ContextMenu("测试场景切换")]
-        public void TestSceneTransition()
-        {
-            if (Application.isPlaying)
-            {
-                LogDebug("测试场景切换到RoomScene");
-                EnterRoomScene();
-            }
-        }
-
-        [ContextMenu("保存玩家数据")]
-        public void SavePlayerData()
-        {
-            if (Application.isPlaying)
-            {
-                SavePlayerDataToPrefs();
             }
         }
 

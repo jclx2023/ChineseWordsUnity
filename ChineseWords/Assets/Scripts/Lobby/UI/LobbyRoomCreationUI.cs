@@ -30,6 +30,15 @@ namespace Lobby.UI
         // UI状态
         private bool isInitialized = false;
         private bool isCreatingRoom = false;
+        private static readonly string[] GradeOptions =
+        {
+            // 小学
+            "一年级","二年级","三年级","四年级","五年级","六年级",
+            // 初中
+            "初一","初二","初三",
+            // 高中
+            "高一","高二","高三"
+        };
 
         #region Unity生命周期
 
@@ -126,16 +135,7 @@ namespace Lobby.UI
             // 生成默认房间名
             if (roomNameInput != null)
             {
-                string playerName = "玩家";
-                if (LobbySceneManager.Instance != null)
-                {
-                    var playerData = LobbySceneManager.Instance.GetCurrentPlayerData();
-                    if (playerData != null && !string.IsNullOrEmpty(playerData.playerName))
-                    {
-                        playerName = playerData.playerName;
-                    }
-                }
-                roomNameInput.text = $"{playerName}的房间";
+                roomNameInput.text = GenerateRoomName();
             }
 
             // 设置默认最大玩家数
@@ -151,6 +151,19 @@ namespace Lobby.UI
                 passwordInput.text = "";
                 passwordInput.contentType = TMP_InputField.ContentType.Password;
             }
+        }
+        /// <summary>
+        /// 随机生成 “年级 + 班级” 格式的房间名，例如 “高二17班”“三年级4班”
+        /// </summary>
+        private string GenerateRoomName()
+        {
+            // 随机年级
+            string grade = GradeOptions[UnityEngine.Random.Range(0, GradeOptions.Length)];
+
+            // 随机班级号（1~999）
+            int classNumber = UnityEngine.Random.Range(1, 1000);   // 上限999
+
+            return $"{grade}{classNumber}班";
         }
 
         /// <summary>

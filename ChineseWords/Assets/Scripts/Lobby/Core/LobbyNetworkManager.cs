@@ -521,7 +521,7 @@ namespace Lobby.Core
             // 连接成功后自动加入大厅
             if (!GetRealLobbyStatus())
             {
-                JoinPhotonLobby();
+                //JoinPhotonLobby();
             }
         }
 
