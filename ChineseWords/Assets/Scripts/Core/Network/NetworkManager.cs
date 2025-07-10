@@ -19,6 +19,12 @@ namespace Core.Network
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
+        [Header("同步调试设置")]
+        [SerializeField] private bool enableSyncDebugLogs = false;
+
+        // 玩家同步管理
+        private Dictionary<ushort, Classroom.Player.PlayerNetworkSync> playerSyncComponents = new Dictionary<ushort, Classroom.Player.PlayerNetworkSync>();
+
         // 静态访问点
         public static NetworkManager Instance => PersistentNetworkManager.Instance?.GameNetwork;
 
@@ -94,6 +100,7 @@ namespace Core.Network
         void IInRoomCallbacks.OnPlayerLeftRoom(Player otherPlayer)
         {
             ushort playerId = (ushort)otherPlayer.ActorNumber;
+            playerSyncComponents.Remove(playerId);
             LogDebug($"玩家离开: {otherPlayer.NickName} (ID: {playerId})");
             OnPlayerLeft?.Invoke(playerId);
         }
@@ -700,6 +707,11 @@ namespace Core.Network
 
         public void SyncPlayerTransform(ushort playerId, Vector3 position, Quaternion rotation, Vector3 velocity)
         {
+            if (enableSyncDebugLogs)
+            {
+                LogDebug($"发送同步数据: 玩家{playerId}, 位置={position:F2}");
+            }
+
             SendRPC("OnPlayerTransform_RPC", RpcTarget.Others, (int)playerId,
                 position.x, position.y, position.z, rotation.x, rotation.y, rotation.z, rotation.w,
                 velocity.x, velocity.y, velocity.z, Time.time);
@@ -709,23 +721,64 @@ namespace Core.Network
         void OnPlayerTransform_RPC(int playerId, float posX, float posY, float posZ,
             float rotX, float rotY, float rotZ, float rotW, float velX, float velY, float velZ, float timestamp)
         {
+            ushort playerIdUShort = (ushort)playerId;
             Vector3 position = new Vector3(posX, posY, posZ);
             Quaternion rotation = new Quaternion(rotX, rotY, rotZ, rotW);
             Vector3 velocity = new Vector3(velX, velY, velZ);
 
-            var allSyncComponents = FindObjectsOfType<Classroom.Player.PlayerNetworkSync>();
-            foreach (var syncComponent in allSyncComponents)
+            if (enableSyncDebugLogs)
             {
-                if (syncComponent.PlayerId == (ushort)playerId)
+                float lag = Time.time - timestamp;
+                LogDebug($"接收同步数据: 玩家{playerId}, 延迟={lag:F3}s");
+            }
+
+            // 直接调用对应的PlayerNetworkSync组件
+            if (playerSyncComponents.ContainsKey(playerIdUShort))
+            {
+                playerSyncComponents[playerIdUShort].ReceiveNetworkTransform(position, rotation, velocity, timestamp);
+            }
+            else
+            {
+                // 备用方案：遍历查找并自动注册
+                var allSyncComponents = FindObjectsOfType<Classroom.Player.PlayerNetworkSync>();
+                foreach (var syncComponent in allSyncComponents)
                 {
-                    syncComponent.ReceiveNetworkTransform(position, rotation, velocity, timestamp);
-                    break;
+                    if (syncComponent.PlayerId == playerIdUShort)
+                    {
+                        syncComponent.ReceiveNetworkTransform(position, rotation, velocity, timestamp);
+                        RegisterPlayerSync(playerIdUShort, syncComponent);
+                        break;
+                    }
                 }
             }
         }
 
         #endregion
+        #region 玩家位置同步
 
+        /// <summary>
+        /// 注册玩家同步组件
+        /// </summary>
+        public void RegisterPlayerSync(ushort playerId, Classroom.Player.PlayerNetworkSync syncComponent)
+        {
+            if (syncComponent == null) return;
+            playerSyncComponents[playerId] = syncComponent;
+            LogDebug($"注册玩家同步组件: PlayerId={playerId}");
+        }
+
+        /// <summary>
+        /// 注销玩家同步组件
+        /// </summary>
+        public void UnregisterPlayerSync(ushort playerId)
+        {
+            if (playerSyncComponents.ContainsKey(playerId))
+            {
+                playerSyncComponents.Remove(playerId);
+                LogDebug($"注销玩家同步组件: PlayerId={playerId}");
+            }
+        }
+
+        #endregion
         #region 调试
 
         private void LogDebug(string message)

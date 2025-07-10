@@ -1,47 +1,48 @@
 using UnityEngine;
 using Core.Network;
-using Photon.Pun;
 
 namespace Classroom.Player
 {
     /// <summary>
-    /// 玩家网络同步组件 - 同步玩家角色的基本变换数据
-    /// 仅同步必要的位置和旋转信息，不同步摄像机视角
-    /// 使用统一的NetworkManager进行数据传输
+    /// 玩家网络同步组件 - 改进版本
+    /// 同步玩家角色的基本变换数据，不同步摄像机视角
+    /// 使用NetworkManager进行数据传输和管理
     /// </summary>
     public class PlayerNetworkSync : MonoBehaviour
     {
         [Header("同步配置")]
         [SerializeField] private bool syncPosition = true; // 同步位置
         [SerializeField] private bool syncRotation = true; // 同步旋转
-        [SerializeField] private float sendRate = 10f; // 发送频率（Hz）
-        [SerializeField] private float interpolationSpeed = 10f; // 插值速度
+        [SerializeField] private float sendRate = 15f; // 发送频率（Hz）
+        [SerializeField] private float interpolationSpeed = 12f; // 插值速度
 
         [Header("优化设置")]
-        [SerializeField] private float positionThreshold = 0.1f; // 位置变化阈值
-        [SerializeField] private float rotationThreshold = 5f; // 旋转变化阈值（度）
+        [SerializeField] private float positionThreshold = 0.05f; // 位置变化阈值
+        [SerializeField] private float rotationThreshold = 3f; // 旋转变化阈值（度）
         [SerializeField] private bool enablePrediction = true; // 启用预测
 
         [Header("调试设置")]
-        [SerializeField] private bool enableDebugLogs = false;
+        [SerializeField] private bool enableDebugLogs = true;
+        [SerializeField] private bool showDebugGizmos = false;
+        [SerializeField] private bool showDetailedStats = false; // 显示详细统计
 
         // 玩家信息
         private ushort playerId;
         private bool isLocalPlayer = false;
         private bool isInitialized = false;
 
-        // 网络同步数据
+        // 网络同步数据（用于远程玩家）
         private Vector3 networkPosition;
         private Quaternion networkRotation;
         private Vector3 networkVelocity;
-        private float networkSendTime;
+        private float networkReceiveTime;
 
-        // 本地数据
+        // 本地数据（用于本地玩家）
         private Vector3 lastSentPosition;
         private Quaternion lastSentRotation;
         private float lastSendTime;
 
-        // 插值数据
+        // 插值数据（用于远程玩家）
         private Vector3 targetPosition;
         private Quaternion targetRotation;
 
@@ -49,10 +50,101 @@ namespace Classroom.Player
         private Transform playerTransform;
         private Rigidbody playerRigidbody;
 
+        // 统计数据
+        private SyncStatistics syncStats = new SyncStatistics();
+
         // 公共属性
         public ushort PlayerId => playerId;
         public bool IsLocalPlayer => isLocalPlayer;
         public bool IsInitialized => isInitialized;
+        public Vector3 NetworkPosition => networkPosition;
+        public Quaternion NetworkRotation => networkRotation;
+        public Vector3 TargetPosition => targetPosition;
+        public SyncStatistics Stats => syncStats;
+
+        #region 统计数据类
+
+        [System.Serializable]
+        public class SyncStatistics
+        {
+            [Header("网络统计")]
+            public int packetsSent;
+            public int packetsReceived;
+            public float lastSendTime;
+            public float lastReceiveTime;
+
+            [Header("位置统计")]
+            public Vector3 lastPosition;
+            public float totalDistance;
+            public float maxSpeed;
+
+            [Header("性能统计")]
+            public float averageSendInterval;
+            public float averageReceiveInterval;
+            public float maxLag;
+            public float averageLag;
+            private float totalLag;
+
+            public void UpdateSent(Vector3 position)
+            {
+                packetsSent++;
+                float currentTime = Time.time;
+
+                if (lastSendTime > 0)
+                {
+                    float interval = currentTime - lastSendTime;
+                    averageSendInterval = (averageSendInterval * (packetsSent - 1) + interval) / packetsSent;
+                }
+                lastSendTime = currentTime;
+
+                if (lastPosition != Vector3.zero)
+                {
+                    float distance = Vector3.Distance(position, lastPosition);
+                    totalDistance += distance;
+
+                    if (lastSendTime > 0)
+                    {
+                        float speed = distance / (currentTime - lastSendTime);
+                        maxSpeed = Mathf.Max(maxSpeed, speed);
+                    }
+                }
+                lastPosition = position;
+            }
+
+            public void UpdateReceived(float timestamp)
+            {
+                packetsReceived++;
+                float currentTime = Time.time;
+                lastReceiveTime = currentTime;
+
+                // 计算延迟
+                float lag = currentTime - timestamp;
+                maxLag = Mathf.Max(maxLag, lag);
+                totalLag += lag;
+                averageLag = totalLag / packetsReceived;
+
+                if (packetsReceived > 1)
+                {
+                    float interval = currentTime - lastReceiveTime;
+                    averageReceiveInterval = (averageReceiveInterval * (packetsReceived - 1) + interval) / packetsReceived;
+                }
+            }
+
+            public string GetSummaryString()
+            {
+                float sendRate = packetsSent > 0 && lastSendTime > 0 ? packetsSent / lastSendTime : 0f;
+                float receiveRate = packetsReceived > 0 && lastReceiveTime > 0 ? packetsReceived / lastReceiveTime : 0f;
+                return $"发送:{packetsSent}包({sendRate:F1}/s), 接收:{packetsReceived}包({receiveRate:F1}/s), 移动:{totalDistance:F1}m";
+            }
+
+            public string GetDetailedString()
+            {
+                return $"发送间隔:{averageSendInterval:F3}s, 接收间隔:{averageReceiveInterval:F3}s, " +
+                       $"平均延迟:{averageLag:F3}s, 最大延迟:{maxLag:F3}s, 最大速度:{maxSpeed:F1}m/s";
+            }
+        }
+
+        #endregion
 
         #region Unity生命周期
 
@@ -64,10 +156,10 @@ namespace Classroom.Player
 
         private void Start()
         {
-            // 如果已经初始化，则检查本地玩家状态
             if (isInitialized)
             {
                 CheckLocalPlayerStatus();
+                RegisterWithNetworkManager();
             }
         }
 
@@ -84,6 +176,15 @@ namespace Classroom.Player
             {
                 // 远程玩家：插值到目标位置和旋转
                 InterpolateToTarget();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (NetworkManager.Instance != null && isInitialized)
+            {
+                NetworkManager.Instance.UnregisterPlayerSync(playerId);
+                LogDebug($"从NetworkManager注销: PlayerId={playerId}");
             }
         }
 
@@ -105,7 +206,17 @@ namespace Classroom.Player
             targetPosition = networkPosition;
             targetRotation = networkRotation;
 
+            // 初始化本地数据
+            lastSentPosition = networkPosition;
+            lastSentRotation = networkRotation;
+
+            // 重置统计数据
+            syncStats = new SyncStatistics();
+            syncStats.lastPosition = networkPosition;
+
             isInitialized = true;
+            RegisterWithNetworkManager();
+
             LogDebug($"PlayerNetworkSync初始化完成 - PlayerID: {playerId}, 本地玩家: {isLocalPlayer}");
 
             // 如果是本地玩家，通知PlayerCameraController重新检查
@@ -114,7 +225,6 @@ namespace Classroom.Player
                 var cameraController = GetComponent<PlayerCameraController>();
                 if (cameraController != null)
                 {
-                    // 触发重新检查（通过反射调用私有方法或添加公共方法）
                     LogDebug("通知PlayerCameraController重新检查本地玩家状态");
                 }
             }
@@ -132,6 +242,18 @@ namespace Classroom.Player
             }
         }
 
+        /// <summary>
+        /// 向NetworkManager注册此组件
+        /// </summary>
+        private void RegisterWithNetworkManager()
+        {
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.RegisterPlayerSync(playerId, this);
+                LogDebug($"向NetworkManager注册: PlayerId={playerId}");
+            }
+        }
+
         #endregion
 
         #region 本地玩家数据发送
@@ -141,7 +263,7 @@ namespace Classroom.Player
         /// </summary>
         private void CheckAndSendData()
         {
-            if (!isLocalPlayer) return;
+            if (!isLocalPlayer || NetworkManager.Instance == null) return;
 
             float currentTime = Time.time;
 
@@ -162,15 +284,17 @@ namespace Classroom.Player
                     }
                 }
 
-                // 发送数据
+                // 发送数据到NetworkManager
                 NetworkManager.Instance.SyncPlayerTransform(playerId, playerTransform.position, playerTransform.rotation, velocity);
 
-                // 更新最后发送的数据
+                // 更新统计和本地记录
+                syncStats.UpdateSent(playerTransform.position);
                 lastSentPosition = playerTransform.position;
                 lastSentRotation = playerTransform.rotation;
                 lastSendTime = currentTime;
 
-                LogDebug($"发送位置数据: {lastSentPosition}, 旋转: {lastSentRotation.eulerAngles}");
+                LogDebug($"发送同步数据: Pos={lastSentPosition:F2}, Rot={lastSentRotation.eulerAngles:F0}, " +
+                         $"Vel={velocity:F2}, 包数:{syncStats.packetsSent}");
             }
         }
 
@@ -185,6 +309,7 @@ namespace Classroom.Player
                 float positionDelta = Vector3.Distance(playerTransform.position, lastSentPosition);
                 if (positionDelta > positionThreshold)
                 {
+                    LogDebug($"位置变化触发同步: {positionDelta:F3} > {positionThreshold}");
                     return true;
                 }
             }
@@ -195,6 +320,7 @@ namespace Classroom.Player
                 float rotationDelta = Quaternion.Angle(playerTransform.rotation, lastSentRotation);
                 if (rotationDelta > rotationThreshold)
                 {
+                    LogDebug($"旋转变化触发同步: {rotationDelta:F1}° > {rotationThreshold}°");
                     return true;
                 }
             }
@@ -216,7 +342,10 @@ namespace Classroom.Player
             networkPosition = position;
             networkRotation = rotation;
             networkVelocity = velocity;
-            networkSendTime = timestamp;
+            networkReceiveTime = timestamp;
+
+            // 更新统计
+            syncStats.UpdateReceived(timestamp);
 
             targetPosition = networkPosition;
             targetRotation = networkRotation;
@@ -224,7 +353,8 @@ namespace Classroom.Player
             // 应用网络延迟补偿
             ApplyNetworkDelayCompensation();
 
-            LogDebug($"接收网络数据 - 位置: {networkPosition}, 旋转: {networkRotation.eulerAngles}, 速度: {networkVelocity}");
+            LogDebug($"接收网络数据: Pos={networkPosition:F2}, Rot={networkRotation.eulerAngles:F0}, " +
+                     $"Vel={networkVelocity:F2}, 延迟:{Time.time - timestamp:F3}s, 包数:{syncStats.packetsReceived}");
         }
 
         /// <summary>
@@ -236,6 +366,9 @@ namespace Classroom.Player
 
             float deltaTime = Time.deltaTime;
             float speed = interpolationSpeed * deltaTime;
+
+            Vector3 oldPosition = playerTransform.position;
+            Quaternion oldRotation = playerTransform.rotation;
 
             // 位置插值
             if (syncPosition)
@@ -249,6 +382,18 @@ namespace Classroom.Player
             {
                 playerTransform.rotation = Quaternion.Lerp(playerTransform.rotation, targetRotation, speed);
             }
+
+            // 调试信息：只在有明显变化时输出
+            if (enableDebugLogs && showDetailedStats)
+            {
+                float posChange = Vector3.Distance(oldPosition, playerTransform.position);
+                float rotChange = Quaternion.Angle(oldRotation, playerTransform.rotation);
+                if (posChange > 0.01f || rotChange > 0.5f)
+                {
+                    LogDebug($"插值更新: 位置变化={posChange:F3}, 旋转变化={rotChange:F1}°, " +
+                             $"到目标距离={Vector3.Distance(playerTransform.position, targetPosition):F3}");
+                }
+            }
         }
 
         /// <summary>
@@ -259,64 +404,29 @@ namespace Classroom.Player
             if (!enablePrediction) return;
 
             // 计算网络延迟
-            float lag = Time.time - networkSendTime;
+            float lag = Time.time - networkReceiveTime;
 
             // 应用延迟补偿到目标位置
             if (syncPosition && networkVelocity.magnitude > 0.1f)
             {
-                targetPosition = networkPosition + networkVelocity * lag;
+                Vector3 compensatedPosition = networkPosition + networkVelocity * lag;
+
+                // 限制补偿距离，避免过度预测
+                float maxCompensation = networkVelocity.magnitude * 0.3f; // 最多补偿0.3秒
+                Vector3 compensation = compensatedPosition - networkPosition;
+                if (compensation.magnitude > maxCompensation)
+                {
+                    compensation = compensation.normalized * maxCompensation;
+                    compensatedPosition = networkPosition + compensation;
+                }
+
+                targetPosition = compensatedPosition;
+
+                if (enableDebugLogs && showDetailedStats)
+                {
+                    LogDebug($"延迟补偿: {lag:F3}s, 原位置={networkPosition:F2}, 补偿后={targetPosition:F2}");
+                }
             }
-
-            LogDebug($"网络延迟补偿: {lag:F3}s, 补偿后位置: {targetPosition}");
-        }
-
-        #endregion
-
-        #region 公共接口
-
-        /// <summary>
-        /// 强制同步到指定位置
-        /// </summary>
-        public void ForceSync(Vector3 position, Quaternion rotation)
-        {
-            if (!isLocalPlayer) return;
-
-            playerTransform.position = position;
-            playerTransform.rotation = rotation;
-
-            // 立即发送数据
-            lastSentPosition = position;
-            lastSentRotation = rotation;
-            lastSendTime = Time.time;
-
-            LogDebug($"强制同步到位置: {position}, 旋转: {rotation.eulerAngles}");
-        }
-
-        /// <summary>
-        /// 设置同步配置
-        /// </summary>
-        public void SetSyncSettings(bool position, bool rotation, float rate)
-        {
-            syncPosition = position;
-            syncRotation = rotation;
-            sendRate = rate;
-
-            LogDebug($"同步设置更新 - 位置: {syncPosition}, 旋转: {syncRotation}, 频率: {sendRate}Hz");
-        }
-
-        /// <summary>
-        /// 获取网络状态信息
-        /// </summary>
-        public string GetNetworkStatus()
-        {
-            if (!isInitialized) return "未初始化";
-
-            string status = $"PlayerID: {playerId}, 本地: {isLocalPlayer}, ";
-            status += $"位置: {playerTransform.position:F1}, ";
-            status += $"目标位置: {targetPosition:F1}, ";
-            status += $"网络延迟: {PhotonNetwork.GetPing()}ms";
-
-            return status;
         }
 
         #endregion

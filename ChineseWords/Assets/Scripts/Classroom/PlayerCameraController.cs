@@ -22,7 +22,7 @@ namespace Classroom.Player
 
         [Header("视角控制")]
         [SerializeField] private float mouseSensitivity = 2f; // 鼠标灵敏度
-        [SerializeField] private float smoothing = 1.5f; // 平滑系数
+        [SerializeField] private float smoothing = 5f; // 平滑系数
         [SerializeField] private bool invertYAxis = false; // 反转Y轴
 
         [Header("视角限制")]
@@ -33,6 +33,9 @@ namespace Classroom.Player
         [Header("座位基准")]
         [SerializeField] private Quaternion seatForwardDirection = Quaternion.identity; // 座位正前方朝向
         [SerializeField] private bool lockToSeatDirection = true; // 锁定到座位朝向
+
+        [Header("描边效果")]
+        [SerializeField] private bool enableOutlineEffect = true; // 启用描边效果
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -274,6 +277,12 @@ namespace Classroom.Player
             // 设置摄像机属性
             ConfigureCamera();
 
+            // 挂载描边效果
+            if (enableOutlineEffect)
+            {
+                AttachOutlineEffect();
+            }
+
             LogDebug("摄像机设置完成");
         }
 
@@ -304,7 +313,6 @@ namespace Classroom.Player
             {
                 Destroy(audioListener);
             }
-
         }
 
         /// <summary>
@@ -329,6 +337,55 @@ namespace Classroom.Player
         }
 
         /// <summary>
+        /// 挂载描边效果
+        /// </summary>
+        private void AttachOutlineEffect()
+        {
+            if (playerCamera == null) return;
+
+            try
+            {
+                // 检查是否已经存在O_CustomImageEffect组件
+                var existingOutline = playerCamera.GetComponent("O_CustomImageEffect");
+                if (existingOutline != null)
+                {
+                    LogDebug("摄像机上已存在 O_CustomImageEffect 组件");
+                    return;
+                }
+
+                // 尝试添加O_CustomImageEffect组件
+                System.Type outlineType = System.Type.GetType("O_CustomImageEffect");
+                if (outlineType == null)
+                {
+                    // 在所有程序集中查找
+                    foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        try
+                        {
+                            outlineType = assembly.GetType("O_CustomImageEffect");
+                            if (outlineType != null) break;
+                        }
+                        catch { continue; }
+                    }
+                }
+
+                if (outlineType != null)
+                {
+                    playerCamera.gameObject.AddComponent(outlineType);
+                    LogDebug("成功添加 O_CustomImageEffect 组件");
+                }
+                else
+                {
+                    LogDebug("未找到 O_CustomImageEffect 类型，请确保插件已正确导入");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                LogDebug($"挂载 O_CustomImageEffect 时发生错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// 设置初始摄像机变换
         /// </summary>
         private void SetupInitialCameraTransform()
@@ -350,7 +407,6 @@ namespace Classroom.Player
             // 重置角度
             currentHorizontalAngle = 0f;
             currentVerticalAngle = 0f;
-
         }
 
         #endregion
@@ -539,8 +595,6 @@ namespace Classroom.Player
 
         #endregion
 
-        #region 调试方法
-
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -548,162 +602,6 @@ namespace Classroom.Player
                 Debug.Log($"[PlayerCameraController] {message}");
             }
         }
-
-        /// <summary>
-        /// 获取当前视角信息
-        /// </summary>
-        public string GetViewAngleInfo()
-        {
-            return $"水平角度: {currentHorizontalAngle:F1}° (限制: ±{horizontalAngleLimit}°), " +
-                   $"垂直角度: {currentVerticalAngle:F1}° (限制: -{verticalDownLimit}° ~ +{verticalUpLimit}°)";
-        }
-
-        [ContextMenu("显示视角信息")]
-        public void ShowViewAngleInfo()
-        {
-            Debug.Log($"[PlayerCameraController] {GetViewAngleInfo()}");
-        }
-
-        [ContextMenu("显示骨骼信息")]
-        public void ShowBoneInfo()
-        {
-            string info = "=== 骨骼信息 ===\n";
-            info += $"Animator: {(characterAnimator != null ? "✓" : "✗")}\n";
-            info += $"头部骨骼: {(headBone != null ? headBone.name : "未找到")}\n";
-            info += $"摄像机挂载点: {(cameraMount != null ? cameraMount.name : "未找到")}\n";
-
-            if (headBone != null)
-            {
-                info += $"头部骨骼子对象数: {headBone.childCount}\n";
-                for (int i = 0; i < headBone.childCount; i++)
-                {
-                    info += $"  - {headBone.GetChild(i).name}\n";
-                }
-            }
-
-            Debug.Log(info);
-        }
-
-        [ContextMenu("重置视角")]
-        public void DebugResetView()
-        {
-            ResetCameraAngle();
-        }
-
-        [ContextMenu("切换控制状态")]
-        public void DebugToggleControl()
-        {
-            SetControlEnabled(!isControlEnabled);
-        }
-
-        [ContextMenu("重新查找挂载点")]
-        public void RefindCameraMount()
-        {
-            FindHeadBoneAndCameraMount();
-            if (isInitialized && cameraMount != null)
-            {
-                SetupInitialCameraTransform();
-            }
-        }
-
-        #endregion
-
-        #region 调试可视化
-
-        private void OnDrawGizmos()
-        {
-            if (!showDebugGizmos || !isInitialized) return;
-
-            DrawBasicGizmos();
-        }
-
-        private void OnDrawGizmosSelected()
-        {
-            if (!showAngleLimits) return;
-
-            DrawDetailedViewLimits();
-        }
-
-        /// <summary>
-        /// 绘制基本调试信息
-        /// </summary>
-        private void DrawBasicGizmos()
-        {
-            if (cameraMount == null) return;
-
-            Vector3 center = cameraMount.position;
-
-            // 绘制当前视角方向
-            if (playerCamera != null)
-            {
-                Gizmos.color = Color.yellow;
-                Vector3 forward = playerCamera.transform.forward;
-                Gizmos.DrawRay(center, forward * 3f);
-            }
-
-            // 绘制座位正前方
-            Gizmos.color = Color.green;
-            Vector3 seatForward = seatForwardDirection * Vector3.forward;
-            Gizmos.DrawRay(center, seatForward * 2f);
-
-            // 绘制头部骨骼位置
-            if (headBone != null)
-            {
-                Gizmos.color = Color.blue;
-                Gizmos.DrawWireSphere(headBone.position, 0.1f);
-
-                // 连接线
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawLine(headBone.position, center);
-            }
-        }
-
-        /// <summary>
-        /// 绘制详细的视角限制范围
-        /// </summary>
-        private void DrawDetailedViewLimits()
-        {
-            if (cameraMount == null) return;
-
-            Vector3 center = cameraMount.position;
-            Vector3 seatForward = seatForwardDirection * Vector3.forward;
-            Vector3 seatRight = seatForwardDirection * Vector3.right;
-            Vector3 seatUp = seatForwardDirection * Vector3.up;
-
-            // 绘制水平限制范围
-            Gizmos.color = Color.cyan;
-
-            // 左边界
-            Vector3 leftLimit = Quaternion.AngleAxis(-horizontalAngleLimit, seatUp) * seatForward;
-            Gizmos.DrawRay(center, leftLimit * 4f);
-
-            // 右边界
-            Vector3 rightLimit = Quaternion.AngleAxis(horizontalAngleLimit, seatUp) * seatForward;
-            Gizmos.DrawRay(center, rightLimit * 4f);
-
-            // 绘制垂直限制范围
-            Gizmos.color = Color.magenta;
-
-            // 上边界
-            Vector3 upLimit = Quaternion.AngleAxis(verticalUpLimit, seatRight) * seatForward;
-            Gizmos.DrawRay(center, upLimit * 3f);
-
-            // 下边界
-            Vector3 downLimit = Quaternion.AngleAxis(-verticalDownLimit, seatRight) * seatForward;
-            Gizmos.DrawRay(center, downLimit * 3f);
-
-            // 绘制限制弧线（简化版）
-            Gizmos.color = Color.white;
-            for (int i = 0; i <= 20; i++)
-            {
-                float t = i / 20f;
-                float angle = Mathf.Lerp(-horizontalAngleLimit, horizontalAngleLimit, t);
-                Vector3 dir = Quaternion.AngleAxis(angle, seatUp) * seatForward;
-                Gizmos.DrawWireSphere(center + dir * 2f, 0.1f);
-            }
-        }
-
-        #endregion
 
         #region 事件处理
 
