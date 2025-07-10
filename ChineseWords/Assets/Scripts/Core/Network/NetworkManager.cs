@@ -133,12 +133,11 @@ namespace Core.Network
             if (!PhotonNetwork.InRoom || persistentManager?.photonView == null) return;
 
             persistentManager.photonView.RPC(methodName, target, parameters);
-            LogDebug($"发送RPC: {methodName} -> {target}");
         }
 
         /// <summary>
         /// 获取玩家对象
-        /// </summary>
+        /// </summary>a
         private Player GetPlayerById(ushort playerId)
         {
             if (!PhotonNetwork.InRoom) return null;

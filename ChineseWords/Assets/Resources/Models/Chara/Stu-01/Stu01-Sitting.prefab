@@ -41,15 +41,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.9
+      value: 0.85
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.9
+      value: 0.85
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.9
+      value: 0.85
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       propertyPath: m_LocalPosition.x
@@ -141,7 +141,6 @@ MonoBehaviour:
   headRotationThreshold: 3
   enablePrediction: 1
   enableDebugLogs: 0
-  showDetailedStats: 0
 --- !u!114 &3865460555584091046
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -156,8 +155,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enableHeadRotation: 1
   enableHeadHorizontalRotation: 1
-  enableHeadVerticalRotation: 0
-  headHorizontalLimit: 90
+  enableHeadVerticalRotation: 1
+  headHorizontalLimit: 75
   headVerticalUpLimit: 60
   headVerticalDownLimit: 30
   headSmoothSpeed: 8
@@ -166,5 +165,4 @@ MonoBehaviour:
   autoFindHeadBone: 1
   syncHeadRotation: 1
   syncThreshold: 3
-  enableDebugLogs: 1
-  showDebugGizmos: 0
+  enableDebugLogs: 0
