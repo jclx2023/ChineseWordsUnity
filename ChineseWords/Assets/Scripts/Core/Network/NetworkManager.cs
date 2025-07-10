@@ -68,6 +68,9 @@ namespace Core.Network
         public static event Action<string, ushort> OnCardMessage;
         public static event Action<ushort, int, ushort> OnCardTransferred;
 
+        // 头部旋转事件
+        public static event Action<ushort, float, float> OnHeadRotationReceived;
+
         #endregion
 
         #region Unity生命周期
@@ -704,38 +707,46 @@ namespace Core.Network
             var spawner = FindObjectOfType<Classroom.Player.NetworkPlayerSpawner>();
             spawner?.ReceiveSeatsAndCharactersData(playerIdsUShort, seatIndices);
         }
+        #endregion
+        #region 头部旋转同步 (新增区域，放在场景管理类消息后面)
 
-        public void SyncPlayerTransform(ushort playerId, Vector3 position, Quaternion rotation, Vector3 velocity)
+        /// <summary>
+        /// 同步玩家头部旋转（本地玩家 → 其他玩家）
+        /// </summary>
+        /// <param name="playerId">玩家ID</param>
+        /// <param name="horizontalAngle">头部水平角度</param>
+        /// <param name="verticalAngle">头部垂直角度</param>
+        public void SyncPlayerHeadRotation(ushort playerId, float horizontalAngle, float verticalAngle)
         {
             if (enableSyncDebugLogs)
             {
-                LogDebug($"发送同步数据: 玩家{playerId}, 位置={position:F2}");
+                LogDebug($"发送头部旋转数据: 玩家{playerId}, H={horizontalAngle:F1}°, V={verticalAngle:F1}°");
             }
 
-            SendRPC("OnPlayerTransform_RPC", RpcTarget.Others, (int)playerId,
-                position.x, position.y, position.z, rotation.x, rotation.y, rotation.z, rotation.w,
-                velocity.x, velocity.y, velocity.z, Time.time);
+            SendRPC("OnPlayerHeadRotation_RPC", RpcTarget.Others, (int)playerId, horizontalAngle, verticalAngle, Time.time);
         }
 
+        /// <summary>
+        /// 接收玩家头部旋转RPC
+        /// </summary>
         [PunRPC]
-        void OnPlayerTransform_RPC(int playerId, float posX, float posY, float posZ,
-            float rotX, float rotY, float rotZ, float rotW, float velX, float velY, float velZ, float timestamp)
+        void OnPlayerHeadRotation_RPC(int playerId, float horizontalAngle, float verticalAngle, float timestamp)
         {
             ushort playerIdUShort = (ushort)playerId;
-            Vector3 position = new Vector3(posX, posY, posZ);
-            Quaternion rotation = new Quaternion(rotX, rotY, rotZ, rotW);
-            Vector3 velocity = new Vector3(velX, velY, velZ);
 
             if (enableSyncDebugLogs)
             {
                 float lag = Time.time - timestamp;
-                LogDebug($"接收同步数据: 玩家{playerId}, 延迟={lag:F3}s");
+                LogDebug($"接收头部旋转数据: 玩家{playerId}, H={horizontalAngle:F1}°, V={verticalAngle:F1}°, 延迟={lag:F3}s");
             }
+
+            // 触发事件
+            OnHeadRotationReceived?.Invoke(playerIdUShort, horizontalAngle, verticalAngle);
 
             // 直接调用对应的PlayerNetworkSync组件
             if (playerSyncComponents.ContainsKey(playerIdUShort))
             {
-                playerSyncComponents[playerIdUShort].ReceiveNetworkTransform(position, rotation, velocity, timestamp);
+                playerSyncComponents[playerIdUShort].ReceiveNetworkHeadRotation(horizontalAngle, verticalAngle, timestamp);
             }
             else
             {
@@ -745,14 +756,13 @@ namespace Core.Network
                 {
                     if (syncComponent.PlayerId == playerIdUShort)
                     {
-                        syncComponent.ReceiveNetworkTransform(position, rotation, velocity, timestamp);
+                        syncComponent.ReceiveNetworkHeadRotation(horizontalAngle, verticalAngle, timestamp);
                         RegisterPlayerSync(playerIdUShort, syncComponent);
                         break;
                     }
                 }
             }
         }
-
         #endregion
         #region 玩家位置同步
 

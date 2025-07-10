@@ -576,24 +576,6 @@ namespace Classroom.Player
         }
 
         /// <summary>
-        /// 强制重建绑定关系
-        /// </summary>
-        [ContextMenu("重建绑定关系")]
-        public void RebuildBindings()
-        {
-            LogDebug("强制重建绑定关系");
-
-            if (!ValidatePrerequisites())
-            {
-                LogDebug("前置条件不满足，无法重建绑定");
-                return;
-            }
-
-            ClearAllBindings();
-            BuildInitialBindings();
-        }
-
-        /// <summary>
         /// 获取绑定状态信息
         /// </summary>
         public string GetBindingStatus()
@@ -627,35 +609,6 @@ namespace Classroom.Player
             return status;
         }
 
-        /// <summary>
-        /// 批量绑定玩家列表
-        /// </summary>
-        public int BatchBindPlayers(List<ushort> playerIds)
-        {
-            if (!isInitialized)
-            {
-                LogDebug("绑定器尚未初始化，无法批量绑定");
-                return 0;
-            }
-
-            int successCount = 0;
-            var availableSeats = GetAvailableSeatIndices();
-
-            for (int i = 0; i < playerIds.Count && i < availableSeats.Count; i++)
-            {
-                var playerId = playerIds[i];
-                var seatIndex = availableSeats[i];
-                string playerName = $"Player_{playerId}";
-
-                if (BindPlayerToSeat(playerId, seatIndex, playerName))
-                {
-                    successCount++;
-                }
-            }
-
-            LogDebug($"批量绑定完成：成功绑定 {successCount}/{playerIds.Count} 个玩家");
-            return successCount;
-        }
 
         #endregion
 
@@ -679,31 +632,6 @@ namespace Classroom.Player
 
         #endregion
 
-        #region 调试方法
-
-        [ContextMenu("显示所有绑定详情")]
-        public void ShowAllBindingDetails()
-        {
-            string details = GetBindingStatus();
-            Debug.Log(details);
-        }
-
-        [ContextMenu("测试自动绑定")]
-        public void TestAutoBinding()
-        {
-            if (!isInitialized)
-            {
-                LogDebug("绑定器未初始化，无法测试");
-                return;
-            }
-
-            // 模拟绑定几个测试玩家
-            var testPlayers = new List<ushort> { 1, 2, 3, 4 };
-            BatchBindPlayers(testPlayers);
-            ShowAllBindingDetails();
-        }
-
-        #endregion
 
         #region 生命周期管理
 

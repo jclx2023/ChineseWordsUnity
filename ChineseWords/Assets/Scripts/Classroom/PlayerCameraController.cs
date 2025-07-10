@@ -4,9 +4,9 @@ using Core.Network;
 namespace Classroom.Player
 {
     /// <summary>
-    /// 玩家摄像机控制器 - 仅在本地玩家角色上激活
-    /// 绑定到角色头部骨骼的摄像机挂载点，实现180°半球视角限制
-    /// 完全本地化控制，不进行网络同步
+    /// 玩家摄像机控制器 - 简化版本，专注于摄像机控制
+    /// 不再直接控制头部骨骼，通过PlayerHeadController协调头部旋转
+    /// 由于玩家不移动，去除了所有位置相关的逻辑
     /// </summary>
     public class PlayerCameraController : MonoBehaviour
     {
@@ -15,10 +15,10 @@ namespace Classroom.Player
         [SerializeField] private Transform cameraMount; // 摄像机挂载点
         [SerializeField] private bool createCameraIfMissing = true; // 自动创建摄像机
 
-        [Header("骨骼查找")]
-        [SerializeField] private string headBoneName = "head"; // 头部骨骼名称
+        [Header("摄像机挂载")]
         [SerializeField] private string cameraMountName = "CameraMount"; // 摄像机挂载点名称
         [SerializeField] private bool autoFindCameraMount = true; // 自动查找摄像机挂载点
+        [SerializeField] private bool mountToCharacterRoot = true; // 挂载到角色根部而不是头部
 
         [Header("视角控制")]
         [SerializeField] private float mouseSensitivity = 2f; // 鼠标灵敏度
@@ -26,21 +26,22 @@ namespace Classroom.Player
         [SerializeField] private bool invertYAxis = false; // 反转Y轴
 
         [Header("视角限制")]
-        [SerializeField] private float horizontalAngleLimit = 90f; // 水平角度限制（左右各90°）
+        [SerializeField] private float horizontalAngleLimit = 180f; // 水平角度限制（左右各180°，允许完整转动）
         [SerializeField] private float verticalUpLimit = 60f; // 向上角度限制
         [SerializeField] private float verticalDownLimit = 30f; // 向下角度限制
+
+        [Header("头部协调")]
+        [SerializeField] private bool enableHeadCoordination = true; // 启用头部协调
+        [SerializeField] private float headCoordinationRatio = 0.3f; // 头部承担的旋转比例（降低，让摄像机承担更多）
+        [SerializeField] private bool allowDiagonalMovement = true; // 允许对角线运动
+        [SerializeField] private bool useIndependentAxes = false; // 使用独立轴控制
 
         [Header("座位基准")]
         [SerializeField] private Quaternion seatForwardDirection = Quaternion.identity; // 座位正前方朝向
         [SerializeField] private bool lockToSeatDirection = true; // 锁定到座位朝向
 
-        [Header("描边效果")]
-        [SerializeField] private bool enableOutlineEffect = true; // 启用描边效果
-
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
-        [SerializeField] private bool showDebugGizmos = true;
-        [SerializeField] private bool showAngleLimits = true;
 
         // 视角控制变量
         private Vector2 mouseDelta;
@@ -48,44 +49,43 @@ namespace Classroom.Player
         private float currentHorizontalAngle = 0f; // 当前水平角度（相对于座位朝向）
         private float currentVerticalAngle = 0f; // 当前垂直角度
 
+        // 摄像机实际承担的角度（扣除头部承担的部分）
+        private float cameraHorizontalAngle = 0f;
+        private float cameraVerticalAngle = 0f;
+
         // 状态变量
         private bool isInitialized = false;
         private bool isLocalPlayer = false;
         private bool isControlEnabled = false;
-        private Vector3 initialCameraPosition;
         private Quaternion initialCameraRotation;
 
         // 输入状态
         private bool cursorLocked = false;
 
-        // 骨骼相关
-        private Animator characterAnimator;
-        private Transform headBone;
+        // 组件引用
+        private PlayerHeadController headController;
 
         // 公共属性
         public bool IsInitialized => isInitialized;
         public bool IsLocalPlayer => isLocalPlayer;
         public bool IsControlEnabled => isControlEnabled;
         public Camera PlayerCamera => playerCamera;
+        public float CurrentHorizontalAngle => currentHorizontalAngle;
+        public float CurrentVerticalAngle => currentVerticalAngle;
 
         #region Unity生命周期
 
         private void Awake()
         {
-            // 查找角色动画器
-            characterAnimator = GetComponent<Animator>();
-            if (characterAnimator == null)
-            {
-                characterAnimator = GetComponentInChildren<Animator>();
-            }
+            // 获取头部控制器引用
+            headController = GetComponent<PlayerHeadController>();
 
-            // 注意：不在Awake中检查本地玩家状态，延迟到Start中
-            LogDebug("PlayerCameraController Awake完成，等待初始化");
+            LogDebug("PlayerCameraController Awake完成");
         }
 
         private void Start()
         {
-            // 延迟检查本地玩家状态，确保PlayerNetworkSync已经初始化
+            // 延迟检查本地玩家状态
             CheckIfLocalPlayer();
 
             if (isLocalPlayer)
@@ -108,13 +108,6 @@ namespace Classroom.Player
             UpdateCameraRotation();
         }
 
-        private void LateUpdate()
-        {
-            if (!isInitialized || !isLocalPlayer) return;
-
-            UpdateCameraPosition();
-        }
-
         #endregion
 
         #region 初始化
@@ -124,7 +117,6 @@ namespace Classroom.Player
         /// </summary>
         private void CheckIfLocalPlayer()
         {
-            // 通过NetworkManager检查是否为本地玩家
             var networkSync = GetComponent<PlayerNetworkSync>();
             if (networkSync != null)
             {
@@ -146,14 +138,14 @@ namespace Classroom.Player
         {
             LogDebug("开始初始化摄像机控制器");
 
-            // 查找头部骨骼和摄像机挂载点
-            FindHeadBoneAndCameraMount();
+            // 查找或创建摄像机挂载点
+            SetupCameraMount();
 
             // 查找或创建摄像机
             SetupCamera();
 
-            // 设置初始位置和角度
-            if (cameraMount != null)
+            // 设置初始变换
+            if (cameraMount != null && playerCamera != null)
             {
                 SetupInitialCameraTransform();
             }
@@ -168,69 +160,58 @@ namespace Classroom.Player
         }
 
         /// <summary>
-        /// 查找头部骨骼和摄像机挂载点
+        /// 设置摄像机挂载点
         /// </summary>
-        private void FindHeadBoneAndCameraMount()
+        private void SetupCameraMount()
         {
-            if (characterAnimator == null)
-            {
-                return;
-            }
-
-            // 查找头部骨骼
-            headBone = FindBoneRecursive(characterAnimator.transform, headBoneName);
-
-            // 在头部骨骼子级查找摄像机挂载点
             if (autoFindCameraMount)
             {
-                cameraMount = FindCameraMountInChildren(headBone);
+                // 优先查找现有的挂载点
+                cameraMount = FindCameraMountInHierarchy();
 
                 if (cameraMount == null)
                 {
-                    // 如果没有找到，创建一个
                     CreateCameraMount();
                 }
             }
         }
 
         /// <summary>
-        /// 递归查找骨骼
+        /// 在层级中查找摄像机挂载点
         /// </summary>
-        private Transform FindBoneRecursive(Transform parent, string boneName)
+        private Transform FindCameraMountInHierarchy()
         {
-            // 检查当前对象
-            if (parent.name.ToLower().Contains(boneName.ToLower()))
-            {
-                return parent;
-            }
+            // 在角色根部查找
+            Transform mount = transform.Find(cameraMountName);
+            if (mount != null) return mount;
 
-            // 递归检查子对象
-            for (int i = 0; i < parent.childCount; i++)
-            {
-                Transform result = FindBoneRecursive(parent.GetChild(i), boneName);
-                if (result != null)
-                {
-                    return result;
-                }
-            }
+            // 递归查找
+            mount = FindTransformRecursive(transform, cameraMountName);
+            if (mount != null) return mount;
 
-            return null;
+            // 查找包含camera或mount关键字的对象
+            mount = FindTransformRecursive(transform, "camera");
+            if (mount != null) return mount;
+
+            mount = FindTransformRecursive(transform, "mount");
+            return mount;
         }
 
         /// <summary>
-        /// 在子级中查找摄像机挂载点
+        /// 递归查找Transform
         /// </summary>
-        private Transform FindCameraMountInChildren(Transform parent)
+        private Transform FindTransformRecursive(Transform parent, string name)
         {
             for (int i = 0; i < parent.childCount; i++)
             {
                 Transform child = parent.GetChild(i);
-                if (child.name.ToLower().Contains(cameraMountName.ToLower()) ||
-                    child.name.ToLower().Contains("camera") ||
-                    child.name.ToLower().Contains("mount"))
+                if (child.name.ToLower().Contains(name.ToLower()))
                 {
                     return child;
                 }
+
+                Transform result = FindTransformRecursive(child, name);
+                if (result != null) return result;
             }
             return null;
         }
@@ -240,15 +221,34 @@ namespace Classroom.Player
         /// </summary>
         private void CreateCameraMount()
         {
-            if (headBone == null) return;
-
             GameObject mountObject = new GameObject(cameraMountName);
-            mountObject.transform.SetParent(headBone);
-            mountObject.transform.localPosition = Vector3.zero;
-            mountObject.transform.localRotation = Quaternion.identity;
 
+            if (mountToCharacterRoot)
+            {
+                // 挂载到角色根部
+                mountObject.transform.SetParent(transform);
+                mountObject.transform.localPosition = new Vector3(0, 1.8f, 0); // 头部高度
+            }
+            else
+            {
+                // 挂载到头部骨骼（如果有的话）
+                if (headController != null && headController.HeadBone != null)
+                {
+                    mountObject.transform.SetParent(headController.HeadBone);
+                    mountObject.transform.localPosition = Vector3.zero;
+                }
+                else
+                {
+                    // 降级到角色根部
+                    mountObject.transform.SetParent(transform);
+                    mountObject.transform.localPosition = new Vector3(0, 1.8f, 0);
+                }
+            }
+
+            mountObject.transform.localRotation = Quaternion.identity;
             cameraMount = mountObject.transform;
-            LogDebug($"创建摄像机挂载点: {cameraMountName}");
+
+            LogDebug($"创建摄像机挂载点: {cameraMountName} at {mountObject.transform.position}");
         }
 
         /// <summary>
@@ -256,11 +256,6 @@ namespace Classroom.Player
         /// </summary>
         private void SetupCamera()
         {
-            // 先尝试查找现有摄像机
-            if (playerCamera == null)
-            {
-                playerCamera = GetComponentInChildren<Camera>();
-            }
 
             // 如果没有摄像机且允许创建，则创建一个
             if (playerCamera == null && createCameraIfMissing)
@@ -277,11 +272,6 @@ namespace Classroom.Player
             // 设置摄像机属性
             ConfigureCamera();
 
-            // 挂载描边效果
-            if (enableOutlineEffect)
-            {
-                AttachOutlineEffect();
-            }
 
             LogDebug("摄像机设置完成");
         }
@@ -303,6 +293,7 @@ namespace Classroom.Player
             else
             {
                 cameraObject.transform.SetParent(transform);
+                cameraObject.transform.localPosition = new Vector3(0, 1.8f, 0);
             }
 
             playerCamera = cameraObject.AddComponent<Camera>();
@@ -337,61 +328,10 @@ namespace Classroom.Player
         }
 
         /// <summary>
-        /// 挂载描边效果
-        /// </summary>
-        private void AttachOutlineEffect()
-        {
-            if (playerCamera == null) return;
-
-            try
-            {
-                // 检查是否已经存在O_CustomImageEffect组件
-                var existingOutline = playerCamera.GetComponent("O_CustomImageEffect");
-                if (existingOutline != null)
-                {
-                    LogDebug("摄像机上已存在 O_CustomImageEffect 组件");
-                    return;
-                }
-
-                // 尝试添加O_CustomImageEffect组件
-                System.Type outlineType = System.Type.GetType("O_CustomImageEffect");
-                if (outlineType == null)
-                {
-                    // 在所有程序集中查找
-                    foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        try
-                        {
-                            outlineType = assembly.GetType("O_CustomImageEffect");
-                            if (outlineType != null) break;
-                        }
-                        catch { continue; }
-                    }
-                }
-
-                if (outlineType != null)
-                {
-                    playerCamera.gameObject.AddComponent(outlineType);
-                    LogDebug("成功添加 O_CustomImageEffect 组件");
-                }
-                else
-                {
-                    LogDebug("未找到 O_CustomImageEffect 类型，请确保插件已正确导入");
-                }
-            }
-            catch (System.Exception ex)
-            {
-                LogDebug($"挂载 O_CustomImageEffect 时发生错误: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// 设置初始摄像机变换
         /// </summary>
         private void SetupInitialCameraTransform()
         {
-            if (cameraMount == null || playerCamera == null) return;
-
             // 确保摄像机位置正确
             if (playerCamera.transform.parent != cameraMount)
             {
@@ -400,13 +340,16 @@ namespace Classroom.Player
                 playerCamera.transform.localRotation = Quaternion.identity;
             }
 
-            // 记录初始变换
-            initialCameraPosition = cameraMount.localPosition;
-            initialCameraRotation = cameraMount.localRotation;
+            // 记录初始变换（不包含偏移，偏移在ApplyCameraRotation中处理）
+            initialCameraRotation = Quaternion.identity;
 
             // 重置角度
             currentHorizontalAngle = 0f;
             currentVerticalAngle = 0f;
+            cameraHorizontalAngle = 0f;
+            cameraVerticalAngle = 0f;
+
+            LogDebug("摄像机初始变换设置完成，90度偏移将在ApplyCameraRotation中应用");
         }
 
         #endregion
@@ -429,6 +372,12 @@ namespace Classroom.Player
             {
                 SetupInitialCameraTransform();
             }
+
+            // 同时设置头部控制器的基础旋转
+            if (headController != null)
+            {
+                headController.SetBaseHeadRotation(seatRotation);
+            }
         }
 
         /// <summary>
@@ -447,24 +396,13 @@ namespace Classroom.Player
                 SetCursorLock(true);
             }
 
-            LogDebug($"摄像机控制状态: {enabled}");
-        }
-
-        /// <summary>
-        /// 重置摄像机角度
-        /// </summary>
-        public void ResetCameraAngle()
-        {
-            currentHorizontalAngle = 0f;
-            currentVerticalAngle = 0f;
-
-            if (cameraMount != null && playerCamera != null)
+            // 同时控制头部控制器
+            if (headController != null)
             {
-                // 重置摄像机到初始状态
-                playerCamera.transform.localRotation = Quaternion.identity;
+                headController.SetHeadControlEnabled(enabled);
             }
 
-            LogDebug("摄像机角度已重置");
+            LogDebug($"摄像机控制状态: {enabled}");
         }
 
         #endregion
@@ -503,17 +441,70 @@ namespace Classroom.Player
         /// </summary>
         private void UpdateCameraRotation()
         {
-            if (cameraMount == null || playerCamera == null) return;
+            if (playerCamera == null) return;
 
-            // 更新角度
+            // 更新总的角度
             currentHorizontalAngle += smoothedMouseDelta.x;
             currentVerticalAngle -= smoothedMouseDelta.y; // 注意负号
 
             // 应用角度限制
             ApplyAngleLimits();
 
-            // 计算最终旋转
-            CalculateAndApplyCameraRotation();
+            // 协调头部和摄像机的旋转
+            CoordinateHeadAndCameraRotation();
+
+            // 应用摄像机旋转
+            ApplyCameraRotation();
+        }
+
+        /// <summary>
+        /// 协调头部和摄像机的旋转
+        /// </summary>
+        private void CoordinateHeadAndCameraRotation()
+        {
+            Vector2 headRotation = Vector2.zero;
+
+            // 如果启用头部协调且头部控制器存在
+            if (enableHeadCoordination && headController != null && headController.IsInitialized)
+            {
+                if (useIndependentAxes)
+                {
+                    // 独立轴模式：水平给头部，垂直给摄像机
+                    float headHorizontal = currentHorizontalAngle * headCoordinationRatio;
+                    headRotation = headController.ReceiveRotationInput(headHorizontal, 0f);
+
+                    cameraHorizontalAngle = currentHorizontalAngle - headRotation.x;
+                    cameraVerticalAngle = currentVerticalAngle; // 垂直完全由摄像机处理
+                }
+                else if (allowDiagonalMovement)
+                {
+                    // 自由模式：头部只承担小部分，摄像机处理大部分
+                    float headHorizontal = currentHorizontalAngle * headCoordinationRatio;
+                    float headVertical = currentVerticalAngle * (headCoordinationRatio * 0.5f); // 垂直给头部更少
+
+                    headRotation = headController.ReceiveRotationInput(headHorizontal, headVertical);
+
+                    // 摄像机承担剩余部分
+                    cameraHorizontalAngle = currentHorizontalAngle - headRotation.x;
+                    cameraVerticalAngle = currentVerticalAngle - headRotation.y;
+                }
+                else
+                {
+                    // 原始模式：让头部控制器处理旋转输入，返回头部实际承担的角度
+                    headRotation = headController.ReceiveRotationInput(currentHorizontalAngle, currentVerticalAngle);
+
+                    // 摄像机承担剩余的旋转
+                    cameraHorizontalAngle = currentHorizontalAngle - headRotation.x;
+                    cameraVerticalAngle = currentVerticalAngle - headRotation.y;
+                }
+            }
+            else
+            {
+                // 禁用头部协调时，摄像机承担所有旋转
+                cameraHorizontalAngle = currentHorizontalAngle;
+                cameraVerticalAngle = currentVerticalAngle;
+            }
+
         }
 
         /// <summary>
@@ -521,7 +512,7 @@ namespace Classroom.Player
         /// </summary>
         private void ApplyAngleLimits()
         {
-            // 水平角度限制（左右各90°）
+            // 水平角度限制
             currentHorizontalAngle = Mathf.Clamp(currentHorizontalAngle, -horizontalAngleLimit, horizontalAngleLimit);
 
             // 垂直角度限制
@@ -529,35 +520,39 @@ namespace Classroom.Player
         }
 
         /// <summary>
-        /// 计算并应用摄像机旋转
+        /// 应用摄像机旋转
         /// </summary>
-        private void CalculateAndApplyCameraRotation()
+        private void ApplyCameraRotation()
         {
-            // 基础旋转（座位朝向）
-            Quaternion baseRotation = lockToSeatDirection ? seatForwardDirection : Quaternion.identity;
+            // 基础旋转（座位朝向，如果头部不处理水平旋转的话）
+            bool headHandlesHorizontal = enableHeadCoordination && headController != null;
+            Quaternion baseRotation = (lockToSeatDirection && !headHandlesHorizontal) ?
+                seatForwardDirection : Quaternion.identity;
+
+            // 摄像机初始朝向偏移
+            Quaternion initialOffset = Quaternion.AngleAxis(90f, Vector3.right);
 
             // 水平旋转（绕Y轴）
-            Quaternion horizontalRotation = Quaternion.AngleAxis(currentHorizontalAngle, Vector3.up);
+            Quaternion horizontalRotation = Quaternion.AngleAxis(cameraHorizontalAngle, Vector3.up);
 
             // 垂直旋转（绕X轴）
-            Quaternion verticalRotation = Quaternion.AngleAxis(currentVerticalAngle, Vector3.right);
+            Quaternion verticalRotation = Quaternion.AngleAxis(cameraVerticalAngle, Vector3.right);
 
-            // 组合旋转：基础旋转 * 水平旋转 * 垂直旋转
-            Quaternion finalRotation = baseRotation * horizontalRotation * verticalRotation;
+            // 组合旋转：基础旋转 * 初始偏移 * 水平旋转 * 垂直旋转
+            Quaternion finalRotation = baseRotation * initialOffset * horizontalRotation * verticalRotation;
 
-            // 应用到摄像机的局部旋转
-            playerCamera.transform.localRotation = Quaternion.Inverse(cameraMount.rotation) * finalRotation;
-        }
+            // 应用到摄像机
+            if (mountToCharacterRoot || cameraMount.parent == transform)
+            {
+                // 如果挂载到角色根部，直接应用旋转
+                playerCamera.transform.localRotation = finalRotation;
+            }
+            else
+            {
+                // 如果挂载到其他骨骼，需要考虑挂载点的旋转
+                playerCamera.transform.localRotation = Quaternion.Inverse(cameraMount.rotation) * finalRotation;
+            }
 
-        /// <summary>
-        /// 更新摄像机位置
-        /// </summary>
-        private void UpdateCameraPosition()
-        {
-            if (cameraMount == null || playerCamera == null) return;
-
-            // 摄像机跟随挂载点位置（已经通过父子关系自动跟随）
-            // 这里可以添加额外的位置偏移逻辑，如头部摆动等
         }
 
         #endregion

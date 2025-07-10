@@ -40,6 +40,18 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.9
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.9
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.9
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
       objectReference: {fileID: 0}
@@ -79,9 +91,13 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
+      propertyPath: m_ConstrainProportionsScale
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       propertyPath: m_Name
-      value: Stu01 1
+      value: Stu01-Sitting
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -93,6 +109,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1908897957786988479}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3865460555584091046}
   m_SourcePrefab: {fileID: 100100000, guid: c5c90c4dc22277340bc846a58cbf371b, type: 3}
 --- !u!4 &2589271616633457306 stripped
 Transform:
@@ -116,12 +135,36 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a13ba44d2b91b00439a82c76b999ba48, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  syncPosition: 1
-  syncRotation: 1
+  syncHeadRotation: 1
   sendRate: 10
   interpolationSpeed: 10
-  positionThreshold: 0.1
-  rotationThreshold: 5
+  headRotationThreshold: 3
   enablePrediction: 1
   enableDebugLogs: 0
-  showNetworkGizmos: 0
+  showDetailedStats: 0
+--- !u!114 &3865460555584091046
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5415432168881156608}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 42b763be1ad60f94e8f9cfb5cac1fa69, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableHeadRotation: 1
+  enableHeadHorizontalRotation: 1
+  enableHeadVerticalRotation: 0
+  headHorizontalLimit: 90
+  headVerticalUpLimit: 60
+  headVerticalDownLimit: 30
+  headSmoothSpeed: 8
+  useSmoothing: 1
+  headBoneName: mixamorig:Head
+  autoFindHeadBone: 1
+  syncHeadRotation: 1
+  syncThreshold: 3
+  enableDebugLogs: 1
+  showDebugGizmos: 0
