@@ -62,6 +62,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 99361988bec84ac4e9a6c536de9c2bb5, type: 3}
       insertIndex: -1
       addedObject: {fileID: 5944483734274556035}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 99361988bec84ac4e9a6c536de9c2bb5, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: -7171546806301672509}
   m_SourcePrefab: {fileID: 100100000, guid: 99361988bec84ac4e9a6c536de9c2bb5, type: 3}
 --- !u!1 &5656117413891499688 stripped
 GameObject:
@@ -118,3 +121,47 @@ CapsuleCollider:
   m_Height: 0.1
   m_Direction: 2
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &-7171546806301672509
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5656117413891499688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0714014ca2a9b1446b56591c9093f91e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  lifetime: 4
+  enableDebugLogs: 1
+  enableTrail: 1
+  trailMaterial: {fileID: 0}
+  trailTime: 0.4
+  trailWidth: 0.05
+  trailColor: {r: 1, g: 1, b: 1, a: 1}
+  trailEndWidthMultiplier: 0.1
+  trailAutoDestruct: 0
+  trailEmitting: 1
+  enableHitEffect: 1
+  dustParticleCount: 20
+  dustLifetime: 0.5
+  dustSpeed: 2
+  dustSize: 0.1
+  dustColor: {r: 1, g: 1, b: 1, a: 1}
+  dustSphereRadius: 0.2
+  dustEffectDuration: 2
+  showVelocityDebug: 1
+  showTrajectoryGizmos: 1
+  trajectoryPoints: 10
+  trajectoryTimeStep: 0.1
+  detectPlayer: 1
+  detectGround: 1
+  detectOtherObjects: 1
+  additionalPlayerTags:
+  - Student
+  - Character
+  additionalGroundTags:
+  - Floor
+  - Plane
+  - Surface

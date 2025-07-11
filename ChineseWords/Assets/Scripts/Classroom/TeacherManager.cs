@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections;
 using Classroom;
 using Core.Network;
@@ -6,54 +6,46 @@ using Core.Network;
 namespace Classroom.Teacher
 {
     /// <summary>
-    /// ÀÏÊ¦¹ÜÀíÆ÷ - ´¦ÀíÑ§Éú´ğ´íÌâÊ±µÄÈÓ·Û±Ê¶¯×÷
-    /// ¹¦ÄÜ£º×ªÏòÑ§Éú ¡ú ²¥·Å¶¯»­ ¡ú Éú³É·Û±Ê ¡ú Å×ÎïÏß·ÉĞĞ ¡ú ÃüÖĞÏú»Ù ¡ú »Ö¸´³¯Ïò
+    /// è€å¸ˆç®¡ç†å™¨ - ç®€åŒ–ç‰ˆæœ¬
     /// </summary>
     public class TeacherManager : MonoBehaviour
     {
-        [Header("×é¼şÒıÓÃ")]
+        [Header("ç»„ä»¶å¼•ç”¨")]
         [SerializeField] private Animator teacherAnimator;
-        [SerializeField] private Transform throwPoint; // ÊÖ²¿Î»ÖÃ
-        [SerializeField] private GameObject chalkPrefab; // ·Û±ÊÔ¤ÖÆÌå
+        [SerializeField] private Transform throwPoint;
+        [SerializeField] private GameObject chalkPrefab;
 
-        [Header("¶¯×÷ÅäÖÃ")]
-        [SerializeField] private float turnSpeed = 2f; // ×ªÏòËÙ¶È
-        [SerializeField] private float throwForce = 15f; // Å×ÉäÁ¦¶È
-        [SerializeField] private float throwAngle = 25f; // Å×Éä½Ç¶È
-        [SerializeField] private float recoverDelay = 2f; // »Ö¸´³¯ÏòÑÓ³Ù
+        [Header("åŠ¨ä½œé…ç½®")]
+        [SerializeField] private float turnSpeed = 2f;
+        [SerializeField] private float throwForce = 15f;
+        [SerializeField] private float recoverDelay = 2f;
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // ×´Ì¬¹ÜÀí
+        // çŠ¶æ€ç®¡ç†
         private enum TeacherState { Idle, Targeting, Throwing, Recovering }
         private TeacherState currentState = TeacherState.Idle;
 
-        // »º´æ
+        // ç¼“å­˜
         private Quaternion initialRotation;
         private ClassroomManager classroomManager;
-        private System.Action onActionCompleted; // ¶¯×÷Íê³É»Øµ÷
-        private Vector3 currentTargetPosition; // µ±Ç°Ä¿±êÎ»ÖÃ»º´æ
+        private System.Action onActionCompleted;
+        private Vector3 currentTargetPosition;
+        private bool hasThrown = false; // é˜²æ­¢é‡å¤æŠ•æ·çš„æ ‡å¿—
 
-        #region UnityÉúÃüÖÜÆÚ
+        #region Unityç”Ÿå‘½å‘¨æœŸ
 
         private void Awake()
         {
-            // ¼ÇÂ¼³õÊ¼³¯Ïò
             initialRotation = transform.rotation;
-
-            // »ñÈ¡½ÌÊÒ¹ÜÀíÆ÷
             classroomManager = FindObjectOfType<ClassroomManager>();
-
-            // ×Ô¶¯²éÕÒ×é¼ş
-            AutoFindComponents();
         }
 
         private void Start()
         {
-            // ¼àÌı´ğÌâ½á¹ûÊÂ¼ş
             SubscribeToEvents();
-            LogDebug("TeacherManager³õÊ¼»¯Íê³É");
+            LogDebug("TeacherManageråˆå§‹åŒ–å®Œæˆ");
         }
 
         private void OnDestroy()
@@ -63,22 +55,17 @@ namespace Classroom.Teacher
 
         #endregion
 
-        #region ÊÂ¼ş¶©ÔÄ
+        #region äº‹ä»¶è®¢é˜…
 
-        /// <summary>
-        /// ¶©ÔÄÍøÂçÊÂ¼ş
-        /// </summary>
         private void SubscribeToEvents()
         {
             if (NetworkManager.Instance != null)
             {
                 NetworkManager.OnPlayerAnswerResult += OnPlayerAnswerResult;
+                LogDebug("å·²è®¢é˜…ç½‘ç»œäº‹ä»¶");
             }
         }
 
-        /// <summary>
-        /// È¡ÏûÊÂ¼ş¶©ÔÄ
-        /// </summary>
         private void UnsubscribeFromEvents()
         {
             if (NetworkManager.Instance != null)
@@ -87,31 +74,29 @@ namespace Classroom.Teacher
             }
         }
 
-        /// <summary>
-        /// ´¦ÀíÍæ¼Ò´ğÌâ½á¹û
-        /// </summary>
         private void OnPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
         {
-            // Ö»´¦Àí´íÎó´ğ°¸£¬ÇÒÈ·±£µ±Ç°¿ÕÏĞ
-            if (isCorrect || currentState != TeacherState.Idle)
-                return;
+            LogDebug($"æ”¶åˆ°ç­”é¢˜ç»“æœ: ç©å®¶{playerId}, æ­£ç¡®:{isCorrect}, ç­”æ¡ˆ:{answer}");
 
-            LogDebug($"Ñ§Éú{playerId}´ğ´íÁË£¬×¼±¸ÈÓ·Û±Ê");
+            if (isCorrect || currentState != TeacherState.Idle)
+            {
+                LogDebug($"è·³è¿‡å¤„ç†: æ­£ç¡®ç­”æ¡ˆ({isCorrect}) æˆ– å¿™ç¢ŒçŠ¶æ€({currentState})");
+                return;
+            }
+
+            LogDebug($"å­¦ç”Ÿ{playerId}ç­”é”™äº†ï¼Œå‡†å¤‡æ‰”ç²‰ç¬”");
             StartChalkThrowSequence(playerId);
         }
 
         #endregion
 
-        #region Ö÷Òª¹¦ÄÜ
+        #region ä¸»è¦åŠŸèƒ½
 
-        /// <summary>
-        /// ¿ªÊ¼ÈÓ·Û±ÊĞòÁĞ
-        /// </summary>
         public void StartChalkThrowSequence(ushort targetPlayerId, System.Action onCompleted = null)
         {
             if (currentState != TeacherState.Idle)
             {
-                LogDebug("ÀÏÊ¦ÕıÃ¦£¬ÎŞ·¨Ö´ĞĞĞÂµÄÈÓ·Û±Ê¶¯×÷");
+                LogDebug("è€å¸ˆæ­£å¿™ï¼Œæ— æ³•æ‰§è¡Œæ–°çš„æ‰”ç²‰ç¬”åŠ¨ä½œ");
                 return;
             }
 
@@ -119,179 +104,177 @@ namespace Classroom.Teacher
             StartCoroutine(ExecuteChalkThrowSequence(targetPlayerId));
         }
 
-        /// <summary>
-        /// Ö´ĞĞÍêÕûµÄÈÓ·Û±ÊĞòÁĞ
-        /// </summary>
         private IEnumerator ExecuteChalkThrowSequence(ushort targetPlayerId)
         {
-            LogDebug($"¿ªÊ¼¶ÔÑ§Éú{targetPlayerId}Ö´ĞĞÈÓ·Û±ÊĞòÁĞ");
+            LogDebug($"=== å¼€å§‹æ‰”ç²‰ç¬”åºåˆ—ï¼Œç›®æ ‡ç©å®¶: {targetPlayerId} ===");
 
-            // 1. »ñÈ¡Ä¿±êÎ»ÖÃ
+            // é‡ç½®æŠ•æ·æ ‡å¿—
+            hasThrown = false;
+
+            // 1. è·å–ç›®æ ‡ä½ç½®
             Vector3 targetPosition = GetStudentPosition(targetPlayerId);
             if (targetPosition == Vector3.zero)
             {
-                LogDebug($"Î´ÕÒµ½Ñ§Éú{targetPlayerId}µÄÎ»ÖÃ£¬È¡Ïû¶¯×÷");
+                LogDebug($"æœªæ‰¾åˆ°å­¦ç”Ÿ{targetPlayerId}çš„ä½ç½®ï¼Œå–æ¶ˆåŠ¨ä½œ");
                 yield break;
             }
 
-            // »º´æÄ¿±êÎ»ÖÃ¹©¶¯»­ÊÂ¼şÊ¹ÓÃ
             currentTargetPosition = targetPosition;
+            LogDebug($"ç›®æ ‡ä½ç½®: {targetPosition}");
 
-            // 2. ×ªÏòÄ¿±ê
+            // 2. è½¬å‘ç›®æ ‡
             currentState = TeacherState.Targeting;
             yield return StartCoroutine(TurnToTarget(targetPosition));
 
-            // 3. ²¥·ÅÈÓ·Û±Ê¶¯»­£¨·Û±ÊÍ¶ÖÀÓÉ¶¯»­ÊÂ¼ş´¥·¢£©
+            // 3. æ’­æ”¾åŠ¨ç”»å¹¶æŠ•æ·
             currentState = TeacherState.Throwing;
             PlayThrowAnimation();
 
-            // 4. µÈ´ı¶¯»­Íê³É£¨ÕâÀïÓÃ¹Ì¶¨Ê±¼ä£¬Êµ¼ÊÓ¦¸Ã¸ù¾İ¶¯»­³¤¶Èµ÷Õû£©
+            // 4. ç­‰å¾…åŠ¨ç”»å®Œæˆ
             yield return new WaitForSeconds(3.4f);
 
-            // 5. »Ö¸´³õÊ¼³¯Ïò
+            // 5. æ¢å¤åˆå§‹æœå‘
             currentState = TeacherState.Recovering;
             yield return StartCoroutine(RecoverToInitialRotation());
 
-            // 6. Íê³É
+            // 6. å®Œæˆ
             currentState = TeacherState.Idle;
-            currentTargetPosition = Vector3.zero; // Çå³ı»º´æ
+            currentTargetPosition = Vector3.zero;
+            hasThrown = false;
             onActionCompleted?.Invoke();
-            LogDebug("ÈÓ·Û±ÊĞòÁĞÍê³É");
+            LogDebug("=== æ‰”ç²‰ç¬”åºåˆ—å®Œæˆ ===");
         }
 
         #endregion
 
-        #region ¾ßÌå¶¯×÷ÊµÏÖ
+        #region å…·ä½“åŠ¨ä½œå®ç°
 
-        /// <summary>
-        /// ×ªÏòÄ¿±ê
-        /// </summary>
         private IEnumerator TurnToTarget(Vector3 targetPosition)
         {
             Vector3 direction = (targetPosition - transform.position).normalized;
-            direction.y = 0; // ±£³ÖË®Æ½×ªÏò
-
+            direction.y = 0;
             Quaternion targetRotation = Quaternion.LookRotation(direction);
 
             while (Quaternion.Angle(transform.rotation, targetRotation) > 1f)
             {
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation,
-                                                    turnSpeed * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
                 yield return null;
             }
 
             transform.rotation = targetRotation;
-            LogDebug("×ªÏòÄ¿±êÍê³É");
+            LogDebug("è½¬å‘ç›®æ ‡å®Œæˆ");
         }
 
-        /// <summary>
-        /// ²¥·ÅÈÓ·Û±Ê¶¯»­
-        /// </summary>
         private void PlayThrowAnimation()
         {
             if (teacherAnimator != null)
             {
                 teacherAnimator.SetTrigger("throw");
-                LogDebug("²¥·ÅÈÓ·Û±Ê¶¯»­");
+                LogDebug("æ’­æ”¾æ‰”ç²‰ç¬”åŠ¨ç”»");
             }
         }
 
         /// <summary>
-        /// ¶¯»­ÊÂ¼ş»Øµ÷ - ÔÚ¹Ø¼üÖ¡Í¶ÖÀ·Û±Ê
-        /// Õâ¸ö·½·¨»á±»Animation Event×Ô¶¯µ÷ÓÃ
+        /// åŠ¨ç”»äº‹ä»¶å›è°ƒ - ç”±åŠ¨ç”»ç³»ç»Ÿè°ƒç”¨
         /// </summary>
         public void OnThrowChalk()
         {
-            if (currentState == TeacherState.Throwing && currentTargetPosition != Vector3.zero)
+            LogDebug("åŠ¨ç”»äº‹ä»¶è§¦å‘ OnThrowChalk");
+
+            if (currentState == TeacherState.Throwing && !hasThrown)
             {
-                ThrowChalk(currentTargetPosition);
-                LogDebug("Í¨¹ı¶¯»­ÊÂ¼şÍ¶ÖÀ·Û±Ê");
+                ThrowChalk();
+            }
+            else
+            {
+                LogDebug($"è·³è¿‡åŠ¨ç”»äº‹ä»¶æŠ•æ· - çŠ¶æ€:{currentState}, å·²æŠ•æ·:{hasThrown}");
             }
         }
 
-        /// <summary>
-        /// Í¶ÖÀ·Û±Ê
-        /// </summary>
-        private void ThrowChalk(Vector3 targetPosition)
+        private void ThrowChalk()
         {
-            if (chalkPrefab == null || throwPoint == null)
+            if (hasThrown)
             {
-                LogDebug("·Û±ÊÔ¤ÖÆÌå»òÍ¶ÖÀµãÎ´ÉèÖÃ");
+                LogDebug("å·²ç»æŠ•æ·è¿‡ç²‰ç¬”ï¼Œè·³è¿‡é‡å¤æŠ•æ·");
                 return;
             }
 
-            // Éú³É·Û±Ê
-            GameObject chalk = Instantiate(chalkPrefab, throwPoint.position, throwPoint.rotation);
-            Rigidbody chalkRb = chalk.GetComponent<Rigidbody>();
+            hasThrown = true;
+            LogDebug("=== æ‰§è¡Œç²‰ç¬”æŠ•æ· ===");
 
-            if (chalkRb != null)
+            try
             {
-                // ¼ÆËãÅ×ÎïÏß³õÊ¼ËÙ¶È
-                Vector3 velocity = CalculateThrowVelocity(throwPoint.position, targetPosition);
-                chalkRb.AddForce(velocity, ForceMode.VelocityChange);
+                // ç”Ÿæˆç²‰ç¬”
+                GameObject chalk = Instantiate(chalkPrefab, throwPoint.position, throwPoint.rotation);
+                Rigidbody chalkRb = chalk.GetComponent<Rigidbody>();
 
-                LogDebug($"·Û±ÊÒÑÍ¶ÖÀ£¬³õÊ¼ËÙ¶È£º{velocity}");
+                if (chalkRb != null)
+                {
+                    // ä½¿ç”¨ç®€å•æŠ•æ·
+                    Vector3 velocity = CalculateSimpleThrowVelocity(throwPoint.position, currentTargetPosition);
+                    chalkRb.AddForce(velocity, ForceMode.VelocityChange);
+                    LogDebug($"ç²‰ç¬”æŠ•æ·å®Œæˆï¼Œé€Ÿåº¦: {velocity}");
+                }
+
+                // è‡ªåŠ¨é”€æ¯
+                StartCoroutine(DestroyChalkAfterTime(chalk, 10f));
             }
-
-            // È·±£·Û±ÊÓĞChalkProjectile½Å±¾ÓÃÓÚÅö×²¼ì²â
-            if (chalk.GetComponent<ChalkProjectile>() == null)
+            catch (System.Exception e)
             {
-                chalk.AddComponent<ChalkProjectile>();
+                LogDebug($"æŠ•æ·ç²‰ç¬”æ—¶å‘ç”Ÿé”™è¯¯: {e.Message}");
+                hasThrown = false; // é‡ç½®æ ‡å¿—ä»¥å…è®¸é‡è¯•
             }
         }
 
-        /// <summary>
-        /// »Ö¸´µ½³õÊ¼³¯Ïò
-        /// </summary>
+        private IEnumerator DestroyChalkAfterTime(GameObject chalk, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (chalk != null)
+            {
+                Destroy(chalk);
+            }
+        }
+
         private IEnumerator RecoverToInitialRotation()
         {
             yield return new WaitForSeconds(recoverDelay);
 
             while (Quaternion.Angle(transform.rotation, initialRotation) > 1f)
             {
-                transform.rotation = Quaternion.Slerp(transform.rotation, initialRotation,
-                                                    turnSpeed * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(transform.rotation, initialRotation, turnSpeed * Time.deltaTime);
                 yield return null;
             }
 
             transform.rotation = initialRotation;
-            LogDebug("»Ö¸´³õÊ¼³¯ÏòÍê³É");
+            LogDebug("æ¢å¤åˆå§‹æœå‘å®Œæˆ");
         }
 
         #endregion
 
-        #region ¸¨Öú·½·¨
+        #region ç®€å•æŠ•æ·è®¡ç®—
 
         /// <summary>
-        /// ×Ô¶¯²éÕÒ×é¼ş
+        /// ç®€å•æŠ•æ·é€Ÿåº¦è®¡ç®—
         /// </summary>
-        private void AutoFindComponents()
+        private Vector3 CalculateSimpleThrowVelocity(Vector3 from, Vector3 to)
         {
-            if (teacherAnimator == null)
-                teacherAnimator = GetComponent<Animator>();
+            Vector3 direction = (to - from).normalized;
+            float distance = Vector3.Distance(from, to);
 
-            if (throwPoint == null)
-            {
-                // ³¢ÊÔ²éÕÒÊÖ²¿Î»ÖÃ
-                throwPoint = transform.Find("ThrowPoint") ??
-                           transform.Find("Hand") ??
-                           transform.Find("RightHand");
+            // æ·»åŠ å‘ä¸Šçš„åˆ†é‡æ¨¡æ‹ŸæŠ›ç‰©çº¿
+            direction.y += 0.4f;
+            direction = direction.normalized;
 
-                if (throwPoint == null)
-                {
-                    // ´´½¨Ä¬ÈÏÍ¶ÖÀµã
-                    GameObject throwObj = new GameObject("ThrowPoint");
-                    throwObj.transform.SetParent(transform);
-                    throwObj.transform.localPosition = new Vector3(0.5f, 1.5f, 0.5f);
-                    throwPoint = throwObj.transform;
-                    LogDebug("×Ô¶¯´´½¨Í¶ÖÀµã");
-                }
-            }
+            // æ ¹æ®è·ç¦»è°ƒæ•´é€Ÿåº¦
+            float speed = Mathf.Max(throwForce, distance * 1.5f);
+
+            return direction * speed;
         }
 
-        /// <summary>
-        /// »ñÈ¡Ñ§ÉúÎ»ÖÃ
-        /// </summary>
+        #endregion
+
+        #region è¾…åŠ©æ–¹æ³•
+
         private Vector3 GetStudentPosition(ushort playerId)
         {
             if (classroomManager?.SeatBinder == null)
@@ -301,132 +284,14 @@ namespace Classroom.Teacher
             return studentGameObject != null ? studentGameObject.transform.position : Vector3.zero;
         }
 
-        /// <summary>
-        /// ¼ÆËãÅ×ÎïÏßÍ¶ÖÀËÙ¶È
-        /// </summary>
-        private Vector3 CalculateThrowVelocity(Vector3 from, Vector3 to)
-        {
-            Vector3 direction = to - from;
-            direction.y = 0;
-            float distance = direction.magnitude;
-
-            float radianAngle = throwAngle * Mathf.Deg2Rad;
-            float height = to.y - from.y;
-
-            // Å×ÎïÏß¹«Ê½¼ÆËã
-            float vY = Mathf.Sqrt(2 * Physics.gravity.magnitude *
-                                (height + distance * Mathf.Tan(radianAngle)));
-            float vXZ = distance / (vY / Physics.gravity.magnitude +
-                                  Mathf.Sqrt(2 * height / Physics.gravity.magnitude));
-
-            Vector3 velocity = direction.normalized * vXZ;
-            velocity.y = vY;
-
-            return velocity * (throwForce / 10f); // Ëõ·ÅÏµÊı
-        }
-
-        /// <summary>
-        /// µ÷ÊÔÈÕÖ¾
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[TeacherManager] {message}");
+                //Debug.Log($"[TeacherManager] {message}");
             }
         }
 
         #endregion
-
-        #region ¹«¹²½Ó¿Ú
-
-        /// <summary>
-        /// ¼ì²éµ±Ç°ÊÇ·ñ¿ÕÏĞ
-        /// </summary>
-        public bool IsIdle => currentState == TeacherState.Idle;
-
-        /// <summary>
-        /// Ç¿ÖÆÍ£Ö¹µ±Ç°¶¯×÷
-        /// </summary>
-        public void StopCurrentAction()
-        {
-            StopAllCoroutines();
-            currentState = TeacherState.Idle;
-            transform.rotation = initialRotation;
-            LogDebug("Ç¿ÖÆÍ£Ö¹µ±Ç°¶¯×÷");
-        }
-
-        #endregion
     }
-
-    #region ChalkProjectile×é¼ş
-
-    /// <summary>
-    /// ·Û±Êµ¯µÀ×é¼ş - ´¦ÀíÅö×²ºÍÏú»Ù
-    /// </summary>
-    public class ChalkProjectile : MonoBehaviour
-    {
-        [Header("ÅäÖÃ")]
-        [SerializeField] private float lifetime = 5f; // ×î´ó´æ»îÊ±¼ä
-        [SerializeField] private bool enableDebugLogs = false;
-
-        private void Start()
-        {
-            // ÉèÖÃ×î´ó´æ»îÊ±¼ä
-            Destroy(gameObject, lifetime);
-        }
-
-        private void OnTriggerEnter(Collider other)
-        {
-            // ¼ì²éÊÇ·ñÃüÖĞÑ§Éú
-            if (other.CompareTag("Player") || other.name.Contains("Character"))
-            {
-                LogDebug($"·Û±ÊÃüÖĞÄ¿±ê: {other.name}");
-
-                // ¿ÉÒÔÔÚÕâÀïÌí¼ÓÃüÖĞÌØĞ§
-                CreateHitEffect();
-
-                // Ïú»Ù·Û±Ê
-                Destroy(gameObject);
-            }
-        }
-
-        private void OnCollisionEnter(Collision collision)
-        {
-            // ±¸ÓÃÅö×²¼ì²â
-            if (collision.gameObject.CompareTag("Player") ||
-                collision.gameObject.name.Contains("Character"))
-            {
-                LogDebug($"·Û±ÊÅö×²Ä¿±ê: {collision.gameObject.name}");
-                CreateHitEffect();
-                Destroy(gameObject);
-            }
-            else if (collision.gameObject.CompareTag("Ground") ||
-                     collision.gameObject.name.Contains("Floor"))
-            {
-                // ÃüÖĞµØÃæÒ²Ïú»Ù
-                LogDebug("·Û±ÊÂäµØ");
-                Destroy(gameObject);
-            }
-        }
-
-        /// <summary>
-        /// ´´½¨ÃüÖĞÌØĞ§£¨¿ÉÑ¡£©
-        /// </summary>
-        private void CreateHitEffect()
-        {
-            // ¿ÉÒÔÔÚÕâÀïÊµÀı»¯Á£×ÓÌØĞ§»ò²¥·ÅÒôĞ§
-            // ÀıÈç£º·Û±ÊËéÁÑĞ§¹û¡¢»Ò³¾·ÉÑïµÈ
-        }
-
-        private void LogDebug(string message)
-        {
-            if (enableDebugLogs)
-            {
-                Debug.Log($"[ChalkProjectile] {message}");
-            }
-        }
-    }
-
-    #endregion
 }
