@@ -8,6 +8,7 @@ using Hashtable = ExitGames.Client.Photon.Hashtable;
 using System.Collections.Generic;
 using Cards.Player;
 using UI.MessageSystem;
+using Classroom.Teacher;
 
 namespace Core.Network
 {
@@ -53,6 +54,7 @@ namespace Core.Network
         public static event Action<ushort, string, string> OnGameVictory;
         public static event Action<string> OnGameEndWithoutWinner;
         public static event Action<string> OnForceReturnToRoom;
+        public static event Action<ushort, bool, string> OnPlayerAnswerResult;
 
         // 房间事件
         public static event Action<ushort> OnPlayerJoined;
@@ -289,6 +291,8 @@ namespace Core.Network
         [PunRPC]
         void OnPlayerAnswerResult_RPC(int playerId, bool isCorrect, string answer)
         {
+            ushort playerIdUShort = (ushort)playerId;
+            OnPlayerAnswerResult?.Invoke(playerIdUShort, isCorrect, answer);
             NotifyComponent<NetworkUI>("OnPlayerAnswerResultReceived", (ushort)playerId, isCorrect, answer);
             var cardManager = PlayerCardManager.Instance ?? FindObjectOfType<PlayerCardManager>();
             if (cardManager != null)

@@ -8,6 +8,7 @@ using GameLogic.FillBlank;
 using Photon.Realtime;
 using Cards.Player;
 using Cards.Core;
+using Classroom.Teacher;
 
 namespace Core.Network
 {
@@ -864,8 +865,17 @@ namespace Core.Network
             NetworkManager.Instance.BroadcastPlayerAnswerResult(playerId, validationResult.isCorrect, answer);
             NetworkManager.Instance.BroadcastAnswerResult(validationResult.isCorrect, currentQuestion.correctAnswer);
 
-            // 更新玩家状态
-            UpdatePlayerState(playerId, validationResult.isCorrect);
+            // 根据答题结果处理
+            if (validationResult.isCorrect)
+            {
+                // 答对了，立即处理
+                UpdatePlayerState(playerId, true);
+            }
+            else
+            {
+                // 答错了，延迟扣血（给老师扔粉笔的时间）
+                StartCoroutine(DelayedDamageApplication(playerId));
+            }
 
             // 检查游戏结束条件
             CheckGameEndConditions();
@@ -877,6 +887,19 @@ namespace Core.Network
             }
         }
 
+        /// <summary>
+        /// 延迟扣血协程
+        /// </summary>
+        private IEnumerator DelayedDamageApplication(ushort playerId)
+        {
+            // 等待老师扔粉笔的时间（可配置）
+            float chalkThrowDelay = 3f; // 对应TeacherManager的完整动画时长
+            yield return new WaitForSeconds(chalkThrowDelay);
+
+            // 执行扣血
+            UpdatePlayerState(playerId, false);
+            LogDebug($"延迟扣血已执行 - 玩家{playerId}");
+        }
 
         /// <summary>
         /// 验证答案提交
