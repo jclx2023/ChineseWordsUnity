@@ -26,6 +26,11 @@ namespace UI.Answer
         [SerializeField] private RectTransform answerPanel;
         [SerializeField] private RectTransform contentArea; // 动态加载答题界面的容器
 
+        [Header("色相设置")]
+        [SerializeField] private Image answerImage; // 需要变色的Image
+        [SerializeField] private bool enableRandomHue = true; // 色相随机化开关
+        [SerializeField] private Material hueShiftMaterial; // 色相偏移材质
+
         [Header("题型答题界面预制体")]
         [SerializeField] private GameObject fillBlankUIPrefab;   // 填空题UI
         [SerializeField] private GameObject chooseUIPrefab;      // 选择题UI
@@ -61,6 +66,12 @@ namespace UI.Answer
         private PlayerCameraController playerCameraController;
         private bool cameraControllerReady = false;
 
+        // 色相管理
+        private float currentRoundHue = 0f;
+        private float currentRoundSaturation = 1f;
+        private bool hasRoundColorSet = false;
+        private Material answerImageMaterial; // 运行时材质实例
+
         // 事件
         public static event System.Action OnAnswerUIClosed;
 
@@ -74,6 +85,7 @@ namespace UI.Answer
             {
                 Instance = this;
                 InitializeAnswerUI();
+                InitializeHueMaterial();
             }
             else
             {
@@ -90,17 +102,127 @@ namespace UI.Answer
         private void OnEnable()
         {
             SubscribeToClassroomManagerEvents();
+            SubscribeToGameEvents();
         }
 
         private void OnDisable()
         {
             UnsubscribeFromClassroomManagerEvents();
+            UnsubscribeFromGameEvents();
         }
 
         private void Update()
         {
             HandleInput();
         }
+
+        #region 色相管理
+
+        /// <summary>
+        /// 初始化色相材质
+        /// </summary>
+        private void InitializeHueMaterial()
+        {
+            if (answerImage != null && hueShiftMaterial != null)
+            {
+                // 创建材质实例
+                answerImageMaterial = new Material(hueShiftMaterial);
+                answerImage.material = answerImageMaterial;
+                LogDebug("色相材质初始化完成");
+            }
+            else
+            {
+                LogDebug("警告：AnswerImage或HueShiftMaterial未设置");
+            }
+        }
+
+        /// <summary>
+        /// 为新回合生成随机色相参数
+        /// </summary>
+        private void GenerateNewRoundColor()
+        {
+            if (!enableRandomHue || answerImageMaterial == null) return;
+
+            currentRoundHue = Random.Range(0f, 1f);
+            currentRoundSaturation = Random.Range(0.6f, 0.8f);
+            hasRoundColorSet = true;
+
+            LogDebug($"生成新回合色相: H={currentRoundHue:F2}, S={currentRoundSaturation:F2}");
+        }
+
+        /// <summary>
+        /// 应用当前回合色相到材质
+        /// </summary>
+        private void ApplyRoundColor()
+        {
+            if (!enableRandomHue || answerImageMaterial == null) return;
+
+            if (!hasRoundColorSet)
+            {
+                GenerateNewRoundColor();
+            }
+
+            // 设置材质参数
+            answerImageMaterial.SetFloat("_HueShift", currentRoundHue);
+            answerImageMaterial.SetFloat("_Saturation", currentRoundSaturation);
+            answerImageMaterial.SetFloat("_Brightness", 1f);
+
+            LogDebug($"应用色相参数: H={currentRoundHue:F2}, S={currentRoundSaturation:F2}");
+        }
+
+        #endregion
+
+        #region 游戏事件订阅
+
+        /// <summary>
+        /// 订阅游戏事件
+        /// </summary>
+        private void SubscribeToGameEvents()
+        {
+            // 监听回合变化事件
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.OnPlayerTurnChanged += OnPlayerTurnChanged;
+                NetworkManager.OnQuestionReceived += OnNewQuestionReceived;
+            }
+        }
+
+        /// <summary>
+        /// 取消订阅游戏事件
+        /// </summary>
+        private void UnsubscribeFromGameEvents()
+        {
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.OnPlayerTurnChanged -= OnPlayerTurnChanged;
+                NetworkManager.OnQuestionReceived -= OnNewQuestionReceived;
+            }
+        }
+
+        /// <summary>
+        /// 回合变化时的处理
+        /// </summary>
+        private void OnPlayerTurnChanged(ushort newPlayerId)
+        {
+            // 每次回合变化时生成新颜色
+            GenerateNewRoundColor();
+            LogDebug($"回合变化，生成新颜色，当前玩家: {newPlayerId}");
+        }
+
+        /// <summary>
+        /// 新题目接收时的处理
+        /// </summary>
+        private void OnNewQuestionReceived(NetworkQuestionData questionData)
+        {
+            // 新题目时也生成新颜色（备用方案）
+            if (!hasRoundColorSet)
+            {
+                GenerateNewRoundColor();
+                LogDebug("接收新题目，生成回合颜色");
+            }
+        }
+
+        #endregion
 
         #region 事件订阅管理
 
@@ -170,12 +292,6 @@ namespace UI.Answer
 
                 elapsed += 0.1f;
                 yield return new WaitForSeconds(0.1f);
-            }
-
-            if (playerCameraController == null)
-            {
-                LogDebug("未能找到摄像机控制器，将使用备用方案");
-                // 可以添加备用查找逻辑或错误处理
             }
         }
 
@@ -270,7 +386,7 @@ namespace UI.Answer
             }
 
             // Esc键取消答题
-            if (currentState == AnswerUIState.Active && (Input.GetKeyDown(KeyCode.Escape)||Input.GetKeyDown(KeyCode.Mouse1)))
+            if (currentState == AnswerUIState.Active && (Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.Mouse1)))
             {
                 HideAnswerUI();
             }
@@ -311,6 +427,9 @@ namespace UI.Answer
                 LogDebug("无法获取当前题目");
                 return;
             }
+
+            // 应用回合颜色
+            ApplyRoundColor();
 
             // 显示题目信息
             DisplayQuestionInfo(currentQuestion);
@@ -392,10 +511,6 @@ namespace UI.Answer
                 BindAnswerUIEvents(currentAnswerUIInstance);
 
                 LogDebug($"成功实例化答题界面: {prefabToLoad.name}");
-            }
-            else
-            {
-                LogDebug($"无法找到题型 {questionType} 对应的预制体或ContentArea为空");
             }
         }
 
@@ -606,16 +721,8 @@ namespace UI.Answer
                 return;
             }
 
-            // 提交答案
-            if (NetworkManager.Instance != null)
-            {
                 NetworkManager.Instance.SubmitAnswer(answerToSubmit);
                 LogDebug($"通过NetworkManager提交答案: {answerToSubmit}");
-            }
-            else
-            {
-                LogDebug("NetworkManager.Instance 为空，无法提交答案");
-            }
 
             HideAnswerUI();
         }
@@ -639,10 +746,6 @@ namespace UI.Answer
                     LogDebug("设置输入框成功");
                 }
             }
-            else
-            {
-                LogDebug("未找到answerinput输入框");
-            }
 
             // 查找submitbutton提交按钮
             Transform submitTransform = fillBlankUIInstance.transform.Find("SubmitButton");
@@ -656,10 +759,6 @@ namespace UI.Answer
                     LogDebug("绑定填空题提交按钮");
                 }
             }
-            else
-            {
-                LogDebug("未找到submitbutton提交按钮");
-            }
         }
 
         /// <summary>
@@ -667,17 +766,8 @@ namespace UI.Answer
         /// </summary>
         private void OnOptionSelected(string selectedOption, GameObject answerUIInstance)
         {
-            LogDebug($"用户选择了选项: {selectedOption}");
-
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.SubmitAnswer(selectedOption);
-                LogDebug($"通过NetworkManager提交答案: {selectedOption}");
-            }
-            else
-            {
-                LogDebug("NetworkManager.Instance 为空，无法提交答案");
-            }
+            NetworkManager.Instance.SubmitAnswer(selectedOption);
+            LogDebug($"通过NetworkManager提交答案: {selectedOption}");
 
             HideAnswerUI();
         }
@@ -887,7 +977,14 @@ namespace UI.Answer
         {
             ClearCurrentAnswerUI();
             UnsubscribeFromClassroomManagerEvents();
-        }
+            UnsubscribeFromGameEvents();
 
+            // 清理材质实例
+            if (answerImageMaterial != null)
+            {
+                DestroyImmediate(answerImageMaterial);
+                answerImageMaterial = null;
+            }
+        }
     }
 }
