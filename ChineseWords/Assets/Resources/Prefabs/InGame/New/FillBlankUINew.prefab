@@ -476,6 +476,7 @@ GameObject:
   - component: {fileID: 3953321163458164526}
   - component: {fileID: 4005021050726962528}
   - component: {fileID: 5578730805830058914}
+  - component: {fileID: 3612422904436471867}
   m_Layer: 5
   m_Name: SubmitButton
   m_TagString: Untagged
@@ -531,7 +532,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: 21300000, guid: c8e7b407d708be24eb09ed3e74a32538, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -585,6 +586,20 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &3612422904436471867
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6261992561027739800}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48dfc89de6e244647a5118a106664af8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  detailSprite: {fileID: 21300000, guid: 8a7a970d00393f546802e37f53e93d03, type: 3}
+  createOnStart: 1
 --- !u!1 &6651250679197933830
 GameObject:
   m_ObjectHideFlags: 0
