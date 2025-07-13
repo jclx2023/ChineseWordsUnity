@@ -9,11 +9,13 @@ using System.Collections.Generic;
 using Cards.Player;
 using UI.MessageSystem;
 using Classroom.Teacher;
+using System.Collections;
 
 namespace Core.Network
 {
     /// <summary>
-    /// 简化版网络管理器 - 按功能分类组织，减少重复代码
+    /// 改进版网络管理器 - 增强房间状态管理和组件解耦合支持
+    /// 新增：房间状态重置、统一属性查询接口、RoomScene解耦合支持
     /// </summary>
     public class NetworkManager : MonoBehaviourPun, IInRoomCallbacks
     {
@@ -22,6 +24,9 @@ namespace Core.Network
 
         [Header("同步调试设置")]
         [SerializeField] private bool enableSyncDebugLogs = false;
+
+        [Header("房间状态管理")]
+        [SerializeField] private float roomStateResetDelay = 2f;
 
         // 玩家同步管理
         private Dictionary<ushort, Classroom.Player.PlayerNetworkSync> playerSyncComponents = new Dictionary<ushort, Classroom.Player.PlayerNetworkSync>();
@@ -36,6 +41,8 @@ namespace Core.Network
         public ushort ClientId => (ushort)PhotonNetwork.LocalPlayer.ActorNumber;
         public string RoomName => PhotonNetwork.CurrentRoom?.Name ?? "";
         public int PlayerCount => PhotonNetwork.CurrentRoom?.PlayerCount ?? 0;
+        public int MaxPlayers => PhotonNetwork.CurrentRoom?.MaxPlayers ?? 0;
+        public bool IsRoomFull => PlayerCount >= MaxPlayers;
 
         // 缓存引用
         private PersistentNetworkManager persistentManager;
@@ -60,6 +67,11 @@ namespace Core.Network
         public static event Action<ushort> OnPlayerJoined;
         public static event Action<ushort> OnPlayerLeft;
         public static event Action<ushort, bool> OnPlayerReadyChanged;
+
+        // 新增：房间状态管理事件
+        public static event Action OnRoomStateReset;           // 房间状态重置
+        public static event Action<string, object> OnRoomPropertyChanged;  // 房间属性变化
+        public static event Action OnAllPlayersReady;          // 所有玩家准备就绪
 
         // 卡牌事件
         public static event Action<ushort, int, ushort, string> OnCardUsed;
@@ -93,6 +105,180 @@ namespace Core.Network
 
         #endregion
 
+        #region 新增：房间状态管理接口
+
+        /// <summary>
+        /// 获取房间属性的统一接口
+        /// </summary>
+        public T GetRoomProperty<T>(string key, T defaultValue = default(T))
+        {
+            if (!IsConnected) return defaultValue;
+            return PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue(key, out object value)
+                ? (T)value : defaultValue;
+        }
+
+        /// <summary>
+        /// 设置房间属性的统一接口（仅房主）
+        /// </summary>
+        public bool SetRoomProperty(string key, object value)
+        {
+            if (!IsHost || !IsConnected) return false;
+            var props = new Hashtable { [key] = value };
+            PhotonNetwork.CurrentRoom.SetCustomProperties(props);
+            LogDebug($"设置房间属性: {key} = {value}");
+            return true;
+        }
+
+        /// <summary>
+        /// 批量设置房间属性（仅房主）
+        /// </summary>
+        public bool SetRoomProperties(Hashtable properties)
+        {
+            if (!IsHost || !IsConnected || properties == null) return false;
+            PhotonNetwork.CurrentRoom.SetCustomProperties(properties);
+            LogDebug($"批量设置房间属性: {properties.Count} 个属性");
+            return true;
+        }
+
+        /// <summary>
+        /// 获取玩家属性的统一接口
+        /// </summary>
+        public T GetPlayerProperty<T>(ushort playerId, string key, T defaultValue = default(T))
+        {
+            var player = GetPlayerById(playerId);
+            return player?.CustomProperties?.TryGetValue(key, out object value) == true
+                ? (T)value : defaultValue;
+        }
+
+        /// <summary>
+        /// 设置本地玩家属性
+        /// </summary>
+        public bool SetMyPlayerProperty(string key, object value)
+        {
+            if (!IsConnected) return false;
+            var props = new Hashtable { [key] = value };
+            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+            LogDebug($"设置本地玩家属性: {key} = {value}");
+            return true;
+        }
+
+        /// <summary>
+        /// 游戏结束后重置房间状态（仅房主）
+        /// </summary>
+        public void ResetRoomStateAfterGame()
+        {
+            if (!IsHost || !IsConnected)
+            {
+                LogDebug("非房主或未连接，无法重置房间状态");
+                return;
+            }
+
+            LogDebug("开始重置房间状态...");
+
+            // 重置房间属性
+            var roomProps = new Hashtable
+            {
+                ["gameStarted"] = false,
+                ["gameEnded"] = false,
+                ["roomState"] = 0, // RoomState.Waiting
+                ["gameEndTime"] = null,
+                ["winnerId"] = null,
+                ["winnerName"] = null,
+                ["gameEndReason"] = null
+            };
+
+            SetRoomProperties(roomProps);
+
+            // 延迟清理所有玩家准备状态
+            StartCoroutine(DelayedClearPlayerReadyStates());
+
+            LogDebug("房间状态已重置为等待状态");
+        }
+
+        /// <summary>
+        /// 延迟清理所有玩家准备状态
+        /// </summary>
+        private IEnumerator DelayedClearPlayerReadyStates()
+        {
+            yield return new WaitForSeconds(0.5f);
+            ClearAllPlayerReadyStates();
+        }
+
+        /// <summary>
+        /// 清理所有玩家准备状态（仅房主）
+        /// </summary>
+        public void ClearAllPlayerReadyStates()
+        {
+            if (!IsHost || !IsConnected) return;
+
+            LogDebug("清理所有玩家准备状态");
+
+            // 通过RPC通知所有客户端清理自己的准备状态
+            SendRPC("OnClearReadyState_RPC", RpcTarget.All);
+        }
+
+        [PunRPC]
+        void OnClearReadyState_RPC()
+        {
+            // 每个客户端清理自己的准备状态
+            if (!IsHost) // 房主不需要准备状态
+            {
+                SetMyPlayerProperty("isReady", false);
+                LogDebug("已清理本地玩家准备状态");
+            }
+        }
+
+        /// <summary>
+        /// 获取房间状态信息（供UI显示）
+        /// </summary>
+        public string GetRoomStatusInfo()
+        {
+            if (!IsConnected) return "未连接";
+
+            int readyCount = GetReadyPlayerCount();
+            int nonHostCount = GetNonHostPlayerCount();
+            bool gameStarted = GetRoomProperty("gameStarted", false);
+
+            return $"房间: {RoomName}, " +
+                   $"玩家: {PlayerCount}/{MaxPlayers}, " +
+                   $"准备: {readyCount}/{nonHostCount}, " +
+                   $"房主: {(IsHost ? "是" : "否")}, " +
+                   $"游戏状态: {(gameStarted ? "进行中" : "等待中")}";
+        }
+
+        /// <summary>
+        /// 检查房间是否可以开始游戏
+        /// </summary>
+        public bool CanStartGame(int minPlayers = 2)
+        {
+            if (!IsHost || !IsConnected) return false;
+            if (PlayerCount < minPlayers) return false;
+            if (GetRoomProperty("gameStarted", false)) return false;
+
+            // 检查所有非房主玩家是否都已准备
+            return AreAllPlayersReady();
+        }
+
+        /// <summary>
+        /// 获取游戏开始条件详情
+        /// </summary>
+        public string GetGameStartConditions(int minPlayers = 2)
+        {
+            if (!IsHost) return "不是房主";
+            if (!IsConnected) return "未连接房间";
+            if (GetRoomProperty("gameStarted", false)) return "游戏已开始";
+            if (PlayerCount < minPlayers) return $"玩家数不足 ({PlayerCount}/{minPlayers})";
+
+            int readyCount = GetReadyPlayerCount();
+            int nonHostCount = GetNonHostPlayerCount();
+
+            if (!AreAllPlayersReady()) return $"玩家未全部准备 ({readyCount}/{nonHostCount})";
+
+            return "满足开始条件";
+        }
+
+        #endregion
+
         #region Photon回调
 
         void IInRoomCallbacks.OnPlayerEnteredRoom(Player newPlayer)
@@ -116,12 +302,40 @@ namespace Core.Network
             {
                 ushort playerId = (ushort)targetPlayer.ActorNumber;
                 bool isReady = (bool)isReadyObj;
+                LogDebug($"玩家准备状态更新: {targetPlayer.NickName} -> {isReady}");
                 OnPlayerReadyChanged?.Invoke(playerId, isReady);
+
+                // 检查是否所有玩家都已准备
+                if (AreAllPlayersReady() && GetNonHostPlayerCount() > 0)
+                {
+                    LogDebug("所有玩家都已准备就绪");
+                    OnAllPlayersReady?.Invoke();
+                }
             }
         }
 
-        void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient) { }
-        void IInRoomCallbacks.OnRoomPropertiesUpdate(Hashtable propertiesThatChanged) { }
+        void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient)
+        {
+            LogDebug($"房主切换到: {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+        }
+
+        void IInRoomCallbacks.OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
+        {
+            // 广播房间属性变化
+            foreach (var kvp in propertiesThatChanged)
+            {
+                LogDebug($"房间属性更新: {kvp.Key} = {kvp.Value}");
+                OnRoomPropertyChanged?.Invoke((string)kvp.Key, kvp.Value);
+            }
+
+            // 检查游戏状态重置
+            if (propertiesThatChanged.ContainsKey("gameStarted") &&
+                !(bool)propertiesThatChanged["gameStarted"])
+            {
+                LogDebug("检测到游戏状态重置");
+                OnRoomStateReset?.Invoke();
+            }
+        }
 
         #endregion
 
@@ -139,7 +353,7 @@ namespace Core.Network
 
         /// <summary>
         /// 获取玩家对象
-        /// </summary>a
+        /// </summary>
         private Player GetPlayerById(ushort playerId)
         {
             if (!PhotonNetwork.InRoom) return null;
@@ -147,11 +361,13 @@ namespace Core.Network
                 if (player.ActorNumber == playerId) return player;
             return null;
         }
+
         public string GetPlayerName(ushort playerId)
         {
             var player = GetPlayerById(playerId);
             return player?.NickName ?? $"Player_{playerId}";
         }
+
         public bool IsHostPlayer(ushort playerId)
         {
             return IsHost && playerId == ClientId;
@@ -190,22 +406,58 @@ namespace Core.Network
         public void SetPlayerReady(bool isReady)
         {
             if (!PhotonNetwork.InRoom) return;
-            var props = new Hashtable { ["isReady"] = isReady };
-            PhotonNetwork.LocalPlayer.SetCustomProperties(props);
+            SetMyPlayerProperty("isReady", isReady);
         }
 
         public bool GetPlayerReady(ushort playerId)
         {
-            var player = GetPlayerById(playerId);
-            return player?.CustomProperties?.TryGetValue("isReady", out object isReady) == true && (bool)isReady;
+            return GetPlayerProperty<bool>(playerId, "isReady", false);
+        }
+
+        public bool GetMyReadyState()
+        {
+            return GetPlayerReady(ClientId);
+        }
+
+        public int GetReadyPlayerCount()
+        {
+            if (!IsConnected) return 0;
+
+            int readyCount = 0;
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (!player.IsMasterClient && GetPlayerReady((ushort)player.ActorNumber))
+                {
+                    readyCount++;
+                }
+            }
+            return readyCount;
+        }
+
+        public int GetNonHostPlayerCount()
+        {
+            if (!IsConnected) return 0;
+
+            int nonHostCount = 0;
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (!player.IsMasterClient)
+                {
+                    nonHostCount++;
+                }
+            }
+            return nonHostCount;
         }
 
         public bool AreAllPlayersReady()
         {
             if (!PhotonNetwork.InRoom || PhotonNetwork.PlayerList.Length < 2) return false;
-            foreach (var player in PhotonNetwork.PlayerList)
-                if (!GetPlayerReady((ushort)player.ActorNumber)) return false;
-            return true;
+
+            int nonHostCount = GetNonHostPlayerCount();
+            if (nonHostCount == 0) return false;
+
+            int readyCount = GetReadyPlayerCount();
+            return readyCount == nonHostCount;
         }
 
         #endregion
@@ -640,6 +892,12 @@ namespace Core.Network
         {
             OnGameVictory?.Invoke((ushort)winnerId, winnerName, reason);
             NotifyComponent<NetworkQuestionManagerController>("StopGame");
+
+            // 新增：延迟重置房间状态
+            if (IsHost)
+            {
+                StartCoroutine(DelayedRoomStateReset());
+            }
         }
 
         public void BroadcastGameEndWithoutWinner(string reason)
@@ -653,6 +911,28 @@ namespace Core.Network
         {
             OnGameEndWithoutWinner?.Invoke(reason);
             NotifyComponent<NetworkQuestionManagerController>("StopGame");
+
+            // 新增：延迟重置房间状态
+            if (IsHost)
+            {
+                StartCoroutine(DelayedRoomStateReset());
+            }
+        }
+
+        /// <summary>
+        /// 延迟重置房间状态（游戏结束后）
+        /// </summary>
+        private IEnumerator DelayedRoomStateReset()
+        {
+            // 等待游戏结束逻辑完成
+            yield return new WaitForSeconds(roomStateResetDelay);
+
+            // 检查是否还在房间中（可能已经返回了）
+            if (IsConnected)
+            {
+                ResetRoomStateAfterGame();
+                LogDebug("游戏结束后自动重置房间状态");
+            }
         }
 
         public void BroadcastForceReturnToRoom(string reason)
@@ -669,7 +949,7 @@ namespace Core.Network
             StartCoroutine(HandleReturnToRoom());
         }
 
-        private System.Collections.IEnumerator HandleReturnToRoom()
+        private IEnumerator HandleReturnToRoom()
         {
             yield return new WaitForSeconds(1f);
             try
@@ -710,8 +990,10 @@ namespace Core.Network
             var spawner = FindObjectOfType<Classroom.Player.NetworkPlayerSpawner>();
             spawner?.ReceiveSeatsAndCharactersData(playerIdsUShort, seatIndices);
         }
+
         #endregion
-        #region 头部旋转同步 (新增区域，放在场景管理类消息后面)
+
+        #region 头部旋转同步
 
         /// <summary>
         /// 同步玩家头部旋转（本地玩家 → 其他玩家）
@@ -766,7 +1048,9 @@ namespace Core.Network
                 }
             }
         }
+
         #endregion
+
         #region 玩家位置同步
 
         /// <summary>
@@ -792,7 +1076,6 @@ namespace Core.Network
         }
 
         #endregion
-        #region 调试
 
         private void LogDebug(string message)
         {
@@ -800,6 +1083,5 @@ namespace Core.Network
                 Debug.Log($"[NetworkManager] {message}");
         }
 
-        #endregion
     }
 }
