@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4529ff69811e28947834de34297722ce, type: 3}
+  m_Name: PlayerModel
+  m_EditorClassIdentifier: 
+  modelId: 0
+  modelName: 
+  modelDescription: 
+  modelPrefab: {fileID: 0}
+  previewPrefab: {fileID: 0}
+  previewScale: {x: 1, y: 1, z: 1}
+  previewRotation: {x: 0, y: 0, z: 0}
+  previewPosition: {x: 0, y: 0, z: 0}
+  idleAnimation: {fileID: 0}
+  selectAnimation: {fileID: 0}
+  animationSpeed: 1
+  isUnlocked: 1
+  isDefault: 0

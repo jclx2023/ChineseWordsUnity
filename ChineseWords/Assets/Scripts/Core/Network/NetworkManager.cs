@@ -68,6 +68,9 @@ namespace Core.Network
         public static event Action<ushort> OnPlayerLeft;
         public static event Action<ushort, bool> OnPlayerReadyChanged;
 
+        public static event System.Action<ushort, int, string> OnPlayerModelChanged;
+        public static event System.Action<ushort[], int[]> OnAllPlayerModelsReceived;
+
         // 新增：房间状态管理事件
         public static event Action OnRoomStateReset;           // 房间状态重置
         public static event Action<string, object> OnRoomPropertyChanged;  // 房间属性变化
@@ -1073,6 +1076,179 @@ namespace Core.Network
                 playerSyncComponents.Remove(playerId);
                 LogDebug($"注销玩家同步组件: PlayerId={playerId}");
             }
+        }
+
+        #endregion
+
+        #region 模型同步RPC方法
+
+        /// <summary>
+        /// 发送玩家模型变化RPC
+        /// </summary>
+        public void SendPlayerModelChangeRPC(ushort playerId, int modelId, string modelName)
+        {
+            if (!IsConnected)
+            {
+                LogDebug("未连接网络，无法发送模型变化RPC");
+                return;
+            }
+
+            photonView.RPC("OnPlayerModelChange_RPC", RpcTarget.Others, (int)playerId, modelId, modelName);
+            LogDebug($"发送模型变化RPC: 玩家{playerId} -> 模型{modelId}({modelName})");
+        }
+
+        /// <summary>
+        /// 接收玩家模型变化RPC
+        /// </summary>
+        [PunRPC]
+        void OnPlayerModelChange_RPC(int playerId, int modelId, string modelName)
+        {
+            ushort playerIdUShort = (ushort)playerId;
+            LogDebug($"接收模型变化RPC: 玩家{playerIdUShort} -> 模型{modelId}({modelName})");
+
+            // 触发模型变化事件
+            OnPlayerModelChanged?.Invoke(playerIdUShort, modelId, modelName);
+        }
+
+        /// <summary>
+        /// 广播所有玩家的模型选择（房主使用）
+        /// </summary>
+        public void BroadcastAllPlayerModels(ushort[] playerIds, int[] modelIds)
+        {
+            if (!IsHost)
+            {
+                LogDebug("只有房主可以广播所有玩家模型");
+                return;
+            }
+
+            if (!IsConnected)
+            {
+                LogDebug("未连接网络，无法广播模型数据");
+                return;
+            }
+
+            // 转换为int数组以支持RPC传输
+            int[] playerIdsInt = new int[playerIds.Length];
+            for (int i = 0; i < playerIds.Length; i++)
+            {
+                playerIdsInt[i] = playerIds[i];
+            }
+
+            photonView.RPC("OnAllPlayerModels_RPC", RpcTarget.Others, playerIdsInt, modelIds);
+            LogDebug($"广播所有玩家模型: {playerIds.Length}名玩家");
+        }
+
+        /// <summary>
+        /// 接收所有玩家模型RPC
+        /// </summary>
+        [PunRPC]
+        void OnAllPlayerModels_RPC(int[] playerIds, int[] modelIds)
+        {
+            if (playerIds.Length != modelIds.Length)
+            {
+                Debug.LogError("[NetworkManager] 玩家ID和模型ID数组长度不匹配");
+                return;
+            }
+
+            // 转换回ushort数组
+            ushort[] playerIdsUShort = new ushort[playerIds.Length];
+            for (int i = 0; i < playerIds.Length; i++)
+            {
+                playerIdsUShort[i] = (ushort)playerIds[i];
+            }
+
+            LogDebug($"接收所有玩家模型RPC: {playerIds.Length}名玩家");
+
+            // 触发事件
+            OnAllPlayerModelsReceived?.Invoke(playerIdsUShort, modelIds);
+        }
+
+        /// <summary>
+        /// 请求同步所有玩家模型（新加入玩家使用）
+        /// </summary>
+        public void RequestAllPlayerModels()
+        {
+            if (IsHost)
+            {
+                LogDebug("房主不需要请求模型同步");
+                return;
+            }
+
+            photonView.RPC("OnRequestAllPlayerModels_RPC", RpcTarget.MasterClient, (int)ClientId);
+            LogDebug("请求同步所有玩家模型");
+        }
+
+        /// <summary>
+        /// 接收模型同步请求RPC（房主接收）
+        /// </summary>
+        [PunRPC]
+        void OnRequestAllPlayerModels_RPC(int requestingPlayerId)
+        {
+            if (!IsHost)
+            {
+                LogDebug("只有房主可以处理模型同步请求");
+                return;
+            }
+
+            LogDebug($"收到玩家{requestingPlayerId}的模型同步请求");
+
+            // 这里需要从某个地方获取当前所有玩家的模型选择
+            // 可以通过事件通知UI控制器发送当前数据
+            OnModelSyncRequested?.Invoke((ushort)requestingPlayerId);
+        }
+
+        // 模型同步请求事件（通知UI控制器）
+        public static event System.Action<ushort> OnModelSyncRequested;
+
+        #endregion
+
+        #region 模型数据查询
+
+        /// <summary>
+        /// 获取玩家的模型ID（从自定义属性中）
+        /// </summary>
+        public int GetPlayerModelId(ushort playerId, int defaultModelId = 0)
+        {
+            var player = GetPhotonPlayer(playerId);
+            if (player?.CustomProperties != null &&
+                player.CustomProperties.TryGetValue("selectedModelId", out object modelIdObj))
+            {
+                if (modelIdObj is int modelId)
+                {
+                    return modelId;
+                }
+            }
+
+            return defaultModelId;
+        }
+
+        /// <summary>
+        /// 设置本地玩家的模型ID（保存到自定义属性）
+        /// </summary>
+        public void SetMyPlayerModelId(int modelId)
+        {
+            if (!IsConnected) return;
+
+            var customProps = new ExitGames.Client.Photon.Hashtable();
+            customProps["selectedModelId"] = modelId;
+
+            PhotonNetwork.LocalPlayer.SetCustomProperties(customProps);
+            LogDebug($"设置本地玩家模型ID: {modelId}");
+        }
+
+        /// <summary>
+        /// 获取Photon玩家对象
+        /// </summary>
+        private Photon.Realtime.Player GetPhotonPlayer(ushort playerId)
+        {
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                if (player.ActorNumber == playerId)
+                {
+                    return player;
+                }
+            }
+            return null;
         }
 
         #endregion

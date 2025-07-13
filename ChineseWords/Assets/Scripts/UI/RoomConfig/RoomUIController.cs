@@ -5,13 +5,16 @@ using System.Collections.Generic;
 using System.Collections;
 using Core.Network;
 using Photon.Realtime;
+using RoomScene.Manager;
+using RoomScene.Data;
+using Photon.Pun;
+using System.Linq;
 
 namespace UI
 {
     /// <summary>
-    /// 房间界面控制器 - 简化解耦版
-    /// 职责：UI显示更新、用户交互处理
-    /// 通过RoomManager和NetworkManager获取数据，完全事件驱动
+    /// 房间界面控制器 - 完全重构版本，支持3D模型选择
+    /// 每个玩家显示：3D模型预览 + 模型切换按钮 + 个人准备按钮 + 玩家信息
     /// </summary>
     public class RoomUIController : MonoBehaviour
     {
@@ -23,17 +26,10 @@ namespace UI
 
         [Header("玩家列表UI")]
         [SerializeField] private Transform playerListParent;
-        [SerializeField] private GameObject playerItemPrefab;
+        [SerializeField] private GameObject playerModelItemPrefab;    // 包含3D模型预览的玩家项预制体
 
-        [Header("游戏控制UI")]
-        [SerializeField] private Button actionButton; // 合并后的准备/开始游戏按钮
-        [SerializeField] private Image actionButtonIcon; // 按钮子物体的图标Image
-        [SerializeField] private Button leaveRoomButton;
-
-        [Header("按钮图标设置")]
-        [SerializeField] private Sprite readySprite;
-        [SerializeField] private Sprite cancelReadySprite;
-        [SerializeField] private Sprite startGameSprite;
+        [Header("房主控制UI")]
+        [SerializeField] private Button leaveRoomButton;             // 只保留离开房间按钮，开始游戏合并到各自的actionButton
 
         [Header("UI刷新设置")]
         [SerializeField] private float autoRefreshInterval = 3f;
@@ -42,8 +38,9 @@ namespace UI
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // 玩家UI缓存
-        private Dictionary<int, GameObject> playerUIItems = new Dictionary<int, GameObject>();
+        // 玩家UI管理
+        private Dictionary<ushort, PlayerModelItemUI> playerUIItems = new Dictionary<ushort, PlayerModelItemUI>();
+        private Dictionary<ushort, RoomPlayerData> playerDataCache = new Dictionary<ushort, RoomPlayerData>();
 
         // 状态管理
         private bool isInitialized = false;
@@ -58,7 +55,7 @@ namespace UI
         {
             UnsubscribeFromEvents();
             StopAutoRefresh();
-            ClearPlayerUIItems();
+            ClearAllPlayerUI();
         }
 
         #region 初始化
@@ -68,19 +65,26 @@ namespace UI
         /// </summary>
         private IEnumerator InitializeUIController()
         {
-            LogDebug("开始初始化RoomUIController");
+            LogDebug("开始初始化RoomUIController (模型选择版本)");
 
-            // 等待RoomManager初始化
-            while (RoomManager.Instance == null || !RoomManager.Instance.IsInitialized)
+            // 等待依赖组件
+            while (RoomManager.Instance == null || NetworkManager.Instance == null ||
+                   PlayerModelManager.Instance == null)
             {
                 yield return new WaitForSeconds(0.1f);
             }
 
-            // 等待NetworkManager准备就绪
-            while (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
+            while (!NetworkManager.Instance.IsConnected)
             {
-                LogDebug("等待NetworkManager连接...");
+                LogDebug("等待网络连接...");
                 yield return new WaitForSeconds(0.1f);
+            }
+
+            // 验证必要组件
+            if (playerModelItemPrefab == null)
+            {
+                Debug.LogError("[RoomUIController] 未设置playerModelItemPrefab！");
+                yield break;
             }
 
             // 初始化UI组件
@@ -89,7 +93,10 @@ namespace UI
             // 订阅事件
             SubscribeToEvents();
 
-            // 立即刷新一次UI
+            // 初始化玩家数据
+            InitializePlayerData();
+
+            // 立即刷新UI
             RefreshAllUI();
 
             // 启动自动刷新
@@ -104,13 +111,6 @@ namespace UI
         /// </summary>
         private void InitializeUIComponents()
         {
-            // 绑定动作按钮（合并的准备/开始游戏按钮）
-            if (actionButton != null)
-            {
-                actionButton.onClick.RemoveAllListeners();
-                actionButton.onClick.AddListener(OnActionButtonClicked);
-            }
-
             // 绑定离开房间按钮
             if (leaveRoomButton != null)
             {
@@ -122,30 +122,57 @@ namespace UI
         }
 
         /// <summary>
-        /// 订阅RoomManager事件
+        /// 初始化玩家数据
+        /// </summary>
+        private void InitializePlayerData()
+        {
+            foreach (var player in PhotonNetwork.PlayerList)
+            {
+                ushort playerId = (ushort)player.ActorNumber;
+                var playerData = new RoomPlayerData
+                {
+                    playerId = playerId,
+                    playerName = player.NickName ?? $"Player_{playerId}",
+                    isHost = player.IsMasterClient,
+                    isReady = NetworkManager.Instance.GetPlayerReady(playerId),
+                    selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()
+                };
+
+                playerDataCache[playerId] = playerData;
+            }
+
+            LogDebug($"初始化了 {playerDataCache.Count} 个玩家数据");
+        }
+
+        #endregion
+
+        #region 事件订阅
+
+        /// <summary>
+        /// 订阅事件
         /// </summary>
         private void SubscribeToEvents()
         {
+            // RoomManager事件
             if (RoomManager.Instance != null)
             {
                 RoomManager.OnRoomEntered += OnRoomEntered;
                 RoomManager.OnPlayerJoinedRoom += OnPlayerJoinedRoom;
                 RoomManager.OnPlayerLeftRoom += OnPlayerLeftRoom;
                 RoomManager.OnPlayerReadyChanged += OnPlayerReadyChanged;
-                RoomManager.OnAllPlayersReady += OnAllPlayersReady;
                 RoomManager.OnGameStarting += OnGameStarting;
                 RoomManager.OnReturnToLobby += OnReturnToLobby;
-
-                LogDebug("已订阅RoomManager事件");
             }
 
-            // 订阅NetworkManager事件
+            // NetworkManager事件
             if (NetworkManager.Instance != null)
             {
-                NetworkManager.OnRoomStateReset += OnRoomStateReset;
                 NetworkManager.OnPlayerReadyChanged += OnNetworkPlayerReadyChanged;
-                LogDebug("已订阅NetworkManager事件");
+                NetworkManager.OnPlayerModelChanged += OnPlayerModelChanged;
+                NetworkManager.OnModelSyncRequested += OnModelSyncRequested;
             }
+
+            LogDebug("已订阅所有事件");
         }
 
         /// <summary>
@@ -159,15 +186,15 @@ namespace UI
                 RoomManager.OnPlayerJoinedRoom -= OnPlayerJoinedRoom;
                 RoomManager.OnPlayerLeftRoom -= OnPlayerLeftRoom;
                 RoomManager.OnPlayerReadyChanged -= OnPlayerReadyChanged;
-                RoomManager.OnAllPlayersReady -= OnAllPlayersReady;
                 RoomManager.OnGameStarting -= OnGameStarting;
                 RoomManager.OnReturnToLobby -= OnReturnToLobby;
             }
 
             if (NetworkManager.Instance != null)
             {
-                NetworkManager.OnRoomStateReset -= OnRoomStateReset;
                 NetworkManager.OnPlayerReadyChanged -= OnNetworkPlayerReadyChanged;
+                NetworkManager.OnPlayerModelChanged -= OnPlayerModelChanged;
+                NetworkManager.OnModelSyncRequested -= OnModelSyncRequested;
             }
 
             LogDebug("已取消订阅事件");
@@ -175,150 +202,131 @@ namespace UI
 
         #endregion
 
-        #region 自动刷新机制
-
-        /// <summary>
-        /// 启动自动刷新
-        /// </summary>
-        private void StartAutoRefresh()
-        {
-            if (enableAutoRefresh && autoRefreshCoroutine == null)
-            {
-                autoRefreshCoroutine = StartCoroutine(AutoRefreshCoroutine());
-                LogDebug($"启动自动刷新，间隔: {autoRefreshInterval}秒");
-            }
-        }
-
-        /// <summary>
-        /// 停止自动刷新
-        /// </summary>
-        private void StopAutoRefresh()
-        {
-            if (autoRefreshCoroutine != null)
-            {
-                StopCoroutine(autoRefreshCoroutine);
-                autoRefreshCoroutine = null;
-                LogDebug("停止自动刷新");
-            }
-        }
-
-        /// <summary>
-        /// 自动刷新协程
-        /// </summary>
-        private IEnumerator AutoRefreshCoroutine()
-        {
-            while (true)
-            {
-                yield return new WaitForSeconds(autoRefreshInterval);
-
-                if (isInitialized && NetworkManager.Instance?.IsConnected == true)
-                {
-                    RefreshAllUI();
-                }
-            }
-        }
-
-        #endregion
-
         #region 事件处理
 
-        /// <summary>
-        /// 房间进入事件处理
-        /// </summary>
         private void OnRoomEntered()
         {
-            LogDebug("收到房间进入事件");
+            LogDebug("房间进入事件");
             RefreshAllUI();
         }
 
-        /// <summary>
-        /// 玩家加入房间事件处理
-        /// </summary>
         private void OnPlayerJoinedRoom(Player player)
         {
             if (player == null) return;
-            LogDebug($"玩家加入: {player.NickName} (ID: {player.ActorNumber})");
-            CreateOrUpdatePlayerUI(player);
+
+            ushort playerId = (ushort)player.ActorNumber;
+            LogDebug($"玩家加入: {player.NickName} (ID: {playerId})");
+
+            // 创建玩家数据
+            var playerData = new RoomPlayerData
+            {
+                playerId = playerId,
+                playerName = player.NickName ?? $"Player_{playerId}",
+                isHost = player.IsMasterClient,
+                isReady = false,
+                selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()
+            };
+            playerDataCache[playerId] = playerData;
+
+            // 创建UI
+            CreatePlayerUI(playerId);
             RefreshRoomInfo();
-            RefreshActionButton();
+            RefreshHostControls();
         }
 
-        /// <summary>
-        /// 玩家离开房间事件处理
-        /// </summary>
         private void OnPlayerLeftRoom(Player player)
         {
-            if (player != null)
-            {
-                LogDebug($"玩家离开: {player.NickName} (ID: {player.ActorNumber})");
-                RemovePlayerUI(player.ActorNumber);
-            }
+            if (player == null) return;
+
+            ushort playerId = (ushort)player.ActorNumber;
+            LogDebug($"玩家离开: {player.NickName} (ID: {playerId})");
+
+            RemovePlayerUI(playerId);
+            playerDataCache.Remove(playerId);
+
             RefreshRoomInfo();
-            RefreshActionButton();
+            RefreshHostControls();
         }
 
-        /// <summary>
-        /// 玩家准备状态变化事件处理
-        /// </summary>
         private void OnPlayerReadyChanged(Player player, bool isReady)
         {
             if (player == null) return;
+
+            ushort playerId = (ushort)player.ActorNumber;
             LogDebug($"玩家准备状态变化: {player.NickName} -> {isReady}");
-            UpdatePlayerReadyState(player);
-            RefreshActionButton();
+
+            if (playerDataCache.ContainsKey(playerId))
+            {
+                playerDataCache[playerId].SetReady(isReady);
+            }
+
+            UpdatePlayerUI(playerId);
+            RefreshHostControls();
         }
 
-        /// <summary>
-        /// NetworkManager玩家准备状态变化事件处理
-        /// </summary>
         private void OnNetworkPlayerReadyChanged(ushort playerId, bool isReady)
         {
             LogDebug($"网络玩家准备状态变化: ID {playerId} -> {isReady}");
-            RefreshPlayerList();
-            RefreshActionButton();
+
+            if (playerDataCache.ContainsKey(playerId))
+            {
+                playerDataCache[playerId].SetReady(isReady);
+            }
+
+            UpdatePlayerUI(playerId);
+            RefreshHostControls();
         }
 
-        /// <summary>
-        /// 所有玩家准备就绪事件处理
-        /// </summary>
-        private void OnAllPlayersReady()
+        private void OnPlayerModelChanged(ushort playerId, int modelId, string modelName)
         {
-            LogDebug("所有玩家都已准备就绪");
-            RefreshActionButton();
-            ShowAllReadyNotification();
+            LogDebug($"玩家模型变化: ID {playerId} -> 模型 {modelId} ({modelName})");
+
+            if (playerDataCache.ContainsKey(playerId))
+            {
+                playerDataCache[playerId].SetSelectedModel(modelId, modelName);
+            }
+
+            UpdatePlayerUI(playerId);
         }
 
-        /// <summary>
-        /// 游戏开始事件处理
-        /// </summary>
+        private void OnModelSyncRequested(ushort requestingPlayerId)
+        {
+            if (!NetworkManager.Instance.IsHost) return;
+
+            LogDebug($"收到玩家 {requestingPlayerId} 的模型同步请求");
+
+            // 发送当前所有玩家的模型数据
+            var playerIds = new List<ushort>();
+            var modelIds = new List<int>();
+
+            foreach (var kvp in playerDataCache)
+            {
+                playerIds.Add(kvp.Key);
+                modelIds.Add(kvp.Value.selectedModelId);
+            }
+
+            if (playerIds.Count > 0)
+            {
+                NetworkManager.Instance.BroadcastAllPlayerModels(playerIds.ToArray(), modelIds.ToArray());
+            }
+        }
+
         private void OnGameStarting()
         {
-            LogDebug("游戏即将开始");
-            RefreshActionButton();
-            ShowGameStartingNotification();
+            LogDebug("游戏即将开始，保存模型选择数据");
+            SavePlayerModelSelections();
+            RefreshHostControls();
         }
 
-        /// <summary>
-        /// 返回大厅事件处理
-        /// </summary>
         private void OnReturnToLobby()
         {
             LogDebug("返回大厅");
             ClearAllUI();
         }
 
-        /// <summary>
-        /// 房间状态重置事件处理
-        /// </summary>
-        private void OnRoomStateReset()
-        {
-            LogDebug("收到房间状态重置事件");
-            RefreshAllUI();
-        }
-
         #endregion
 
-        #region UI刷新方法
+        #region UI刷新
 
         /// <summary>
         /// 刷新所有UI
@@ -335,7 +343,7 @@ namespace UI
             LogDebug("刷新所有UI");
             RefreshRoomInfo();
             RefreshPlayerList();
-            RefreshActionButton();
+            RefreshHostControls();
         }
 
         /// <summary>
@@ -345,38 +353,30 @@ namespace UI
         {
             if (NetworkManager.Instance?.IsConnected != true) return;
 
-            // 更新房间名称
             if (roomNameText != null)
-            {
                 roomNameText.text = $"房间: {NetworkManager.Instance.RoomName}";
-            }
 
-            // 更新房间代码
             if (roomCodeText != null)
             {
                 string roomCode = NetworkManager.Instance.GetRoomProperty<string>("roomCode", "");
                 roomCodeText.text = string.IsNullOrEmpty(roomCode) ? "房间代码: 无" : $"房间代码: {roomCode}";
             }
 
-            // 更新房间状态
             if (roomStatusText != null)
             {
                 var roomState = GetRoomState();
                 roomStatusText.text = $"状态: {GetRoomStateDisplayText(roomState)}";
             }
 
-            // 更新玩家数量和准备状态
             if (playerCountText != null)
             {
                 int totalPlayers = NetworkManager.Instance.PlayerCount;
                 int maxPlayers = NetworkManager.Instance.MaxPlayers;
-                int readyCount = NetworkManager.Instance.GetReadyPlayerCount();
-                int nonHostCount = NetworkManager.Instance.GetNonHostPlayerCount();
+                int readyCount = GetReadyPlayerCount();
+                int nonHostCount = GetNonHostPlayerCount();
 
                 playerCountText.text = $"玩家: {totalPlayers}/{maxPlayers} (准备: {readyCount}/{nonHostCount})";
             }
-
-            LogDebug($"房间信息已更新: {NetworkManager.Instance.RoomName}, 玩家数: {NetworkManager.Instance.PlayerCount}");
         }
 
         /// <summary>
@@ -384,198 +384,160 @@ namespace UI
         /// </summary>
         private void RefreshPlayerList()
         {
-            if (NetworkManager.Instance?.IsConnected != true || playerListParent == null) return;
+            if (NetworkManager.Instance?.IsConnected != true) return;
 
             LogDebug("刷新玩家列表");
 
-            // 清空现有UI
-            ClearPlayerUIItems();
-
-            // 重新创建所有玩家UI
-            var playerIds = NetworkManager.Instance.GetAllOnlinePlayerIds();
-            foreach (var playerId in playerIds)
+            // 获取当前房间所有玩家
+            var currentPlayerIds = new HashSet<ushort>();
+            foreach (var player in PhotonNetwork.PlayerList)
             {
-                CreatePlayerUIFromId(playerId);
-            }
+                ushort playerId = (ushort)player.ActorNumber;
+                currentPlayerIds.Add(playerId);
 
-            LogDebug($"玩家列表刷新完成，当前玩家数: {playerIds.Count}");
-        }
-
-        /// <summary>
-        /// 从玩家ID创建UI
-        /// </summary>
-        private void CreatePlayerUIFromId(ushort playerId)
-        {
-            if (playerItemPrefab == null || playerListParent == null) return;
-
-            GameObject playerItem = Instantiate(playerItemPrefab, playerListParent);
-            playerItem.name = $"Player_{playerId}";
-            playerUIItems[playerId] = playerItem;
-
-            // 更新UI内容
-            UpdatePlayerUIFromId(playerItem, playerId);
-
-            LogDebug($"创建玩家UI: ID {playerId}");
-        }
-
-        /// <summary>
-        /// 从玩家ID更新UI内容
-        /// </summary>
-        private void UpdatePlayerUIFromId(GameObject playerItem, ushort playerId)
-        {
-            if (playerItem == null) return;
-
-            string playerName = NetworkManager.Instance.GetPlayerName(playerId);
-            bool isHost = NetworkManager.Instance.IsHostPlayer(playerId);
-            bool isReady = NetworkManager.Instance.GetPlayerReady(playerId);
-
-            // 更新玩家名称
-            var nameText = playerItem.GetComponentInChildren<TMP_Text>();
-            if (nameText != null)
-            {
-                string displayName = playerName;
-                if (isHost)
+                // 确保玩家数据存在
+                if (!playerDataCache.ContainsKey(playerId))
                 {
-                    displayName += " (房主)";
+                    var playerData = new RoomPlayerData
+                    {
+                        playerId = playerId,
+                        playerName = player.NickName ?? $"Player_{playerId}",
+                        isHost = player.IsMasterClient,
+                        isReady = NetworkManager.Instance.GetPlayerReady(playerId),
+                        selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()
+                    };
+                    playerDataCache[playerId] = playerData;
                 }
-                nameText.text = displayName;
-            }
 
-            // 更新准备状态显示
-            var statusTexts = playerItem.GetComponentsInChildren<TMP_Text>();
-            TMP_Text statusText = null;
-
-            foreach (var text in statusTexts)
-            {
-                if (text != nameText && (text.name.Contains("Status") || statusTexts.Length > 1))
+                // 创建或更新UI
+                if (!playerUIItems.ContainsKey(playerId))
                 {
-                    statusText = text;
-                    break;
-                }
-            }
-
-            if (statusText != null)
-            {
-                if (isHost)
-                {
-                    statusText.text = "房主";
-                    statusText.color = Color.yellow;
+                    CreatePlayerUI(playerId);
                 }
                 else
                 {
-                    statusText.text = isReady ? "已准备" : "未准备";
-                    statusText.color = isReady ? Color.green : Color.red;
+                    UpdatePlayerUI(playerId);
                 }
             }
 
-            // 更新背景颜色
-            var backgroundImage = playerItem.GetComponent<Image>();
-            if (backgroundImage != null)
+            // 移除已离开玩家的UI
+            var playersToRemove = new List<ushort>();
+            foreach (var playerId in playerUIItems.Keys)
             {
-                if (isHost)
+                if (!currentPlayerIds.Contains(playerId))
                 {
-                    backgroundImage.color = new Color(1f, 0.8f, 0.2f, 0.3f); // 房主金色背景
-                }
-                else
-                {
-                    backgroundImage.color = isReady ?
-                        new Color(0.2f, 1f, 0.2f, 0.2f) : // 准备：淡绿色
-                        new Color(1f, 0.2f, 0.2f, 0.2f);  // 未准备：淡红色
+                    playersToRemove.Add(playerId);
                 }
             }
-        }
 
-        /// <summary>
-        /// 创建或更新玩家UI（兼容Player对象）
-        /// </summary>
-        private void CreateOrUpdatePlayerUI(Player player)
-        {
-            if (player == null) return;
-            CreatePlayerUIFromId((ushort)player.ActorNumber);
-        }
-
-        /// <summary>
-        /// 更新特定玩家的准备状态UI
-        /// </summary>
-        private void UpdatePlayerReadyState(Player player)
-        {
-            if (player == null) return;
-
-            if (playerUIItems.ContainsKey(player.ActorNumber))
+            foreach (var playerId in playersToRemove)
             {
-                var playerItem = playerUIItems[player.ActorNumber];
-                if (playerItem != null)
-                {
-                    UpdatePlayerUIFromId(playerItem, (ushort)player.ActorNumber);
-                }
+                RemovePlayerUI(playerId);
+                playerDataCache.Remove(playerId);
             }
         }
 
         /// <summary>
-        /// 移除玩家UI
+        /// 刷新房主控制
         /// </summary>
-        private void RemovePlayerUI(int actorNumber)
+        private void RefreshHostControls()
         {
-            if (playerUIItems.ContainsKey(actorNumber))
-            {
-                var item = playerUIItems[actorNumber];
-                if (item != null)
-                {
-                    Destroy(item);
-                }
-                playerUIItems.Remove(actorNumber);
-
-                LogDebug($"移除玩家UI: ActorNumber {actorNumber}");
-            }
-        }
-
-        /// <summary>
-        /// 刷新动作按钮（合并的准备/开始游戏按钮）
-        /// </summary>
-        private void RefreshActionButton()
-        {
-            if (NetworkManager.Instance?.IsConnected != true || actionButton == null) return;
-
-            bool isHost = NetworkManager.Instance.IsHost;
-            bool canStartGame = RoomManager.Instance?.CanStartGame() ?? false;
-            bool myReadyState = NetworkManager.Instance.GetMyReadyState();
             bool gameStarted = GetGameStarted();
 
-            if (isHost)
-            {
-                // 房主显示开始游戏按钮
-                actionButton.gameObject.SetActive(true);
-                actionButton.interactable = canStartGame && !gameStarted;
-
-                // 设置按钮图标
-                SetButtonIcon(startGameSprite);
-            }
-            else
-            {
-                // 玩家显示准备按钮
-                actionButton.gameObject.SetActive(true);
-                actionButton.interactable = !gameStarted;
-
-                // 根据准备状态设置图标
-                SetButtonIcon(myReadyState ? cancelReadySprite : readySprite);
-            }
-
-            // 更新离开房间按钮
+            // 离开房间按钮
             if (leaveRoomButton != null)
             {
                 leaveRoomButton.interactable = !gameStarted;
             }
         }
 
+        #endregion
+
+        #region 玩家UI管理
+
         /// <summary>
-        /// 设置按钮图标（切换子物体Image的Sprite）
+        /// 创建玩家UI
         /// </summary>
-        private void SetButtonIcon(Sprite sprite)
+        private void CreatePlayerUI(ushort playerId)
         {
-            if (actionButtonIcon != null && sprite != null)
+            if (playerModelItemPrefab == null || playerListParent == null)
             {
-                actionButtonIcon.sprite = sprite;
+                Debug.LogError("[RoomUIController] 缺少必要的UI预制体或父级");
+                return;
             }
+
+            if (playerUIItems.ContainsKey(playerId))
+            {
+                LogDebug($"玩家 {playerId} 的UI已存在，先移除");
+                RemovePlayerUI(playerId);
+            }
+
+            // 实例化UI项
+            GameObject uiItem = Instantiate(playerModelItemPrefab, playerListParent);
+            uiItem.name = $"PlayerModelItem_{playerId}";
+
+            // 获取PlayerModelItemUI组件
+            var itemUI = uiItem.GetComponent<PlayerModelItemUI>();
+            if (itemUI == null)
+            {
+                itemUI = uiItem.AddComponent<PlayerModelItemUI>();
+            }
+
+            // 初始化UI项
+            var playerData = playerDataCache[playerId];
+            itemUI.Initialize(playerId, playerData, this);
+
+            // 缓存UI项
+            playerUIItems[playerId] = itemUI;
+
+            LogDebug($"创建玩家UI: {playerData.playerName} (ID: {playerId})");
+        }
+
+        /// <summary>
+        /// 更新玩家UI
+        /// </summary>
+        private void UpdatePlayerUI(ushort playerId)
+        {
+            if (!playerUIItems.ContainsKey(playerId) || !playerDataCache.ContainsKey(playerId))
+                return;
+
+            var itemUI = playerUIItems[playerId];
+            var playerData = playerDataCache[playerId];
+
+            itemUI.UpdateDisplay(playerData);
+        }
+
+        /// <summary>
+        /// 移除玩家UI
+        /// </summary>
+        private void RemovePlayerUI(ushort playerId)
+        {
+            if (playerUIItems.ContainsKey(playerId))
+            {
+                var itemUI = playerUIItems[playerId];
+                if (itemUI != null && itemUI.gameObject != null)
+                {
+                    Destroy(itemUI.gameObject);
+                }
+                playerUIItems.Remove(playerId);
+                LogDebug($"移除玩家UI: ID {playerId}");
+            }
+        }
+
+        /// <summary>
+        /// 清空所有玩家UI
+        /// </summary>
+        private void ClearAllPlayerUI()
+        {
+            foreach (var itemUI in playerUIItems.Values)
+            {
+                if (itemUI != null && itemUI.gameObject != null)
+                {
+                    Destroy(itemUI.gameObject);
+                }
+            }
+            playerUIItems.Clear();
+            playerDataCache.Clear();
         }
 
         /// <summary>
@@ -583,8 +545,6 @@ namespace UI
         /// </summary>
         private void ClearAllUI()
         {
-            LogDebug("清空所有UI");
-
             // 清空房间信息
             if (roomNameText != null) roomNameText.text = "房间: 未连接";
             if (roomCodeText != null) roomCodeText.text = "房间代码: 无";
@@ -592,140 +552,171 @@ namespace UI
             if (playerCountText != null) playerCountText.text = "玩家: 0/0";
 
             // 清空玩家列表
-            ClearPlayerUIItems();
+            ClearAllPlayerUI();
 
             // 隐藏控制按钮
-            if (actionButton != null) actionButton.gameObject.SetActive(false);
-        }
-
-        /// <summary>
-        /// 清空玩家UI项
-        /// </summary>
-        private void ClearPlayerUIItems()
-        {
-            foreach (var item in playerUIItems.Values)
-            {
-                if (item != null)
-                {
-                    Destroy(item);
-                }
-            }
-            playerUIItems.Clear();
+            // 移除了startGameButton相关代码，因为开始游戏功能已合并到各自的actionButton
         }
 
         #endregion
 
-        #region 按钮事件处理
+        #region 公共接口 - 供PlayerModelItemUI调用
 
         /// <summary>
-        /// 动作按钮点击（合并的准备/开始游戏按钮）
+        /// 玩家模型选择变化
         /// </summary>
-        private void OnActionButtonClicked()
+        public void OnPlayerModelSelectionChanged(ushort playerId, int newModelId)
         {
-            if (NetworkManager.Instance?.IsConnected != true) return;
+            if (!playerDataCache.ContainsKey(playerId)) return;
 
-            bool isHost = NetworkManager.Instance.IsHost;
+            string modelName = PlayerModelManager.Instance.GetModelName(newModelId);
+            playerDataCache[playerId].SetSelectedModel(newModelId, modelName);
 
-            if (isHost)
+            // 通过网络同步给其他玩家
+            NetworkManager.Instance.SendPlayerModelChangeRPC(playerId, newModelId, modelName);
+
+            LogDebug($"玩家 {playerId} 选择模型: {modelName} (ID: {newModelId})");
+        }
+
+        /// <summary>
+        /// 玩家准备状态变化（支持房主开始游戏）
+        /// </summary>
+        public void OnPlayerReadyStateChanged(ushort playerId, bool isReady)
+        {
+            if (playerId != NetworkManager.Instance.ClientId)
+            {
+                LogDebug("只能改变自己的状态");
+                return;
+            }
+
+            var playerData = GetPlayerData(playerId);
+            if (playerData == null) return;
+
+            if (playerData.isHost)
             {
                 // 房主点击开始游戏
-                if (RoomManager.Instance != null)
+                if (CanStartGame())
                 {
-                    if (RoomManager.Instance.CanStartGame())
-                    {
-                        RoomManager.Instance.StartGame();
-                        LogDebug("房主点击开始游戏");
-                    }
-                    else
-                    {
-                        LogDebug($"无法开始游戏: {RoomManager.Instance.GetGameStartConditions()}");
-                    }
+                    RoomManager.Instance.StartGame();
+                    LogDebug("房主点击开始游戏");
+                }
+                else
+                {
+                    LogDebug("无法开始游戏 - 条件不满足");
                 }
             }
             else
             {
-                // 玩家点击准备/取消准备
-                bool currentState = NetworkManager.Instance.GetMyReadyState();
-                bool newState = !currentState;
-
-                if (RoomManager.Instance != null)
-                {
-                    RoomManager.Instance.SetPlayerReady(newState);
-                    LogDebug($"设置准备状态: {currentState} -> {newState}");
-                }
+                // 普通玩家改变准备状态
+                RoomManager.Instance.SetPlayerReady(isReady);
+                LogDebug($"设置本地玩家准备状态: {isReady}");
             }
         }
 
         /// <summary>
-        /// 离开房间按钮点击
+        /// 获取玩家数据
         /// </summary>
+        public RoomPlayerData GetPlayerData(ushort playerId)
+        {
+            return playerDataCache.TryGetValue(playerId, out RoomPlayerData data) ? data : null;
+        }
+
+        /// <summary>
+        /// 检查是否可以开始游戏（供PlayerModelItemUI调用）
+        /// </summary>
+        public bool CanStartGame()
+        {
+            return RoomManager.Instance?.CanStartGame() ?? false;
+        }
+
+        #endregion
+
+        #region 数据保存
+
+        /// <summary>
+        /// 保存玩家模型选择数据
+        /// </summary>
+        private void SavePlayerModelSelections()
+        {
+            var modelSelections = new Dictionary<ushort, int>();
+            foreach (var kvp in playerDataCache)
+            {
+                modelSelections[kvp.Key] = kvp.Value.selectedModelId;
+            }
+
+            PlayerModelSelectionData.SaveSelections(modelSelections);
+            LogDebug($"保存了 {modelSelections.Count} 个玩家的模型选择数据");
+        }
+
+        #endregion
+
+        #region 按钮事件
+
         private void OnLeaveRoomButtonClicked()
         {
             LogDebug("点击离开房间");
-
-            if (RoomManager.Instance != null)
-            {
-                RoomManager.Instance.LeaveRoomAndReturnToLobby();
-            }
+            RoomManager.Instance.LeaveRoomAndReturnToLobby();
         }
 
         #endregion
 
-        #region 数据获取方法
+        #region 自动刷新
 
-        /// <summary>
-        /// 获取房间状态
-        /// </summary>
-        private RoomState GetRoomState()
+        private void StartAutoRefresh()
         {
-            if (RoomManager.Instance != null)
+            if (enableAutoRefresh && autoRefreshCoroutine == null)
             {
-                return RoomManager.Instance.GetRoomState();
+                autoRefreshCoroutine = StartCoroutine(AutoRefreshCoroutine());
+                LogDebug($"启动自动刷新，间隔: {autoRefreshInterval}秒");
             }
-            return RoomState.Waiting;
         }
 
-        /// <summary>
-        /// 获取游戏是否已开始
-        /// </summary>
-        private bool GetGameStarted()
+        private void StopAutoRefresh()
         {
-            if (RoomManager.Instance != null)
+            if (autoRefreshCoroutine != null)
             {
-                return RoomManager.Instance.GetGameStarted();
+                StopCoroutine(autoRefreshCoroutine);
+                autoRefreshCoroutine = null;
             }
-            return false;
         }
 
-        #endregion
-
-        #region UI效果和通知
-
-        /// <summary>
-        /// 显示所有玩家准备就绪通知
-        /// </summary>
-        private void ShowAllReadyNotification()
+        private IEnumerator AutoRefreshCoroutine()
         {
-            LogDebug("所有玩家准备就绪 - 可以添加特效");
-            // 可以在这里添加特效、音效或UI提示
-        }
+            while (true)
+            {
+                yield return new WaitForSeconds(autoRefreshInterval);
 
-        /// <summary>
-        /// 显示游戏开始通知
-        /// </summary>
-        private void ShowGameStartingNotification()
-        {
-            LogDebug("游戏即将开始 - 可以添加倒计时");
-            // 可以在这里添加倒计时UI或特效
+                if (isInitialized && NetworkManager.Instance?.IsConnected == true)
+                {
+                    RefreshAllUI();
+                }
+            }
         }
 
         #endregion
 
         #region 辅助方法
 
-        /// <summary>
-        /// 获取房间状态显示文本
-        /// </summary>
+        private RoomState GetRoomState()
+        {
+            return RoomManager.Instance?.GetRoomState() ?? RoomState.Waiting;
+        }
+
+        private bool GetGameStarted()
+        {
+            return RoomManager.Instance?.GetGameStarted() ?? false;
+        }
+
+        private int GetReadyPlayerCount()
+        {
+            return playerDataCache.Values.Count(p => p.isReady && !p.isHost);
+        }
+
+        private int GetNonHostPlayerCount()
+        {
+            return playerDataCache.Values.Count(p => !p.isHost);
+        }
+
         private string GetRoomStateDisplayText(RoomState state)
         {
             switch (state)
@@ -738,9 +729,6 @@ namespace UI
             }
         }
 
-        /// <summary>
-        /// 调试日志
-        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
@@ -750,6 +738,5 @@ namespace UI
         }
 
         #endregion
-
     }
 }
