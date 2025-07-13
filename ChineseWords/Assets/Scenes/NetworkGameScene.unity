@@ -4005,6 +4005,22 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 5
       objectReference: {fileID: 0}
+    - target: {fileID: 4484884133224054014, guid: e5061592dc65f7e44806aba3992da190, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4484884133224054014, guid: e5061592dc65f7e44806aba3992da190, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4484884133224054014, guid: e5061592dc65f7e44806aba3992da190, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4484884133224054014, guid: e5061592dc65f7e44806aba3992da190, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 6569850924366789924, guid: e5061592dc65f7e44806aba3992da190, type: 3}
       propertyPath: m_Layer
       value: 5

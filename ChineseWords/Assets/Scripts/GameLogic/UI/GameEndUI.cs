@@ -249,10 +249,6 @@ namespace UI
                 playerCameraController.SetControlEnabled(enabled);
                 LogDebug($"摄像机控制: {(enabled ? "启用" : "禁用")}");
             }
-            else
-            {
-                LogDebug("摄像机控制器不可用，无法控制摄像机");
-            }
         }
 
         #endregion
@@ -335,46 +331,26 @@ namespace UI
                 Debug.LogError("[GameEndUI] ❌ 缺少gameEndPanel引用");
                 hasErrors = true;
             }
-            else
-            {
-                LogDebug("✓ gameEndPanel引用正常");
-            }
 
             if (titleText == null)
             {
                 Debug.LogWarning("[GameEndUI] ⚠️ 缺少titleText引用");
-            }
-            else
-            {
-                LogDebug("✓ titleText引用正常");
             }
 
             if (returnToRoomButton == null)
             {
                 Debug.LogWarning("[GameEndUI] ⚠️ 缺少returnToRoomButton引用");
             }
-            else
-            {
-                LogDebug("✓ returnToRoomButton引用正常");
-            }
 
             if (panelCanvasGroup == null)
             {
                 Debug.LogWarning("[GameEndUI] ⚠️ 缺少panelCanvasGroup引用，将无法使用淡入效果");
-            }
-            else
-            {
-                LogDebug("✓ panelCanvasGroup引用正常");
             }
 
             if (hasErrors)
             {
                 Debug.LogError("[GameEndUI] ❌ 关键组件缺失，禁用脚本");
                 this.enabled = false;
-            }
-            else
-            {
-                LogDebug("✓ 所有关键组件验证通过");
             }
         }
 
@@ -500,7 +476,6 @@ namespace UI
         /// </summary>
         private void ShowGameEndPanel(bool hasWinner, ushort winnerId, string winnerName, string reason)
         {
-            LogDebug($"★★★ ShowGameEndPanel被调用 - hasWinner: {hasWinner}, winnerName: {winnerName} ★★★");
 
             if (isPanelVisible)
             {
@@ -769,8 +744,6 @@ namespace UI
         /// </summary>
         private IEnumerator FadeInPanel()
         {
-            LogDebug($"★ FadeInPanel开始 - 初始alpha: {panelCanvasGroup.alpha}");
-
             float elapsedTime = 0f;
             float startAlpha = panelCanvasGroup.alpha;
 
@@ -783,7 +756,6 @@ namespace UI
             }
 
             panelCanvasGroup.alpha = 1f;
-            LogDebug($"★ FadeInPanel完成 - 最终alpha: {panelCanvasGroup.alpha}");
             EnablePanelInteraction();
         }
 
@@ -792,7 +764,6 @@ namespace UI
         /// </summary>
         private IEnumerator FadeOutPanel()
         {
-            LogDebug($"FadeOutPanel开始 - 初始alpha: {panelCanvasGroup.alpha}");
 
             float elapsedTime = 0f;
             float startAlpha = panelCanvasGroup.alpha;
@@ -809,7 +780,6 @@ namespace UI
             }
 
             panelCanvasGroup.alpha = 0f;
-            LogDebug("FadeOutPanel完成");
 
             // 隐藏面板
             if (gameEndPanel != null)
@@ -924,12 +894,6 @@ namespace UI
             Spectator,  // 观战者（已死亡）
             NoWinner    // 无获胜者
         }
-
-        #endregion
-
-        #region 公共接口
-
-        public bool IsPanelVisible => isPanelVisible;
 
         #endregion
 
