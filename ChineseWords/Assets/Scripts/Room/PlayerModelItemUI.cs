@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using RoomScene.Data;
@@ -8,48 +8,59 @@ using Core.Network;
 namespace UI
 {
     /// <summary>
-    /// Íæ¼ÒÄ£ĞÍUIÏî - Í³Ò»ActionButton°æ±¾
-    /// ÏÔÊ¾£º3DÄ£ĞÍÔ¤ÀÀ + Ä£ĞÍÇĞ»»°´Å¥ + Íæ¼ÒĞÅÏ¢ + Í³Ò»ĞĞ¶¯°´Å¥
-    /// ActionButton¸ù¾İÍæ¼ÒÀàĞÍºÍ±¾µØ/Ô¶³ÌÏÔÊ¾²»Í¬ÄÚÈİ
+    /// ç©å®¶æ¨¡å‹UIé¡¹ - å›¾ç‰‡æŒ‰é’®ç‰ˆæœ¬
+    /// æ˜¾ç¤ºï¼š3Dæ¨¡å‹é¢„è§ˆ + æ¨¡å‹åˆ‡æ¢æŒ‰é’® + ç©å®¶ä¿¡æ¯ + å›¾ç‰‡çŠ¶æ€æŒ‰é’®
+    /// ActionButtonä½¿ç”¨å›¾ç‰‡è€Œéæ–‡å­—æ¥æ˜¾ç¤ºä¸åŒçŠ¶æ€
     /// </summary>
     public class PlayerModelItemUI : MonoBehaviour
     {
-        [Header("Ä£ĞÍÔ¤ÀÀÇøÓò")]
+        [Header("æ¨¡å‹é¢„è§ˆåŒºåŸŸ")]
         [SerializeField] private Transform modelPreviewContainer;
         [SerializeField] private Button previousModelButton;
         [SerializeField] private Button nextModelButton;
 
-        [Header("Íæ¼ÒĞÅÏ¢ÇøÓò")]
+        [Header("ç©å®¶ä¿¡æ¯åŒºåŸŸ")]
         [SerializeField] private TMP_Text playerNameText;
-        [SerializeField] private TMP_Text hostIndicatorText;          // ¿Î´ú±í±êÊ¶ÎÄ±¾
+        [SerializeField] private TMP_Text hostIndicatorText;          // è¯¾ä»£è¡¨æ ‡è¯†æ–‡æœ¬
         [SerializeField] private Image playerBackgroundImage;
 
-        [Header("ĞĞ¶¯¿ØÖÆÇøÓò")]
-        [SerializeField] private Button actionButton;                // Í³Ò»µÄĞĞ¶¯°´Å¥
-        [SerializeField] private TMP_Text actionButtonText;          // °´Å¥ÎÄ±¾
+        [Header("è¡ŒåŠ¨æ§åˆ¶åŒºåŸŸ")]
+        [SerializeField] private Button actionButton;                // ç»Ÿä¸€çš„è¡ŒåŠ¨æŒ‰é’®
+        [SerializeField] private Image actionButtonIconImage;        // æŒ‰é’®å­ç‰©ä½“çš„Icon Imageç»„ä»¶
 
-        [Header("ÑÕÉ«ÅäÖÃ")]
+        [Header("æŒ‰é’®çŠ¶æ€å›¾ç‰‡ - æœ¬åœ°ç©å®¶")]
+        [SerializeField] private Sprite localPlayerReadyIconSprite;          // æœ¬åœ°ç©å®¶ï¼šå‡†å¤‡æŒ‰é’®å›¾æ ‡
+        [SerializeField] private Sprite localPlayerCancelReadyIconSprite;    // æœ¬åœ°ç©å®¶ï¼šå–æ¶ˆå‡†å¤‡æŒ‰é’®å›¾æ ‡
+        [SerializeField] private Sprite localHostStartGameIconSprite;        // æœ¬åœ°æˆ¿ä¸»ï¼šå¼€å§‹æ¸¸æˆæŒ‰é’®å›¾æ ‡
+        [SerializeField] private Sprite localHostStartGameDisabledIconSprite;   // æœ¬åœ°æˆ¿ä¸»ï¼šå¼€å§‹æ¸¸æˆç¦ç”¨æŒ‰é’®å›¾æ ‡
+
+        [Header("æŒ‰é’®çŠ¶æ€å›¾ç‰‡ - è¿œç¨‹ç©å®¶")]
+        [SerializeField] private Sprite remotePlayerReadyIconSprite;         // è¿œç¨‹ç©å®¶ï¼šå·²å‡†å¤‡çŠ¶æ€å›¾æ ‡
+        [SerializeField] private Sprite remotePlayerNotReadyIconSprite;      // è¿œç¨‹ç©å®¶ï¼šæœªå‡†å¤‡çŠ¶æ€å›¾æ ‡
+        [SerializeField] private Sprite remoteHostReadyIconSprite;           // è¿œç¨‹æˆ¿ä¸»ï¼šå·²å‡†å¤‡çŠ¶æ€å›¾æ ‡
+
+        [Header("é¢œè‰²é…ç½®")]
         [SerializeField] private Color hostBackgroundColor = new Color(1f, 0.8f, 0.2f, 0.3f);
         [SerializeField] private Color readyBackgroundColor = new Color(0.2f, 1f, 0.2f, 0.2f);
         [SerializeField] private Color notReadyBackgroundColor = new Color(1f, 0.2f, 0.2f, 0.2f);
 
-        [Header("µ÷ÊÔÉèÖÃ")]
+        [Header("è°ƒè¯•è®¾ç½®")]
         [SerializeField] private bool enableDebugLogs = true;
 
-        // Êı¾İÒıÓÃ
+        // æ•°æ®å¼•ç”¨
         private ushort playerId;
         private RoomPlayerData playerData;
         private RoomUIController parentController;
         private GameObject currentModelPreview;
         private bool isLocalPlayer;
 
-        // ×´Ì¬
+        // çŠ¶æ€
         private bool isInitialized = false;
 
-        #region ³õÊ¼»¯
+        #region åˆå§‹åŒ–
 
         /// <summary>
-        /// ³õÊ¼»¯Íæ¼ÒUIÏî
+        /// åˆå§‹åŒ–ç©å®¶UIé¡¹
         /// </summary>
         public void Initialize(ushort id, RoomPlayerData data, RoomUIController controller)
         {
@@ -60,18 +71,34 @@ namespace UI
 
             SetupUIComponents();
             UpdateDisplay(playerData);
-            ShowModelPreview(playerData.selectedModelId);
+
+            // ç¡®ä¿æ˜¾ç¤ºæ­£ç¡®çš„æ¨¡å‹é¢„è§ˆ
+            int modelIdToShow = playerData.selectedModelId;
+
+            // å¦‚æœæ˜¯è¿œç¨‹ç©å®¶ä¸”æ¨¡å‹IDæ˜¯é»˜è®¤å€¼ï¼Œå°è¯•ä»NetworkManagerè·å–
+            if (!isLocalPlayer && modelIdToShow == PlayerModelManager.Instance.GetDefaultModelId())
+            {
+                int networkModelId = NetworkManager.Instance.GetPlayerModelId(playerId);
+                if (networkModelId != PlayerModelManager.Instance.GetDefaultModelId())
+                {
+                    modelIdToShow = networkModelId;
+                    playerData.SetSelectedModel(modelIdToShow, PlayerModelManager.Instance.GetModelName(modelIdToShow));
+                    LogDebug($"ä»NetworkManagerè·å–ç©å®¶{playerId}çš„æ¨¡å‹ID: {modelIdToShow}");
+                }
+            }
+
+            ShowModelPreview(modelIdToShow);
 
             isInitialized = true;
-            LogDebug($"³õÊ¼»¯Íæ¼ÒUIÏî: {playerData.playerName} (±¾µØÍæ¼Ò: {isLocalPlayer})");
+            LogDebug($"åˆå§‹åŒ–ç©å®¶UIé¡¹: {playerData.playerName} (æœ¬åœ°ç©å®¶: {isLocalPlayer}, æ¨¡å‹ID: {modelIdToShow})");
         }
 
         /// <summary>
-        /// ÉèÖÃUI×é¼ş
+        /// è®¾ç½®UIç»„ä»¶
         /// </summary>
         private void SetupUIComponents()
         {
-            // ÉèÖÃÄ£ĞÍÇĞ»»°´Å¥£¨½ö±¾µØÍæ¼Ò¿ÉÓÃ£©
+            // è®¾ç½®æ¨¡å‹åˆ‡æ¢æŒ‰é’®ï¼ˆä»…æœ¬åœ°ç©å®¶å¯ç”¨ï¼‰
             if (previousModelButton != null)
             {
                 previousModelButton.onClick.RemoveAllListeners();
@@ -86,7 +113,7 @@ namespace UI
                 nextModelButton.gameObject.SetActive(isLocalPlayer);
             }
 
-            // ÉèÖÃÍ³Ò»µÄĞĞ¶¯°´Å¥
+            // è®¾ç½®ç»Ÿä¸€çš„è¡ŒåŠ¨æŒ‰é’®
             if (actionButton != null)
             {
                 actionButton.onClick.RemoveAllListeners();
@@ -94,21 +121,44 @@ namespace UI
                 UpdateActionButtonState();
             }
 
-            // È·±£Ô¤ÀÀÈİÆ÷´æÔÚ
+            // ç¡®ä¿é¢„è§ˆå®¹å™¨å­˜åœ¨
             if (modelPreviewContainer == null)
             {
                 GameObject previewObj = new GameObject("ModelPreviewContainer");
                 previewObj.transform.SetParent(transform, false);
                 modelPreviewContainer = previewObj.transform;
             }
+
+            // éªŒè¯å›¾ç‰‡ç»„ä»¶
+            ValidateImageComponents();
+        }
+
+        /// <summary>
+        /// éªŒè¯å›¾ç‰‡ç»„ä»¶å¼•ç”¨
+        /// </summary>
+        private void ValidateImageComponents()
+        {
+            if (actionButtonIconImage == null)
+            {
+                // å°è¯•ä»actionButtonçš„ç¬¬ä¸€ä¸ªå­ç‰©ä½“è·å–Imageç»„ä»¶
+                if (actionButton != null && actionButton.transform.childCount > 0)
+                {
+                    actionButtonIconImage = actionButton.transform.GetChild(0).GetComponent<Image>();
+                }
+
+                if (actionButtonIconImage == null)
+                {
+                    LogDebug("è­¦å‘Šï¼šActionButtonçš„Icon Imageç»„ä»¶æœªæ‰¾åˆ°ï¼");
+                }
+            }
         }
 
         #endregion
 
-        #region ÏÔÊ¾¸üĞÂ
+        #region æ˜¾ç¤ºæ›´æ–°
 
         /// <summary>
-        /// ¸üĞÂÏÔÊ¾ÄÚÈİ
+        /// æ›´æ–°æ˜¾ç¤ºå†…å®¹
         /// </summary>
         public void UpdateDisplay(RoomPlayerData data)
         {
@@ -116,38 +166,38 @@ namespace UI
 
             playerData = data;
 
-            // ¸üĞÂÍæ¼ÒÃû³Æ
+            // æ›´æ–°ç©å®¶åç§°
             if (playerNameText != null)
             {
                 string displayName = playerData.playerName;
                 if (isLocalPlayer)
                 {
-                    displayName += " (Äã)";
+                    displayName += " (ä½ )";
                 }
                 playerNameText.text = displayName;
             }
 
-            // ¸üĞÂ¿Î´ú±í±êÊ¶
+            // æ›´æ–°è¯¾ä»£è¡¨æ ‡è¯†
             UpdateHostIndicator();
 
-            // ¸üĞÂ±³¾°ÑÕÉ«
+            // æ›´æ–°èƒŒæ™¯é¢œè‰²
             UpdateBackgroundColor();
 
-            // ¸üĞÂÍ³Ò»ĞĞ¶¯°´Å¥×´Ì¬
+            // æ›´æ–°ç»Ÿä¸€è¡ŒåŠ¨æŒ‰é’®çŠ¶æ€
             UpdateActionButtonState();
 
-            // ¸üĞÂÄ£ĞÍÔ¤ÀÀ£¨Èç¹ûÄ£ĞÍID·¢Éú±ä»¯£©
+            // æ›´æ–°æ¨¡å‹é¢„è§ˆï¼ˆå¦‚æœæ¨¡å‹IDå‘ç”Ÿå˜åŒ–ï¼‰
             if (currentModelPreview == null ||
                 playerData.selectedModelId != GetCurrentPreviewModelId())
             {
                 ShowModelPreview(playerData.selectedModelId);
             }
 
-            LogDebug($"¸üĞÂÍæ¼ÒÏÔÊ¾: {playerData.playerName}, Ä£ĞÍ: {playerData.selectedModelId}, ×¼±¸: {playerData.isReady}");
+            LogDebug($"æ›´æ–°ç©å®¶æ˜¾ç¤º: {playerData.playerName}, æ¨¡å‹: {playerData.selectedModelId}, å‡†å¤‡: {playerData.isReady}");
         }
 
         /// <summary>
-        /// ¸üĞÂ¿Î´ú±í±êÊ¶
+        /// æ›´æ–°è¯¾ä»£è¡¨æ ‡è¯†
         /// </summary>
         private void UpdateHostIndicator()
         {
@@ -155,7 +205,7 @@ namespace UI
             {
                 if (playerData.isHost)
                 {
-                    hostIndicatorText.text = "¿Î´ú±í";
+                    hostIndicatorText.text = "è¯¾ä»£è¡¨";
                     hostIndicatorText.color = Color.yellow;
                     hostIndicatorText.gameObject.SetActive(true);
                 }
@@ -167,7 +217,7 @@ namespace UI
         }
 
         /// <summary>
-        /// ¸üĞÂ±³¾°ÑÕÉ«
+        /// æ›´æ–°èƒŒæ™¯é¢œè‰²
         /// </summary>
         private void UpdateBackgroundColor()
         {
@@ -192,94 +242,142 @@ namespace UI
         }
 
         /// <summary>
-        /// ¸üĞÂÍ³Ò»ĞĞ¶¯°´Å¥×´Ì¬
+        /// æ›´æ–°ç»Ÿä¸€è¡ŒåŠ¨æŒ‰é’®çŠ¶æ€
         /// </summary>
         private void UpdateActionButtonState()
         {
             if (actionButton == null) return;
 
-            // actionButtonÊ¼ÖÕÏÔÊ¾£¬µ«ÄÚÈİºÍ½»»¥ĞÔ²»Í¬
+            // actionButtonå§‹ç»ˆæ˜¾ç¤ºï¼Œä½†å†…å®¹å’Œäº¤äº’æ€§ä¸åŒ
             actionButton.gameObject.SetActive(true);
 
             if (isLocalPlayer)
             {
-                // ±¾µØÍæ¼ÒµÄ°´Å¥
-                if (playerData.isHost)
-                {
-                    // ·¿Ö÷ÏÔÊ¾"¿ªÊ¼ÓÎÏ·"
-                    if (actionButtonText != null)
-                    {
-                        actionButtonText.text = "¿ªÊ¼ÓÎÏ·";
-                    }
-
-                    // ·¿Ö÷°´Å¥ÊÇ·ñ¿Éµã»÷È¡¾öÓÚÊÇ·ñËùÓĞÈË¶¼×¼±¸ºÃÁË
-                    actionButton.interactable = CanStartGame();
-                }
-                else
-                {
-                    // ÆÕÍ¨Íæ¼ÒÏÔÊ¾"×¼±¸"/"È¡Ïû×¼±¸"
-                    if (actionButtonText != null)
-                    {
-                        actionButtonText.text = playerData.isReady ? "È¡Ïû×¼±¸" : "×¼±¸";
-                    }
-
-                    actionButton.interactable = true;
-                }
+                UpdateLocalPlayerButtonState();
             }
             else
             {
-                // ÆäËûÍæ¼ÒµÄ°´Å¥ - ½ö×÷×´Ì¬ÏÔÊ¾£¬²»¿É½»»¥
-                actionButton.interactable = false;
-
-                if (actionButtonText != null)
-                {
-                    if (playerData.isHost)
-                    {
-                        // ¿´ÆäËû·¿Ö÷Ê±£¬Ê¼ÖÕÏÔÊ¾"ÒÑ×¼±¸"
-                        actionButtonText.text = "ÒÑ×¼±¸";
-                    }
-                    else
-                    {
-                        // ¿´ÆäËûÆÕÍ¨Íæ¼ÒÊ±£¬ÏÔÊ¾ÆäÊµ¼Ê×¼±¸×´Ì¬
-                        actionButtonText.text = playerData.isReady ? "ÒÑ×¼±¸" : "Î´×¼±¸";
-                    }
-                }
+                UpdateRemotePlayerButtonState();
             }
         }
 
         /// <summary>
-        /// ¼ì²éÊÇ·ñ¿ÉÒÔ¿ªÊ¼ÓÎÏ·£¨¹©·¿Ö÷°´Å¥Ê¹ÓÃ£©
+        /// æ›´æ–°æœ¬åœ°ç©å®¶æŒ‰é’®çŠ¶æ€
+        /// </summary>
+        private void UpdateLocalPlayerButtonState()
+        {
+            if (playerData.isHost)
+            {
+                // æˆ¿ä¸»æ˜¾ç¤º"å¼€å§‹æ¸¸æˆ"
+                bool canStart = CanStartGame();
+                actionButton.interactable = canStart;
+
+                if (canStart)
+                {
+                    SetButtonIcon(localHostStartGameIconSprite);
+                }
+                else
+                {
+                    SetButtonIcon(localHostStartGameDisabledIconSprite);
+                }
+
+                LogDebug($"æˆ¿ä¸»æŒ‰é’®çŠ¶æ€æ›´æ–°: å¯å¼€å§‹={canStart}");
+            }
+            else
+            {
+                // æ™®é€šç©å®¶æ˜¾ç¤º"å‡†å¤‡"/"å–æ¶ˆå‡†å¤‡"
+                actionButton.interactable = true;
+
+                if (playerData.isReady)
+                {
+                    SetButtonIcon(localPlayerCancelReadyIconSprite);
+                }
+                else
+                {
+                    SetButtonIcon(localPlayerReadyIconSprite);
+                }
+
+                LogDebug($"æ™®é€šç©å®¶æŒ‰é’®çŠ¶æ€æ›´æ–°: å‡†å¤‡={playerData.isReady}");
+            }
+        }
+
+        /// <summary>
+        /// æ›´æ–°è¿œç¨‹ç©å®¶æŒ‰é’®çŠ¶æ€
+        /// </summary>
+        private void UpdateRemotePlayerButtonState()
+        {
+            // å…¶ä»–ç©å®¶çš„æŒ‰é’® - ä»…ä½œçŠ¶æ€æ˜¾ç¤ºï¼Œä¸å¯äº¤äº’
+            actionButton.interactable = false;
+
+            if (playerData.isHost)
+            {
+                // çœ‹å…¶ä»–æˆ¿ä¸»æ—¶ï¼Œå§‹ç»ˆæ˜¾ç¤º"å·²å‡†å¤‡"
+                SetButtonIcon(remoteHostReadyIconSprite);
+            }
+            else
+            {
+                // çœ‹å…¶ä»–æ™®é€šç©å®¶æ—¶ï¼Œæ˜¾ç¤ºå…¶å®é™…å‡†å¤‡çŠ¶æ€
+                if (playerData.isReady)
+                {
+                    SetButtonIcon(remotePlayerReadyIconSprite);
+                }
+                else
+                {
+                    SetButtonIcon(remotePlayerNotReadyIconSprite);
+                }
+            }
+
+            LogDebug($"è¿œç¨‹ç©å®¶æŒ‰é’®çŠ¶æ€æ›´æ–°: {playerData.playerName}, å‡†å¤‡={playerData.isReady}");
+        }
+
+        /// <summary>
+        /// è®¾ç½®æŒ‰é’®å›¾æ ‡
+        /// </summary>
+        private void SetButtonIcon(Sprite iconSprite)
+        {
+            if (actionButtonIconImage != null && iconSprite != null)
+            {
+                actionButtonIconImage.sprite = iconSprite;
+            }
+            else if (iconSprite == null)
+            {
+                LogDebug("è­¦å‘Šï¼šå°è¯•è®¾ç½®ç©ºçš„æŒ‰é’®å›¾æ ‡å›¾ç‰‡");
+            }
+        }
+
+        /// <summary>
+        /// æ£€æŸ¥æ˜¯å¦å¯ä»¥å¼€å§‹æ¸¸æˆï¼ˆä¾›æˆ¿ä¸»æŒ‰é’®ä½¿ç”¨ï¼‰
         /// </summary>
         private bool CanStartGame()
         {
             if (parentController == null) return false;
 
-            // Í¨¹ı¸¸¿ØÖÆÆ÷¼ì²éÓÎÏ·¿ªÊ¼Ìõ¼ş
+            // é€šè¿‡çˆ¶æ§åˆ¶å™¨æ£€æŸ¥æ¸¸æˆå¼€å§‹æ¡ä»¶
             return parentController.CanStartGame();
         }
 
         #endregion
 
-        #region Ä£ĞÍÔ¤ÀÀ
+        #region æ¨¡å‹é¢„è§ˆ
 
         /// <summary>
-        /// ÏÔÊ¾Ä£ĞÍÔ¤ÀÀ
+        /// æ˜¾ç¤ºæ¨¡å‹é¢„è§ˆ
         /// </summary>
         private void ShowModelPreview(int modelId)
         {
             if (PlayerModelManager.Instance == null) return;
 
-            // Çå³ıµ±Ç°Ô¤ÀÀ
+            // æ¸…é™¤å½“å‰é¢„è§ˆ
             ClearCurrentPreview();
 
-            // ´´½¨ĞÂÔ¤ÀÀ
+            // åˆ›å»ºæ–°é¢„è§ˆ
             currentModelPreview = PlayerModelManager.Instance.ShowModelPreview(modelId, modelPreviewContainer);
 
-            LogDebug($"ÏÔÊ¾Ä£ĞÍÔ¤ÀÀ: ID {modelId}");
+            LogDebug($"æ˜¾ç¤ºæ¨¡å‹é¢„è§ˆ: ID {modelId}");
         }
 
         /// <summary>
-        /// Çå³ıµ±Ç°Ô¤ÀÀ
+        /// æ¸…é™¤å½“å‰é¢„è§ˆ
         /// </summary>
         private void ClearCurrentPreview()
         {
@@ -291,7 +389,7 @@ namespace UI
         }
 
         /// <summary>
-        /// »ñÈ¡µ±Ç°Ô¤ÀÀµÄÄ£ĞÍID
+        /// è·å–å½“å‰é¢„è§ˆçš„æ¨¡å‹ID
         /// </summary>
         private int GetCurrentPreviewModelId()
         {
@@ -300,10 +398,10 @@ namespace UI
 
         #endregion
 
-        #region °´Å¥ÊÂ¼ş
+        #region æŒ‰é’®äº‹ä»¶
 
         /// <summary>
-        /// ÉÏÒ»¸öÄ£ĞÍ°´Å¥µã»÷
+        /// ä¸Šä¸€ä¸ªæ¨¡å‹æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnPreviousModelClicked()
         {
@@ -319,7 +417,7 @@ namespace UI
         }
 
         /// <summary>
-        /// ÏÂÒ»¸öÄ£ĞÍ°´Å¥µã»÷
+        /// ä¸‹ä¸€ä¸ªæ¨¡å‹æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnNextModelClicked()
         {
@@ -335,24 +433,24 @@ namespace UI
         }
 
         /// <summary>
-        /// Í³Ò»µÄĞĞ¶¯°´Å¥µã»÷
+        /// ç»Ÿä¸€çš„è¡ŒåŠ¨æŒ‰é’®ç‚¹å‡»
         /// </summary>
         private void OnActionButtonClicked()
         {
-            if (!isLocalPlayer) return; // Ö»ÓĞ±¾µØÍæ¼ÒÄÜµã»÷×Ô¼ºµÄ°´Å¥
+            if (!isLocalPlayer) return; // åªæœ‰æœ¬åœ°ç©å®¶èƒ½ç‚¹å‡»è‡ªå·±çš„æŒ‰é’®
 
             if (playerData.isHost)
             {
-                // ·¿Ö÷µã»÷¿ªÊ¼ÓÎÏ·£¨Êµ¼ÊÂß¼­ÓÉ¸¸¿ØÖÆÆ÷´¦Àí£©
+                // æˆ¿ä¸»ç‚¹å‡»å¼€å§‹æ¸¸æˆï¼ˆå®é™…é€»è¾‘ç”±çˆ¶æ§åˆ¶å™¨å¤„ç†ï¼‰
                 if (parentController != null)
                 {
-                    parentController.OnPlayerReadyStateChanged(playerId, true); // ´«true±íÊ¾¿ªÊ¼ÓÎÏ·
+                    parentController.OnPlayerReadyStateChanged(playerId, true); // ä¼ trueè¡¨ç¤ºå¼€å§‹æ¸¸æˆ
                 }
-                LogDebug("·¿Ö÷µã»÷¿ªÊ¼ÓÎÏ·°´Å¥");
+                LogDebug("æˆ¿ä¸»ç‚¹å‡»å¼€å§‹æ¸¸æˆæŒ‰é’®");
             }
             else
             {
-                // ÆÕÍ¨Íæ¼ÒÇĞ»»×¼±¸×´Ì¬
+                // æ™®é€šç©å®¶åˆ‡æ¢å‡†å¤‡çŠ¶æ€
                 bool newReadyState = !playerData.isReady;
 
                 if (parentController != null)
@@ -360,56 +458,63 @@ namespace UI
                     parentController.OnPlayerReadyStateChanged(playerId, newReadyState);
                 }
 
-                LogDebug($"µã»÷¸öÈË×¼±¸°´Å¥: {playerData.isReady} -> {newReadyState}");
+                LogDebug($"ç‚¹å‡»ä¸ªäººå‡†å¤‡æŒ‰é’®: {playerData.isReady} -> {newReadyState}");
             }
         }
 
         /// <summary>
-        /// ¸Ä±äÄ£ĞÍ
+        /// æ”¹å˜æ¨¡å‹
         /// </summary>
         private void ChangeModel(int newModelId)
         {
             if (!PlayerModelManager.Instance.IsModelAvailable(newModelId))
             {
-                LogDebug($"Ä£ĞÍ {newModelId} ²»¿ÉÓÃ");
+                LogDebug($"æ¨¡å‹ {newModelId} ä¸å¯ç”¨");
                 return;
             }
 
-            // ¸üĞÂ±¾µØÊı¾İ
+            // æ›´æ–°æœ¬åœ°æ•°æ®
             string modelName = PlayerModelManager.Instance.GetModelName(newModelId);
             playerData.SetSelectedModel(newModelId, modelName);
 
-            // ¸üĞÂÔ¤ÀÀ
+            // æ›´æ–°é¢„è§ˆ
             ShowModelPreview(newModelId);
 
-            // Í¨Öª¸¸¿ØÖÆÆ÷£¨»á´¥·¢ÍøÂçÍ¬²½£©
+            // ä¿å­˜åˆ°Photonç©å®¶å±æ€§
+            NetworkManager.Instance.SetMyPlayerModelId(newModelId);
+
+            // é€šçŸ¥çˆ¶æ§åˆ¶å™¨ï¼ˆä¼šè§¦å‘ç½‘ç»œåŒæ­¥ï¼‰
             if (parentController != null)
             {
                 parentController.OnPlayerModelSelectionChanged(playerId, newModelId);
             }
 
-            LogDebug($"¸Ä±äÄ£ĞÍµ½: {modelName} (ID: {newModelId})");
+            LogDebug($"æ”¹å˜æ¨¡å‹åˆ°: {modelName} (ID: {newModelId})");
         }
+
 
         #endregion
 
-        #region ÉúÃüÖÜÆÚ
+        #region è¾…åŠ©æ–¹æ³•
 
-        private void OnDestroy()
-        {
-            ClearCurrentPreview();
-        }
-
-        #endregion
-
-        #region ¸¨Öú·½·¨
-
+        /// <summary>
+        /// æ—¥å¿—è¾“å‡º
+        /// </summary>
         private void LogDebug(string message)
         {
             if (enableDebugLogs)
             {
                 Debug.Log($"[PlayerModelItemUI_{playerId}] {message}");
             }
+        }
+
+        #endregion
+
+        #region ç”Ÿå‘½å‘¨æœŸ
+
+        private void OnDestroy()
+        {
+            ClearCurrentPreview();
         }
 
         #endregion

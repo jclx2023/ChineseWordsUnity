@@ -76,6 +76,9 @@ MonoBehaviour:
   - OnStealRandomCardRequested_RPC
   - OnPlayerHeadRotation_RPC
   - OnClearReadyState_RPC
+  - OnAllPlayerModels_RPC
+  - OnPlayerModelChange_RPC
+  - OnRequestAllPlayerModels_RPC
   DisableAutoOpenWizard: 1
   ShowSettings: 1
   DevRegionSetOnce: 1

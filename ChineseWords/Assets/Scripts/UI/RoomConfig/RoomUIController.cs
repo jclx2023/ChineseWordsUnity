@@ -13,8 +13,9 @@ using System.Linq;
 namespace UI
 {
     /// <summary>
-    /// 房间界面控制器 - 完全重构版本，支持3D模型选择
+    /// 房间界面控制器 - 完全重构版本，支持3D模型选择和动态布局
     /// 每个玩家显示：3D模型预览 + 模型切换按钮 + 个人准备按钮 + 玩家信息
+    /// 支持2-8人房间的动态布局切换（2-4人单行，5-8人双行）
     /// </summary>
     public class RoomUIController : MonoBehaviour
     {
@@ -31,6 +32,12 @@ namespace UI
         [Header("房主控制UI")]
         [SerializeField] private Button leaveRoomButton;             // 只保留离开房间按钮，开始游戏合并到各自的actionButton
 
+        [Header("布局配置")]
+        [SerializeField] private Vector2 playerItemSize = new Vector2(300, 320);    // 单个玩家项尺寸
+        [SerializeField] private Vector2 singleRowSpacing = new Vector2(68, 0);     // 单行布局间距
+        [SerializeField] private Vector2 doubleRowSpacing = new Vector2(84, 62);    // 双行布局间距
+        [SerializeField] private int singleRowMaxPlayers = 4;                       // 单行布局最大玩家数
+
         [Header("UI刷新设置")]
         [SerializeField] private float autoRefreshInterval = 3f;
         [SerializeField] private bool enableAutoRefresh = true;
@@ -41,6 +48,11 @@ namespace UI
         // 玩家UI管理
         private Dictionary<ushort, PlayerModelItemUI> playerUIItems = new Dictionary<ushort, PlayerModelItemUI>();
         private Dictionary<ushort, RoomPlayerData> playerDataCache = new Dictionary<ushort, RoomPlayerData>();
+
+        // 布局管理
+        private GridLayoutGroup gridLayoutGroup;
+        private int currentMaxPlayers = 0;
+        private bool isLayoutInitialized = false;
 
         // 状态管理
         private bool isInitialized = false;
@@ -118,7 +130,38 @@ namespace UI
                 leaveRoomButton.onClick.AddListener(OnLeaveRoomButtonClicked);
             }
 
+            // 初始化布局组件
+            InitializeLayoutComponents();
+
             LogDebug("UI组件初始化完成");
+        }
+
+        /// <summary>
+        /// 初始化布局组件
+        /// </summary>
+        private void InitializeLayoutComponents()
+        {
+            if (playerListParent == null)
+            {
+                Debug.LogError("[RoomUIController] PlayerListParent 未设置！");
+                return;
+            }
+
+            // 获取或添加GridLayoutGroup组件
+            gridLayoutGroup = playerListParent.GetComponent<GridLayoutGroup>();
+            if (gridLayoutGroup == null)
+            {
+                gridLayoutGroup = playerListParent.gameObject.AddComponent<GridLayoutGroup>();
+                LogDebug("已添加GridLayoutGroup组件");
+            }
+
+            // 基础设置
+            gridLayoutGroup.cellSize = playerItemSize;
+            gridLayoutGroup.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            gridLayoutGroup.startAxis = GridLayoutGroup.Axis.Horizontal;
+            gridLayoutGroup.childAlignment = TextAnchor.MiddleCenter;
+
+            LogDebug("布局组件初始化完成");
         }
 
         /// <summary>
@@ -126,22 +169,189 @@ namespace UI
         /// </summary>
         private void InitializePlayerData()
         {
+            // 获取房间最大玩家数并设置布局
+            int maxPlayers = NetworkManager.Instance?.MaxPlayers ?? 4;
+            SetupPlayerListLayout(maxPlayers);
+
             foreach (var player in PhotonNetwork.PlayerList)
             {
                 ushort playerId = (ushort)player.ActorNumber;
+
+                // 尝试从Photon玩家属性中获取模型ID
+                int selectedModelId = PlayerModelManager.Instance.GetDefaultModelId();
+                if (player.CustomProperties != null && player.CustomProperties.ContainsKey("selectedModelId"))
+                {
+                    selectedModelId = (int)player.CustomProperties["selectedModelId"];
+                    LogDebug($"从玩家属性恢复模型ID: 玩家{playerId} -> 模型{selectedModelId}");
+                }
+
                 var playerData = new RoomPlayerData
                 {
                     playerId = playerId,
                     playerName = player.NickName ?? $"Player_{playerId}",
                     isHost = player.IsMasterClient,
                     isReady = NetworkManager.Instance.GetPlayerReady(playerId),
-                    selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()
+                    selectedModelId = selectedModelId // 使用实际的模型ID
                 };
 
+                // 安全地初始化同步时间
+                playerData.InitializeSyncTime();
+
                 playerDataCache[playerId] = playerData;
+
+                LogDebug($"初始化玩家数据: {playerData.playerName} (模型ID: {selectedModelId})");
             }
 
-            LogDebug($"初始化了 {playerDataCache.Count} 个玩家数据");
+            LogDebug($"初始化了 {playerDataCache.Count} 个玩家数据，最大玩家数: {maxPlayers}");
+
+            // 如果是新加入的玩家，请求同步所有玩家的模型数据
+            RequestModelSyncFromHost();
+        }
+        /// <summary>
+        /// 请求从房主同步模型数据
+        /// </summary>
+        private void RequestModelSyncFromHost()
+        {
+            if (NetworkManager.Instance != null && !NetworkManager.Instance.IsHost)
+            {
+                LogDebug("请求从房主同步模型数据");
+                NetworkManager.Instance.RequestAllPlayerModels();
+            }
+        }
+
+        #endregion
+
+        #region 动态布局管理
+
+        /// <summary>
+        /// 根据最大玩家数设置玩家列表布局
+        /// </summary>
+        /// <param name="maxPlayers">房间最大玩家数</param>
+        private void SetupPlayerListLayout(int maxPlayers)
+        {
+            if (gridLayoutGroup == null)
+            {
+                Debug.LogError("[RoomUIController] GridLayoutGroup 未初始化！");
+                return;
+            }
+
+            // 如果布局已经为这个玩家数设置过，则跳过
+            if (isLayoutInitialized && currentMaxPlayers == maxPlayers)
+            {
+                LogDebug($"布局已为 {maxPlayers} 人设置，跳过重复设置");
+                return;
+            }
+
+            currentMaxPlayers = maxPlayers;
+
+            // 更新单元格大小（以防运行时修改了配置）
+            gridLayoutGroup.cellSize = playerItemSize;
+
+            if (maxPlayers <= singleRowMaxPlayers)
+            {
+                SetupSingleRowLayout(maxPlayers);
+            }
+            else
+            {
+                SetupDoubleRowLayout(maxPlayers);
+            }
+
+            isLayoutInitialized = true;
+            LogDebug($"布局设置完成: {maxPlayers} 人 {(maxPlayers <= singleRowMaxPlayers ? "单行" : "双行")} 布局");
+        }
+
+        /// <summary>
+        /// 设置单行布局（2-4人）
+        /// </summary>
+        /// <param name="maxPlayers">最大玩家数</param>
+        private void SetupSingleRowLayout(int maxPlayers)
+        {
+            gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedRowCount;
+            gridLayoutGroup.constraintCount = 1;
+
+            // 动态计算水平间距以实现居中效果
+            float parentWidth = GetPlayerListPanelWidth();
+            float totalItemWidth = maxPlayers * playerItemSize.x;
+
+            if (parentWidth > totalItemWidth)
+            {
+                float availableSpaceForSpacing = parentWidth - totalItemWidth;
+                float horizontalSpacing = availableSpaceForSpacing / (maxPlayers + 1);
+
+                // 限制间距的最小和最大值
+                horizontalSpacing = Mathf.Clamp(horizontalSpacing, 20f, 200f);
+
+                gridLayoutGroup.spacing = new Vector2(horizontalSpacing, singleRowSpacing.y);
+
+                LogDebug($"单行布局 - 玩家数: {maxPlayers}, 容器宽度: {parentWidth:F0}, 水平间距: {horizontalSpacing:F0}");
+            }
+            else
+            {
+                // 如果空间不够，使用默认间距
+                gridLayoutGroup.spacing = singleRowSpacing;
+                LogDebug($"单行布局 - 空间不足，使用默认间距: {singleRowSpacing}");
+            }
+        }
+
+        /// <summary>
+        /// 设置双行布局（5-8人）
+        /// </summary>
+        /// <param name="maxPlayers">最大玩家数</param>
+        private void SetupDoubleRowLayout(int maxPlayers)
+        {
+            gridLayoutGroup.constraint = GridLayoutGroup.Constraint.FixedRowCount;
+            gridLayoutGroup.constraintCount = 2;
+            gridLayoutGroup.spacing = doubleRowSpacing;
+
+            LogDebug($"双行布局 - 玩家数: {maxPlayers}, 间距: {doubleRowSpacing}");
+        }
+
+        /// <summary>
+        /// 获取PlayerListPanel的宽度
+        /// </summary>
+        /// <returns>面板宽度</returns>
+        private float GetPlayerListPanelWidth()
+        {
+            if (playerListParent == null) return 1536f; // 默认值
+
+            RectTransform rectTransform = playerListParent.GetComponent<RectTransform>();
+            if (rectTransform != null)
+            {
+                return rectTransform.rect.width;
+            }
+
+            return 1536f; // 1920x1080下80%宽度的默认值
+        }
+
+        /// <summary>
+        /// 强制重新计算布局（用于运行时调整）
+        /// </summary>
+        public void RecalculateLayout()
+        {
+            if (gridLayoutGroup != null)
+            {
+                // 强制重新布局
+                LayoutRebuilder.ForceRebuildLayoutImmediate(playerListParent.GetComponent<RectTransform>());
+                LogDebug("强制重新计算布局");
+            }
+        }
+
+        /// <summary>
+        /// 重置布局（用于房间人数变化）
+        /// </summary>
+        public void ResetLayout()
+        {
+            isLayoutInitialized = false;
+            currentMaxPlayers = 0;
+
+            if (NetworkManager.Instance != null)
+            {
+                int maxPlayers = NetworkManager.Instance.MaxPlayers;
+                SetupPlayerListLayout(maxPlayers);
+                RecalculateLayout();
+            }
+
+            LogDebug("布局已重置");
         }
 
         #endregion
@@ -170,6 +380,7 @@ namespace UI
                 NetworkManager.OnPlayerReadyChanged += OnNetworkPlayerReadyChanged;
                 NetworkManager.OnPlayerModelChanged += OnPlayerModelChanged;
                 NetworkManager.OnModelSyncRequested += OnModelSyncRequested;
+                NetworkManager.OnAllPlayerModelsReceived += OnAllPlayerModelsReceived;
             }
 
             LogDebug("已订阅所有事件");
@@ -195,6 +406,7 @@ namespace UI
                 NetworkManager.OnPlayerReadyChanged -= OnNetworkPlayerReadyChanged;
                 NetworkManager.OnPlayerModelChanged -= OnPlayerModelChanged;
                 NetworkManager.OnModelSyncRequested -= OnModelSyncRequested;
+                NetworkManager.OnAllPlayerModelsReceived -= OnAllPlayerModelsReceived;
             }
 
             LogDebug("已取消订阅事件");
@@ -207,7 +419,30 @@ namespace UI
         private void OnRoomEntered()
         {
             LogDebug("房间进入事件");
+
+            // 房间进入时重新设置布局
+            ResetLayout();
+
+            // 延迟刷新UI，确保所有数据都已同步
+            StartCoroutine(DelayedUIRefresh());
+        }
+
+        /// <summary>
+        /// 延迟刷新UI
+        /// </summary>
+        private IEnumerator DelayedUIRefresh()
+        {
+            yield return new WaitForSeconds(0.2f);
+
+            // 重新初始化玩家数据（包括模型ID）
+            InitializePlayerData();
+
+            yield return new WaitForSeconds(0.2f);
+
+            // 刷新所有UI
             RefreshAllUI();
+
+            LogDebug("延迟UI刷新完成");
         }
 
         private void OnPlayerJoinedRoom(Player player)
@@ -226,10 +461,18 @@ namespace UI
                 isReady = false,
                 selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()
             };
+
+            // 安全地初始化同步时间
+            playerData.InitializeSyncTime();
+
             playerDataCache[playerId] = playerData;
 
             // 创建UI
             CreatePlayerUI(playerId);
+
+            // 检查是否需要重新布局（玩家数量变化）
+            CheckAndUpdateLayout();
+
             RefreshRoomInfo();
             RefreshHostControls();
         }
@@ -243,6 +486,9 @@ namespace UI
 
             RemovePlayerUI(playerId);
             playerDataCache.Remove(playerId);
+
+            // 检查是否需要重新布局（玩家数量变化）
+            CheckAndUpdateLayout();
 
             RefreshRoomInfo();
             RefreshHostControls();
@@ -406,6 +652,10 @@ namespace UI
                         isReady = NetworkManager.Instance.GetPlayerReady(playerId),
                         selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()
                     };
+
+                    // 安全地初始化同步时间
+                    playerData.InitializeSyncTime();
+
                     playerDataCache[playerId] = playerData;
                 }
 
@@ -435,6 +685,9 @@ namespace UI
                 RemovePlayerUI(playerId);
                 playerDataCache.Remove(playerId);
             }
+
+            // 在刷新完成后检查布局
+            CheckAndUpdateLayout();
         }
 
         /// <summary>
@@ -453,8 +706,78 @@ namespace UI
 
         #endregion
 
-        #region 玩家UI管理
+        #region 布局检查和更新
 
+        /// <summary>
+        /// 检查并更新布局（当玩家数量变化时）
+        /// </summary>
+        private void CheckAndUpdateLayout()
+        {
+            if (NetworkManager.Instance == null) return;
+
+            int currentMaxPlayers = NetworkManager.Instance.MaxPlayers;
+            int currentPlayerCount = playerDataCache.Count;
+
+            // 检查是否需要重新设置布局
+            bool needsLayoutUpdate = false;
+
+            // 如果最大玩家数变化，需要重新布局
+            if (this.currentMaxPlayers != currentMaxPlayers)
+            {
+                needsLayoutUpdate = true;
+                LogDebug($"最大玩家数变化: {this.currentMaxPlayers} -> {currentMaxPlayers}");
+            }
+
+            // 如果从单行布局范围切换到双行布局范围（或反之），需要重新布局
+            bool wasInSingleRowRange = this.currentMaxPlayers <= singleRowMaxPlayers;
+            bool isInSingleRowRange = currentMaxPlayers <= singleRowMaxPlayers;
+
+            if (wasInSingleRowRange != isInSingleRowRange)
+            {
+                needsLayoutUpdate = true;
+                LogDebug($"布局模式变化: {(wasInSingleRowRange ? "单行" : "双行")} -> {(isInSingleRowRange ? "单行" : "双行")}");
+            }
+
+            if (needsLayoutUpdate)
+            {
+                SetupPlayerListLayout(currentMaxPlayers);
+                RecalculateLayout();
+            }
+        }
+
+        #endregion
+
+        #region 玩家UI管理
+        /// <summary>
+        /// 处理接收到的所有玩家模型数据
+        /// </summary>
+        private void OnAllPlayerModelsReceived(ushort[] playerIds, int[] modelIds)
+        {
+            if (playerIds.Length != modelIds.Length)
+            {
+                Debug.LogError("[RoomUIController] 玩家ID和模型ID数组长度不匹配");
+                return;
+            }
+
+            LogDebug($"收到所有玩家模型数据: {playerIds.Length} 个玩家");
+
+            for (int i = 0; i < playerIds.Length; i++)
+            {
+                ushort playerId = playerIds[i];
+                int modelId = modelIds[i];
+
+                if (playerDataCache.ContainsKey(playerId))
+                {
+                    string modelName = PlayerModelManager.Instance.GetModelName(modelId);
+                    playerDataCache[playerId].SetSelectedModel(modelId, modelName);
+                    UpdatePlayerUI(playerId);
+
+                    LogDebug($"更新玩家模型: {playerId} -> 模型{modelId}({modelName})");
+                }
+            }
+
+            LogDebug("所有玩家模型数据已更新");
+        }
         /// <summary>
         /// 创建玩家UI
         /// </summary>
@@ -629,6 +952,31 @@ namespace UI
             return RoomManager.Instance?.CanStartGame() ?? false;
         }
 
+        /// <summary>
+        /// 获取当前布局信息（调试用）
+        /// </summary>
+        public string GetLayoutInfo()
+        {
+            if (gridLayoutGroup == null) return "布局组件未初始化";
+
+            return $"布局信息: 最大玩家数={currentMaxPlayers}, " +
+                   $"约束={gridLayoutGroup.constraint}, " +
+                   $"约束数量={gridLayoutGroup.constraintCount}, " +
+                   $"单元格大小={gridLayoutGroup.cellSize}, " +
+                   $"间距={gridLayoutGroup.spacing}, " +
+                   $"面板宽度={GetPlayerListPanelWidth():F0}";
+        }
+
+        /// <summary>
+        /// 手动触发布局重置（供外部调用）
+        /// </summary>
+        [ContextMenu("重置布局")]
+        public void ManualResetLayout()
+        {
+            LogDebug("手动重置布局");
+            ResetLayout();
+        }
+
         #endregion
 
         #region 数据保存
@@ -706,6 +1054,8 @@ namespace UI
         {
             return RoomManager.Instance?.GetGameStarted() ?? false;
         }
+
+        // 移除重复的CanStartGame方法，已在公共接口部分定义
 
         private int GetReadyPlayerCount()
         {

@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4529ff69811e28947834de34297722ce, type: 3}
-  m_Name: PlayerModel
+  m_Name: PlayerModel 0
   m_EditorClassIdentifier: 
   modelId: 0
-  modelName: 
+  modelName: "\u7537\u5B66\u751F"
   modelDescription: 
-  modelPrefab: {fileID: 0}
-  previewPrefab: {fileID: 0}
-  previewScale: {x: 1, y: 1, z: 1}
-  previewRotation: {x: 0, y: 0, z: 0}
-  previewPosition: {x: 0, y: 0, z: 0}
-  idleAnimation: {fileID: 0}
+  modelPrefab: {fileID: 5415432168881156608, guid: 4e3b70e84dfc1904d85a57e42fb3d49e, type: 3}
+  previewPrefab: {fileID: 919132149155446097, guid: deea4d61a9ab4f846bf4c874ea6b11f1, type: 3}
+  previewScale: {x: 90, y: 90, z: 90}
+  previewRotation: {x: 0, y: 180, z: 0}
+  previewPosition: {x: 0, y: -180, z: -50}
+  idleAnimation: {fileID: -203655887218126122, guid: deea4d61a9ab4f846bf4c874ea6b11f1, type: 3}
   selectAnimation: {fileID: 0}
   animationSpeed: 1
   isUnlocked: 1
-  isDefault: 0
+  isDefault: 1

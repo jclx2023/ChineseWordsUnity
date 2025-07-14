@@ -16,8 +16,7 @@ namespace RoomScene.Manager
 
         [Header("预览设置")]
         [SerializeField] private Transform previewParent;
-        [SerializeField] private Camera previewCamera;
-        [SerializeField] private Light previewLight;
+        // 移除 previewCamera 和 previewLight，避免意外禁用主摄像机
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -114,11 +113,7 @@ namespace RoomScene.Manager
                 previewParent = previewContainer.transform;
             }
 
-            // 确保预览环境正确设置
-            if (previewCamera != null)
-            {
-                previewCamera.gameObject.SetActive(false); // 默认关闭预览相机
-            }
+            LogDebug("预览环境设置完成");
         }
 
         #endregion

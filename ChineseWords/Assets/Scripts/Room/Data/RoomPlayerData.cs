@@ -34,7 +34,7 @@ namespace RoomScene.Data
             isHost = false;
             isReady = false;
             isOnline = true;
-            lastSyncTime = Time.time;
+            lastSyncTime = 0f; // 不在构造函数中调用Time.time
         }
 
         /// <summary>
@@ -49,7 +49,7 @@ namespace RoomScene.Data
             isHost = false;
             isReady = false;
             isOnline = true;
-            lastSyncTime = Time.time;
+            lastSyncTime = 0f; // 不在构造函数中调用Time.time
         }
 
         /// <summary>
@@ -59,7 +59,7 @@ namespace RoomScene.Data
         {
             selectedModelId = modelId;
             selectedModelName = modelName;
-            lastSyncTime = Time.time;
+            UpdateSyncTime(); // 使用方法来更新时间
         }
 
         /// <summary>
@@ -68,6 +68,25 @@ namespace RoomScene.Data
         public void SetReady(bool ready)
         {
             isReady = ready;
+            UpdateSyncTime(); // 使用方法来更新时间
+        }
+
+        /// <summary>
+        /// 更新同步时间（安全的时间更新方法）
+        /// </summary>
+        public void UpdateSyncTime()
+        {
+            if (Application.isPlaying) // 只在运行时更新时间
+            {
+                lastSyncTime = Time.time;
+            }
+        }
+
+        /// <summary>
+        /// 初始化同步时间（在Awake或Start中调用）
+        /// </summary>
+        public void InitializeSyncTime()
+        {
             lastSyncTime = Time.time;
         }
 
@@ -100,7 +119,7 @@ namespace RoomScene.Data
         /// </summary>
         public static RoomPlayerData FromNetworkData(RoomPlayerNetworkData networkData)
         {
-            return new RoomPlayerData
+            var data = new RoomPlayerData
             {
                 playerId = networkData.playerId,
                 playerName = networkData.playerName,
@@ -109,8 +128,12 @@ namespace RoomScene.Data
                 selectedModelId = networkData.selectedModelId,
                 selectedModelName = networkData.selectedModelName,
                 isOnline = true,
-                lastSyncTime = Time.time
+                lastSyncTime = 0f // 不在构造时调用Time.time
             };
+
+            // 创建后初始化时间
+            data.InitializeSyncTime();
+            return data;
         }
     }
 

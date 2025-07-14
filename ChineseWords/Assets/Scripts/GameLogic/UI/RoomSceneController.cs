@@ -13,11 +13,12 @@ using Photon.Realtime;
 namespace UI
 {
     /// <summary>
-    /// 房间场景控制器 - 简化解耦版
-    /// 职责：场景初始化、数据传递、错误处理、场景切换协调
+    /// 房间场景控制器 - 修复版，支持房间属性监听
+    /// 职责：场景初始化、数据传递、错误处理、场景切换协调、游戏开始信号监听
     /// 通过RoomManager和NetworkManager与网络层交互
+    /// 修复：添加房间属性监听，确保所有玩家都能收到游戏开始信号
     /// </summary>
-    public class RoomSceneController : MonoBehaviourPun, IConnectionCallbacks
+    public class RoomSceneController : MonoBehaviourPun, IConnectionCallbacks, IInRoomCallbacks
     {
         [Header("UI控制器引用")]
         [SerializeField] private RoomUIController roomUIController;
@@ -142,7 +143,7 @@ namespace UI
             {
                 if (NetworkManager.Instance?.IsConnected == true)
                 {
-                    LogDebug($"✓ 网络连接正常 - 房间: {NetworkManager.Instance.RoomName}");
+                    LogDebug($" 网络连接正常 - 房间: {NetworkManager.Instance.RoomName}");
                     yield break;
                 }
 
@@ -158,7 +159,7 @@ namespace UI
             }
             else
             {
-                LogDebug("⚠ 网络连接失败，但允许直接启动（调试模式）");
+                LogDebug(" 网络连接失败，但允许直接启动（调试模式）");
             }
         }
 
@@ -476,7 +477,7 @@ namespace UI
             // 订阅SceneTransitionManager事件
             SceneTransitionManager.OnSceneTransitionStarted += OnSceneTransitionStarted;
 
-            LogDebug("✓ 事件订阅完成");
+            LogDebug(" 事件订阅完成");
         }
 
         /// <summary>
@@ -490,7 +491,7 @@ namespace UI
             RoomManager.OnReturnToLobby -= OnReturnToLobby;
             SceneTransitionManager.OnSceneTransitionStarted -= OnSceneTransitionStarted;
 
-            LogDebug("✓ 事件取消订阅完成");
+            LogDebug(" 事件取消订阅完成");
         }
 
         #endregion
@@ -498,7 +499,7 @@ namespace UI
         #region 事件处理
 
         /// <summary>
-        /// 游戏开始事件处理
+        /// 游戏开始事件处理（房主端）
         /// </summary>
         private void OnGameStarting()
         {
@@ -509,7 +510,7 @@ namespace UI
             }
 
             hasHandledGameStart = true;
-            LogDebug("收到游戏开始事件 - 开始场景切换流程");
+            LogDebug("收到游戏开始事件（房主端） - 开始场景切换流程");
 
             ShowLoadingPanel("游戏启动中，请稍候...");
 
@@ -539,6 +540,156 @@ namespace UI
         {
             LogDebug($"场景切换开始: {sceneName}");
             ShowLoadingPanel($"正在切换到 {sceneName}...");
+        }
+
+        #endregion
+
+        #region IInRoomCallbacks实现
+
+        void IInRoomCallbacks.OnPlayerEnteredRoom(Player newPlayer)
+        {
+            LogDebug($"Photon: 玩家加入房间 - {newPlayer.NickName} (ID: {newPlayer.ActorNumber})");
+        }
+
+        void IInRoomCallbacks.OnPlayerLeftRoom(Player otherPlayer)
+        {
+            LogDebug($"Photon: 玩家离开房间 - {otherPlayer.NickName} (ID: {otherPlayer.ActorNumber})");
+        }
+
+        void IInRoomCallbacks.OnPlayerPropertiesUpdate(Player targetPlayer, ExitGames.Client.Photon.Hashtable changedProps)
+        {
+            LogDebug($"玩家属性更新: {targetPlayer.NickName}");
+        }
+
+        void IInRoomCallbacks.OnMasterClientSwitched(Player newMasterClient)
+        {
+            LogDebug($"Photon: 房主切换到 {newMasterClient.NickName} (ID: {newMasterClient.ActorNumber})");
+        }
+
+        void IInRoomCallbacks.OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
+        {
+            LogDebug($" 房间属性更新: {string.Join(", ", propertiesThatChanged.Keys)}");
+
+            // 关键修复：检查游戏开始信号
+            if (ShouldTriggerGameStart(propertiesThatChanged))
+            {
+                LogDebug("检测到游戏开始信号");
+                HandleGameStartSignal();
+            }
+
+            // 输出所有变化的属性（调试用）
+            foreach (var prop in propertiesThatChanged)
+            {
+                LogDebug($"  - {prop.Key} = {prop.Value}");
+
+                // 特别关注游戏状态相关的属性
+                if (prop.Key.ToString().Contains("game") || prop.Key.ToString().Contains("state"))
+                {
+                    LogDebug($"游戏状态相关属性: {prop.Key} = {prop.Value}");
+                }
+            }
+        }
+
+        #endregion
+
+        #region 游戏开始信号处理
+
+        /// <summary>
+        /// 检查是否应该触发游戏开始
+        /// </summary>
+        private bool ShouldTriggerGameStart(ExitGames.Client.Photon.Hashtable changedProps)
+        {
+            // 检查gameStarted属性
+            if (changedProps.ContainsKey("gameStarted"))
+            {
+                bool gameStarted = (bool)changedProps["gameStarted"];
+                if (gameStarted)
+                {
+                    LogDebug("检测到gameStarted=true");
+                    return true;
+                }
+            }
+
+            // 检查roomState属性
+            if (changedProps.ContainsKey("roomState"))
+            {
+                int roomState = (int)changedProps["roomState"];
+                if (roomState == 1) // Starting状态
+                {
+                    LogDebug("检测到roomState=Starting");
+                    return true;
+                }
+            }
+
+            // 检查GAME_STARTED_KEY（如果使用了这个键）
+            if (changedProps.ContainsKey("GAME_STARTED_KEY"))
+            {
+                bool gameStarted = (bool)changedProps["GAME_STARTED_KEY"];
+                if (gameStarted)
+                {
+                    LogDebug("检测到GAME_STARTED_KEY=true");
+                    return true;
+                }
+            }
+
+            // 检查ROOM_STATE_KEY（如果使用了这个键）
+            if (changedProps.ContainsKey("ROOM_STATE_KEY"))
+            {
+                int roomState = (int)changedProps["ROOM_STATE_KEY"];
+                if (roomState == 1) // Starting状态
+                {
+                    LogDebug("检测到ROOM_STATE_KEY=Starting");
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 处理游戏开始信号
+        /// </summary>
+        private void HandleGameStartSignal()
+        {
+            // 如果是房主，由OnGameStarting事件处理，这里不重复处理
+            if (PhotonNetwork.IsMasterClient)
+            {
+                LogDebug("🎯 房主端游戏开始由OnGameStarting事件处理，跳过房间属性处理");
+                return;
+            }
+
+            // 防止重复处理
+            if (hasHandledGameStart)
+            {
+                LogDebug(" 游戏开始已处理，忽略重复信号");
+                return;
+            }
+
+            // 非房主玩家处理游戏开始
+            LogDebug(" 非房主玩家处理游戏开始信号");
+            TriggerGameStartForClient();
+        }
+
+        /// <summary>
+        /// 为客户端触发游戏开始（非房主）
+        /// </summary>
+        private void TriggerGameStartForClient()
+        {
+            hasHandledGameStart = true;
+            LogDebug(" 客户端收到游戏开始信号 - 开始场景切换流程");
+
+            ShowLoadingPanel("游戏启动中，请稍候...");
+
+            // 使用SceneTransitionManager执行场景切换
+            bool switchSuccess = SceneTransitionManager.SwitchToGameScene("RoomSceneController");
+
+            if (!switchSuccess)
+            {
+                LogDebug(" 场景切换请求失败，可能已在切换中");
+                // 如果切换失败，重置处理标志
+                hasHandledGameStart = false;
+                HideLoadingPanel();
+            }
         }
 
         #endregion
@@ -600,7 +751,7 @@ namespace UI
 
         #endregion
 
-        #region Photon回调实现
+        #region IConnectionCallbacks实现
 
         void IConnectionCallbacks.OnConnected() { }
         void IConnectionCallbacks.OnConnectedToMaster() { }
@@ -644,7 +795,7 @@ namespace UI
         {
             if (isLeavingRoom) return;
 
-            LogDebug($"检测到连接断开: {reason}");
+            //LogDebug($"检测到连接断开: {reason}");
             ShowError($"网络连接断开: {reason}");
             Invoke(nameof(ReturnToLobbyDelayed), 3f);
         }
