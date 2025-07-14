@@ -109,6 +109,8 @@ namespace Lobby.Core
             // 等待网络管理器准备就绪
             yield return StartCoroutine(WaitForNetworkManager());
 
+            NotifyPlayerDataReady();
+
             // 订阅网络事件
             SubscribeToNetworkEvents();
 
@@ -117,6 +119,20 @@ namespace Lobby.Core
 
             isInitialized = true;
             LogDebug("Lobby场景初始化完成");
+        }
+
+        private void NotifyPlayerDataReady()
+        {
+            if (LobbyNetworkManager.Instance != null && currentPlayerData != null)
+            {
+                // 直接告诉LobbyNetworkManager设置玩家名称
+                LobbyNetworkManager.Instance.SetPlayerName(currentPlayerData.playerName);
+                LogDebug($"已通知LobbyNetworkManager设置玩家名称: '{currentPlayerData.playerName}'");
+            }
+            else
+            {
+                LogDebug("无法通知LobbyNetworkManager：实例不存在或玩家数据为空");
+            }
         }
 
         /// <summary>
@@ -471,7 +487,7 @@ namespace Lobby.Core
 
             // 清理玩家昵称
             newName = newName.Trim();
-            if (newName.Length > 20) // 限制昵称长度
+            if (newName.Length > 20)
             {
                 newName = newName.Substring(0, 20);
             }
@@ -483,6 +499,13 @@ namespace Lobby.Core
             if (autoSavePlayerPrefs)
             {
                 SavePlayerDataToPrefs();
+            }
+
+            // 关键：同时通知LobbyNetworkManager更新
+            if (LobbyNetworkManager.Instance != null)
+            {
+                LobbyNetworkManager.Instance.SetPlayerName(newName);
+                LogDebug($"已通知LobbyNetworkManager更新玩家名称: '{newName}'");
             }
 
             LogDebug($"玩家昵称已更新: '{oldName}' -> '{newName}'");

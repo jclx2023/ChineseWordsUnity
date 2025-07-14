@@ -937,7 +937,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 8cbc0a63768514e47924468ffc356b51, type: 2}
   - {fileID: 11400000, guid: 649ed3fd7e12b2941b6c7d960c3f67e4, type: 2}
   defaultModelId: 0
-  previewParent: {fileID: 384446185}
   enableDebugLogs: 1
 --- !u!4 &1079618707
 Transform:
@@ -2153,7 +2152,7 @@ MonoBehaviour:
   singleRowMaxPlayers: 4
   autoRefreshInterval: 3
   enableAutoRefresh: 1
-  enableDebugLogs: 0
+  enableDebugLogs: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -664,28 +664,36 @@ namespace Lobby.Core
         #endregion
 
         #region 辅助方法
+        /// <summary>
+        /// 由LobbySceneManager调用，设置玩家名称
+        /// </summary>
+        public void SetPlayerName(string playerName)
+        {
+            if (string.IsNullOrEmpty(playerName))
+            {
+                LogDebug("收到空的玩家名称，使用默认名称");
+                playerName = "默认玩家";
+            }
 
+            // 立即设置PhotonNetwork.NickName
+            PhotonNetwork.NickName = playerName;
+            LogDebug($"✓ 收到LobbySceneManager通知，设置PhotonNetwork.NickName: '{playerName}'");
+        }
         /// <summary>
         /// 设置玩家属性
         /// </summary>
         private void SetPlayerProperties()
         {
-            var lobbySceneManager = FindObjectOfType<LobbySceneManager>();
-            if (lobbySceneManager != null)
+            // 如果PhotonNetwork.NickName已经设置（由LobbySceneManager设置），直接使用
+            if (!string.IsNullOrEmpty(PhotonNetwork.NickName))
             {
-                var playerData = lobbySceneManager.GetCurrentPlayerData();
-                if (playerData != null)
-                {
-                    var playerProps = PhotonLobbyDataConverter.CreatePlayerProperties(playerData);
-                    if (PhotonNetworkAdapter.Instance != null)
-                    {
-                        PhotonNetworkAdapter.Instance.SetPlayerProperties(playerProps);
-                    }
-                    return;
-                }
+                LogDebug($"使用已设置的PhotonNetwork.NickName: '{PhotonNetwork.NickName}'");
+                return;
             }
 
-            LogDebug("使用默认玩家数据");
+            // 备用方案：如果还没设置，使用默认名称
+            PhotonNetwork.NickName = "未知玩家";
+            LogDebug("使用备用玩家名称: '未知玩家'");
         }
 
         /// <summary>

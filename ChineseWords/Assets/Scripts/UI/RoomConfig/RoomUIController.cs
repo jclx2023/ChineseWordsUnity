@@ -452,11 +452,20 @@ namespace UI
             ushort playerId = (ushort)player.ActorNumber;
             LogDebug($"玩家加入: {player.NickName} (ID: {playerId})");
 
+            // 修复：确保获取正确的玩家名称
+            string playerName = player.NickName;
+            if (string.IsNullOrEmpty(playerName))
+            {
+                // 如果player.NickName为空，从PhotonNetwork.PlayerList重新获取
+                var photonPlayer = PhotonNetwork.PlayerList.FirstOrDefault(p => p.ActorNumber == playerId);
+                playerName = photonPlayer?.NickName ?? $"Player_{playerId}";
+            }
+
             // 创建玩家数据
             var playerData = new RoomPlayerData
             {
                 playerId = playerId,
-                playerName = player.NickName ?? $"Player_{playerId}",
+                playerName = playerName,  // 使用修复后的名称
                 isHost = player.IsMasterClient,
                 isReady = false,
                 selectedModelId = PlayerModelManager.Instance.GetDefaultModelId()

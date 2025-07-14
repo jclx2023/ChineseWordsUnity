@@ -4,6 +4,8 @@ using TMPro;
 using RoomScene.Data;
 using RoomScene.Manager;
 using Core.Network;
+using Photon.Pun;
+using System.Linq;
 
 namespace UI
 {
@@ -38,11 +40,6 @@ namespace UI
         [SerializeField] private Sprite remotePlayerReadyIconSprite;         // 远程玩家：已准备状态图标
         [SerializeField] private Sprite remotePlayerNotReadyIconSprite;      // 远程玩家：未准备状态图标
         [SerializeField] private Sprite remoteHostReadyIconSprite;           // 远程房主：已准备状态图标
-
-        [Header("颜色配置")]
-        [SerializeField] private Color hostBackgroundColor = new Color(1f, 0.8f, 0.2f, 0.3f);
-        [SerializeField] private Color readyBackgroundColor = new Color(0.2f, 1f, 0.2f, 0.2f);
-        [SerializeField] private Color notReadyBackgroundColor = new Color(1f, 0.2f, 0.2f, 0.2f);
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -164,7 +161,27 @@ namespace UI
         {
             if (data == null) return;
 
+            // 保存旧的模型ID用于比较 - 修复：在赋值前保存，避免引用问题
+            int oldModelId = playerData?.selectedModelId ?? -1;
+            // 保存当前预览状态
+            bool hadPreview = currentModelPreview != null;
+            string oldPreviewName = currentModelPreview?.name ?? "null";
+
+            // 更新数据引用
             playerData = data;
+            int newModelId = playerData.selectedModelId;
+
+            // 如果是远程玩家，尝试从NetworkManager获取最新的模型ID
+            if (!isLocalPlayer)
+            {
+                int networkModelId = NetworkManager.Instance?.GetPlayerModelId(playerId) ?? PlayerModelManager.Instance.GetDefaultModelId();
+                if (networkModelId != PlayerModelManager.Instance.GetDefaultModelId() && networkModelId != newModelId)
+                {
+                    LogDebug($"检测到网络模型ID不一致: 本地数据={newModelId}, 网络数据={networkModelId}");
+                    newModelId = networkModelId;
+                    playerData.SetSelectedModel(networkModelId, PlayerModelManager.Instance.GetModelName(networkModelId));
+                }
+            }
 
             // 更新玩家名称
             if (playerNameText != null)
@@ -180,20 +197,75 @@ namespace UI
             // 更新课代表标识
             UpdateHostIndicator();
 
-            // 更新背景颜色
-            UpdateBackgroundColor();
-
             // 更新统一行动按钮状态
             UpdateActionButtonState();
 
-            // 更新模型预览（如果模型ID发生变化）
-            if (currentModelPreview == null ||
-                playerData.selectedModelId != GetCurrentPreviewModelId())
+            // 检查是否需要更新模型预览
+            bool needsPreviewUpdate = ShouldUpdateModelPreview(oldModelId, newModelId, hadPreview);
+
+            if (needsPreviewUpdate)
             {
-                ShowModelPreview(playerData.selectedModelId);
+                LogDebug($"需要更新模型预览: {oldModelId} -> {newModelId}");
+                UpdateModelPreview(newModelId);
+            }
+            else
+            {
+                LogDebug($"无需更新模型预览");
             }
 
-            LogDebug($"更新玩家显示: {playerData.playerName}, 模型: {playerData.selectedModelId}, 准备: {playerData.isReady}");
+            LogDebug($"UpdateDisplay完成");
+        }
+
+        private bool ShouldUpdateModelPreview(int oldModelId, int newModelId, bool hadPreview)
+        {
+            // 情况1: 当前没有预览对象
+            if (currentModelPreview == null)
+            {
+                LogDebug($"需要更新原因: 当前预览为空");
+                return true;
+            }
+
+            // 情况2: 模型ID发生变化
+            if (oldModelId != newModelId)
+            {
+                LogDebug($"需要更新原因: 模型ID变化 {oldModelId} -> {newModelId}");
+                return true;
+            }
+
+            // 情况3: 预览对象不活跃
+            if (!currentModelPreview.activeInHierarchy)
+            {
+                LogDebug($"需要更新原因: 预览对象不活跃");
+                return true;
+            }
+
+            // 情况4: 预览对象的父级错误
+            if (currentModelPreview.transform.parent != modelPreviewContainer)
+            {
+                LogDebug($"需要更新原因: 预览对象父级错误");
+                return true;
+            }
+
+            // 情况5: 强制检查预览对象是否与期望的模型匹配
+            string expectedPreviewName = PlayerModelManager.Instance?.GetModelName(newModelId);
+            if (!string.IsNullOrEmpty(expectedPreviewName) && !currentModelPreview.name.Contains(expectedPreviewName))
+            {
+                LogDebug($"需要更新原因: 预览对象名称不匹配，期望包含:{expectedPreviewName}, 实际:{currentModelPreview.name}");
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 更新模型预览
+        /// </summary>
+        private void UpdateModelPreview(int modelId)
+        {
+            // 先清理旧预览
+            ClearCurrentPreview();
+            // 创建新预览
+            ShowModelPreview(modelId);
         }
 
         /// <summary>
@@ -214,31 +286,6 @@ namespace UI
                     hostIndicatorText.gameObject.SetActive(false);
                 }
             }
-        }
-
-        /// <summary>
-        /// 更新背景颜色
-        /// </summary>
-        private void UpdateBackgroundColor()
-        {
-            if (playerBackgroundImage == null) return;
-
-            Color backgroundColor;
-
-            if (playerData.isHost)
-            {
-                backgroundColor = hostBackgroundColor;
-            }
-            else if (playerData.isReady)
-            {
-                backgroundColor = readyBackgroundColor;
-            }
-            else
-            {
-                backgroundColor = notReadyBackgroundColor;
-            }
-
-            playerBackgroundImage.color = backgroundColor;
         }
 
         /// <summary>
@@ -386,14 +433,6 @@ namespace UI
                 currentModelPreview.SetActive(false);
                 currentModelPreview = null;
             }
-        }
-
-        /// <summary>
-        /// 获取当前预览的模型ID
-        /// </summary>
-        private int GetCurrentPreviewModelId()
-        {
-            return playerData?.selectedModelId ?? 0;
         }
 
         #endregion

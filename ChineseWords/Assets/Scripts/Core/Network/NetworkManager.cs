@@ -1087,12 +1087,6 @@ namespace Core.Network
         /// </summary>
         public void SendPlayerModelChangeRPC(ushort playerId, int modelId, string modelName)
         {
-            if (!IsConnected)
-            {
-                LogDebug("未连接网络，无法发送模型变化RPC");
-                return;
-            }
-
             photonView.RPC("OnPlayerModelChange_RPC", RpcTarget.Others, (int)playerId, modelId, modelName);
             LogDebug($"发送模型变化RPC: 玩家{playerId} -> 模型{modelId}({modelName})");
         }
@@ -1118,12 +1112,6 @@ namespace Core.Network
             if (!IsHost)
             {
                 LogDebug("只有房主可以广播所有玩家模型");
-                return;
-            }
-
-            if (!IsConnected)
-            {
-                LogDebug("未连接网络，无法广播模型数据");
                 return;
             }
 
