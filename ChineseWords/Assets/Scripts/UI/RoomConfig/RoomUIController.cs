@@ -77,7 +77,7 @@ namespace UI
         /// </summary>
         private IEnumerator InitializeUIController()
         {
-            LogDebug("开始初始化RoomUIController (模型选择版本)");
+            LogDebug("开始初始化RoomUIController");
 
             // 等待依赖组件
             while (RoomManager.Instance == null || NetworkManager.Instance == null ||
@@ -90,13 +90,6 @@ namespace UI
             {
                 LogDebug("等待网络连接...");
                 yield return new WaitForSeconds(0.1f);
-            }
-
-            // 验证必要组件
-            if (playerModelItemPrefab == null)
-            {
-                Debug.LogError("[RoomUIController] 未设置playerModelItemPrefab！");
-                yield break;
             }
 
             // 初始化UI组件
@@ -141,11 +134,6 @@ namespace UI
         /// </summary>
         private void InitializeLayoutComponents()
         {
-            if (playerListParent == null)
-            {
-                Debug.LogError("[RoomUIController] PlayerListParent 未设置！");
-                return;
-            }
 
             // 获取或添加GridLayoutGroup组件
             gridLayoutGroup = playerListParent.GetComponent<GridLayoutGroup>();

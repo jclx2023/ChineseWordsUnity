@@ -200,12 +200,6 @@ namespace UI
         /// </summary>
         private void LoadLobbyScene()
         {
-            if (string.IsNullOrEmpty(lobbyScene))
-            {
-                Debug.LogError("大厅场景名称未设置");
-                return;
-            }
-
             try
             {
                 LogDebug($"加载大厅场景: {lobbyScene}");
@@ -248,7 +242,6 @@ namespace UI
 <color=#4A90E2><b>技术支持：</b></color></size>
 Unity 2022.3 LTS
 Photon PUN2
-Riptide
 
 <color=#4A90E2><b>版本信息：</b></color></size>
 版本号: " + Application.version + @"

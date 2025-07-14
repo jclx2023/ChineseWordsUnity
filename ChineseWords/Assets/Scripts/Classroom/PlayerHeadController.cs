@@ -139,12 +139,6 @@ namespace Classroom.Player
                 FindHeadBone();
             }
 
-            if (headBone == null)
-            {
-                LogDebug("未找到头部骨骼，头部控制器初始化失败");
-                return;
-            }
-
             // 记录初始状态
             SetupInitialHeadTransform();
 
@@ -160,17 +154,7 @@ namespace Classroom.Player
         private void FindHeadBone()
         {
             if (characterAnimator == null) return;
-
             headBone = FindBoneRecursive(characterAnimator.transform, headBoneName);
-
-            if (headBone != null)
-            {
-                LogDebug($"找到头部骨骼: {headBone.name} at {headBone.position}");
-            }
-            else
-            {
-                LogDebug($"未找到名称包含 '{headBoneName}' 的头部骨骼");
-            }
         }
 
         /// <summary>
@@ -294,12 +278,6 @@ namespace Classroom.Player
 
             // 应用到头部骨骼
             headBone.rotation = finalHeadRotation;
-
-            // 调试输出（减少频率）
-            if (enableDebugLogs && Time.frameCount % 60 == 0) // 每60帧输出一次
-            {
-                LogDebug($"头部旋转: H={currentHeadHorizontalAngle:F1}°, V={currentHeadVerticalAngle:F1}°");
-            }
         }
 
         /// <summary>

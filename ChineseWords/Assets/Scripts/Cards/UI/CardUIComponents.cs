@@ -263,28 +263,6 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 根据屏幕分辨率自动计算缩放因子
-        /// </summary>
-        public void AutoCalculateScaleFactor()
-        {
-            float screenWidth = Screen.width;
-            float referenceWidth = 1920f; // 参考分辨率宽度
-
-            float autoScale = screenWidth / referenceWidth;
-            SetScaleFactor(autoScale);
-
-            LogDebug($"自动计算缩放因子: {scaleFactor} (屏幕宽度: {screenWidth})");
-        }
-
-        /// <summary>
-        /// 获取计算后的卡牌尺寸
-        /// </summary>
-        public Vector2 GetFinalCardSize()
-        {
-            return baseCardSize * scaleFactor;
-        }
-
-        /// <summary>
         /// 在子对象中查找指定名称的组件
         /// </summary>
         private T FindComponentInChildren<T>(GameObject parent, string childName) where T : Component

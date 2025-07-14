@@ -140,11 +140,6 @@ namespace UI
                 {
                     actionButtonIconImage = actionButton.transform.GetChild(0).GetComponent<Image>();
                 }
-
-                if (actionButtonIconImage == null)
-                {
-                    LogDebug("警告：ActionButton的Icon Image组件未找到！");
-                }
             }
         }
 
@@ -375,10 +370,6 @@ namespace UI
             {
                 actionButtonIconImage.sprite = iconSprite;
             }
-            else if (iconSprite == null)
-            {
-                LogDebug("警告：尝试设置空的按钮图标图片");
-            }
         }
 
         /// <summary>
@@ -495,11 +486,6 @@ namespace UI
         /// </summary>
         private void ChangeModel(int newModelId)
         {
-            if (!PlayerModelManager.Instance.IsModelAvailable(newModelId))
-            {
-                LogDebug($"模型 {newModelId} 不可用");
-                return;
-            }
 
             // 更新本地数据
             string modelName = PlayerModelManager.Instance.GetModelName(newModelId);

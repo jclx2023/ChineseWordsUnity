@@ -74,17 +74,11 @@ namespace UI
             // 注册网络事件
             RegisterNetworkEvents();
 
-            // 验证组件配置
-            ValidateComponents();
-
             // 尝试立即查找摄像机控制器（如果已经初始化）
             if (!cameraControllerReady)
             {
                 StartCoroutine(FindPlayerCameraControllerCoroutine());
             }
-
-            LogDebug($"GameEndUI初始化完成 - 脚本启用状态: {this.enabled}");
-            LogDebug($"NetworkManager.Instance存在: {NetworkManager.Instance != null}");
         }
 
         private void OnEnable()
@@ -189,12 +183,6 @@ namespace UI
                 elapsed += 0.1f;
                 yield return new WaitForSeconds(0.1f);
             }
-
-            if (playerCameraController == null)
-            {
-                LogDebug("未能找到摄像机控制器，将使用备用方案");
-                // 可以添加备用查找逻辑或错误处理
-            }
         }
 
         /// <summary>
@@ -221,17 +209,6 @@ namespace UI
                 if (controller.IsLocalPlayer)
                 {
                     LogDebug($"通过遍历找到本地玩家摄像机控制器: {controller.name}");
-                    return controller;
-                }
-            }
-
-            // 方式3: 查找包含"Local"、"Player"等关键词的摄像机控制器
-            foreach (var controller in controllers)
-            {
-                if (controller.gameObject.name.Contains("Local") ||
-                    controller.gameObject.name.Contains("Player"))
-                {
-                    LogDebug($"通过关键词找到摄像机控制器: {controller.name}");
                     return controller;
                 }
             }
@@ -264,27 +241,6 @@ namespace UI
             {
                 localPlayerId = NetworkManager.Instance.ClientId;
                 LogDebug($"本地玩家ID: {localPlayerId}");
-            }
-            else
-            {
-                Debug.LogWarning("[GameEndUI] NetworkManager未准备就绪，将延迟获取玩家ID");
-                Invoke(nameof(RetryGetLocalPlayerInfo), 0.5f);
-            }
-        }
-
-        /// <summary>
-        /// 重试获取本地玩家信息
-        /// </summary>
-        private void RetryGetLocalPlayerInfo()
-        {
-            if (NetworkManager.Instance != null)
-            {
-                localPlayerId = NetworkManager.Instance.ClientId;
-                LogDebug($"延迟获取本地玩家ID成功: {localPlayerId}");
-            }
-            else
-            {
-                Debug.LogError("[GameEndUI] NetworkManager仍未准备就绪");
             }
         }
 
@@ -319,41 +275,6 @@ namespace UI
             LogDebug("GameEndUI UI组件初始化完成");
         }
 
-        /// <summary>
-        /// 验证组件配置
-        /// </summary>
-        private void ValidateComponents()
-        {
-            bool hasErrors = false;
-
-            if (gameEndPanel == null)
-            {
-                Debug.LogError("[GameEndUI] ❌ 缺少gameEndPanel引用");
-                hasErrors = true;
-            }
-
-            if (titleText == null)
-            {
-                Debug.LogWarning("[GameEndUI] ⚠️ 缺少titleText引用");
-            }
-
-            if (returnToRoomButton == null)
-            {
-                Debug.LogWarning("[GameEndUI] ⚠️ 缺少returnToRoomButton引用");
-            }
-
-            if (panelCanvasGroup == null)
-            {
-                Debug.LogWarning("[GameEndUI] ⚠️ 缺少panelCanvasGroup引用，将无法使用淡入效果");
-            }
-
-            if (hasErrors)
-            {
-                Debug.LogError("[GameEndUI] ❌ 关键组件缺失，禁用脚本");
-                this.enabled = false;
-            }
-        }
-
         #endregion
 
         #region 网络事件处理
@@ -370,11 +291,6 @@ namespace UI
                 NetworkManager.OnForceReturnToRoom += OnForceReturnToRoomReceived;
 
                 LogDebug("✓ 网络事件注册完成");
-            }
-            else
-            {
-                Debug.LogWarning("[GameEndUI] NetworkManager未找到，将延迟注册事件");
-                Invoke(nameof(RetryRegisterEvents), 1f);
             }
         }
 
@@ -483,8 +399,6 @@ namespace UI
                 return;
             }
 
-            LogDebug($"开始显示游戏结束面板");
-
             isPanelVisible = true;
 
             // 设置为最后渲染（最顶层）
@@ -500,10 +414,7 @@ namespace UI
             LogDebug($"gameEndPanel是否为null: {gameEndPanel == null}");
             if (gameEndPanel != null)
             {
-                LogDebug($"设置gameEndPanel.SetActive(true)");
                 gameEndPanel.SetActive(true);
-                LogDebug($"gameEndPanel当前状态: {gameEndPanel.activeSelf}");
-                LogDebug($"gameEndPanel在Hierarchy中是否激活: {gameEndPanel.activeInHierarchy}");
             }
 
             // 播放淡入动画或直接显示
@@ -518,11 +429,8 @@ namespace UI
             }
             else
             {
-                LogDebug("panelCanvasGroup为null，直接启用交互");
                 EnablePanelInteraction();
             }
-
-            LogDebug("★★★ 游戏结束面板显示逻辑完成 ★★★");
         }
 
         /// <summary>
@@ -566,8 +474,6 @@ namespace UI
         /// </summary>
         private void UpdateGameEndPanelContent(bool hasWinner, ushort winnerId, string winnerName, string reason)
         {
-            LogDebug($"更新面板内容 - hasWinner: {hasWinner}, winnerName: {winnerName}");
-
             // 确定玩家状态和对应的UI样式
             PlayerEndStatus playerStatus = DeterminePlayerStatus(hasWinner, winnerId);
             LogDebug($"玩家状态确定: {playerStatus}");
@@ -823,8 +729,6 @@ namespace UI
         /// </summary>
         private void OnReturnToRoomButtonClicked()
         {
-            LogDebug("返回房间按钮被点击");
-
             // 请求返回房间
             RequestReturnToRoom();
         }
@@ -839,16 +743,11 @@ namespace UI
         private void RequestReturnToRoom()
         {
             LogDebug($"请求返回房间 - 玩家ID: {localPlayerId}");
-
             // 调用HostGameManager的返回房间方法
             if (HostGameManager.Instance != null)
             {
                 HostGameManager.Instance.RequestReturnToRoom(localPlayerId, "游戏结束后返回");
                 LogDebug("✓ 已向HostGameManager发送返回房间请求");
-            }
-            else
-            {
-                Debug.LogError("[GameEndUI] HostGameManager未找到，无法请求返回房间");
             }
 
             // 隐藏游戏结束面板

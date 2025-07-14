@@ -72,13 +72,6 @@ namespace Core
                 FindEssentialComponents();
             }
 
-            // 验证必要组件
-            if (!ValidateEssentialComponents())
-            {
-                Debug.LogError("[SceneModeController] 缺少必要组件，初始化失败");
-                yield break;
-            }
-
             isInitialized = true;
             LogDebug("SceneModeController初始化完成");
 
@@ -89,7 +82,6 @@ namespace Core
             StartCoroutine(EnsureComponentsStarted());
 
             configurationCompleted = true;
-            LogDebug("场景配置完成");
         }
 
         /// <summary>
@@ -97,8 +89,6 @@ namespace Core
         /// </summary>
         private void FindEssentialComponents()
         {
-            LogDebug("自动查找必要组件");
-
             // 查找GameCanvas
             if (gameCanvas == null)
             {
@@ -142,28 +132,6 @@ namespace Core
                 }
             }
             return null;
-        }
-
-        /// <summary>
-        /// 验证必要组件
-        /// </summary>
-        private bool ValidateEssentialComponents()
-        {
-            bool isValid = true;
-
-            if (gameCanvas == null)
-            {
-                Debug.LogWarning("[SceneModeController] GameCanvas未找到");
-                isValid = false;
-            }
-
-            if (networkUI == null)
-            {
-                Debug.LogWarning("[SceneModeController] NetworkUI未找到");
-                isValid = false;
-            }
-
-            return isValid;
         }
 
         #endregion
@@ -315,7 +283,6 @@ namespace Core
             }
             else
             {
-                Debug.LogWarning("[SceneModeController] 找不到NetworkQuestionManagerController");
             }
         }
 
@@ -345,12 +312,10 @@ namespace Core
 
         public void OnConnected()
         {
-            LogDebug("Photon: 已连接到服务器");
         }
 
         public void OnConnectedToMaster()
         {
-            LogDebug("Photon: 已连接到主服务器");
         }
 
         public void OnDisconnected(DisconnectCause cause)
@@ -498,19 +463,6 @@ namespace Core
         }
 
         /// <summary>
-        /// 安全设置组件启用状态
-        /// </summary>
-        private void SetComponentEnabled(MonoBehaviour component, bool enabled)
-        {
-            if (component != null)
-            {
-                bool wasEnabled = component.enabled;
-                component.enabled = enabled;
-                LogDebug($"设置 {component.GetType().Name} 启用状态: {wasEnabled} → {enabled}");
-            }
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -518,104 +470,6 @@ namespace Core
             if (enableDebugLogs)
             {
                 Debug.Log($"[SceneModeController] {message}");
-            }
-        }
-
-        #endregion
-
-        #region 公共接口
-
-        /// <summary>
-        /// 手动重新配置场景
-        /// </summary>
-        public void ReconfigureScene()
-        {
-            if (!isInitialized)
-            {
-                LogDebug("尚未初始化，无法重新配置");
-                return;
-            }
-
-            LogDebug("手动重新配置场景");
-            ConfigureSceneForPhoton();
-        }
-
-        /// <summary>
-        /// 强制刷新组件引用
-        /// </summary>
-        public void RefreshComponentReferences()
-        {
-            LogDebug("刷新组件引用");
-            FindEssentialComponents();
-
-            if (ValidateEssentialComponents())
-            {
-                ConfigureSceneForPhoton();
-            }
-        }
-
-        /// <summary>
-        /// 获取当前状态信息
-        /// </summary>
-        public string GetStatusInfo()
-        {
-            return $"初始化: {isInitialized}, " +
-                   $"配置完成: {configurationCompleted}, " +
-                   $"在房间中: {isInRoom}, " +
-                   $"MasterClient: {isMasterClient}, " +
-                   $"Photon连接: {PhotonNetwork.IsConnected}";
-        }
-
-        /// <summary>
-        /// 获取组件状态信息
-        /// </summary>
-        public string GetComponentStatus()
-        {
-            return $"GameCanvas: {(gameCanvas != null ? "✓" : "✗")}, " +
-                   $"NetworkUI: {(networkUI != null ? "✓" : "✗")}, " +
-                   $"NetworkCanvas: {(networkCanvas != null ? "✓" : "✗")}, " +
-                   $"HostGameManager: {(HostGameManager.Instance != null ? "✓" : "✗")}";
-        }
-
-        #endregion
-
-        #region 调试方法
-
-        [ContextMenu("重新配置场景")]
-        public void DebugReconfigureScene()
-        {
-            if (Application.isPlaying)
-            {
-                ReconfigureScene();
-            }
-        }
-
-        [ContextMenu("刷新组件引用")]
-        public void DebugRefreshReferences()
-        {
-            if (Application.isPlaying)
-            {
-                RefreshComponentReferences();
-            }
-        }
-
-        [ContextMenu("显示状态信息")]
-        public void DebugShowStatus()
-        {
-            if (Application.isPlaying)
-            {
-                Debug.Log($"=== SceneModeController状态 ===\n{GetStatusInfo()}");
-                Debug.Log($"=== 组件状态 ===\n{GetComponentStatus()}");
-            }
-        }
-
-        [ContextMenu("测试模式切换")]
-        public void DebugTestModeSwitch()
-        {
-            if (Application.isPlaying)
-            {
-                LogDebug("测试模式切换");
-                ConfigureSceneForPhoton();
             }
         }
 

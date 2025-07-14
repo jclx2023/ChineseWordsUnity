@@ -138,18 +138,6 @@ namespace UI.MessageSystem
         private void Initialize()
         {
             FindCanvas();
-            if (messageCanvas == null)
-            {
-                Debug.LogError("[MessageNotifier] 未找到MessageCanvas，请确保场景中有名为'MessageCanvas'的Canvas或手动分配");
-                return;
-            }
-
-            if (notificationPanelPrefab == null)
-            {
-                Debug.LogError("[MessageNotifier] 通知面板预制体未分配，请在Inspector中分配notificationPanelPrefab");
-                return;
-            }
-
             CreatePanel();
             SetupPositions();
         }
@@ -200,12 +188,6 @@ namespace UI.MessageSystem
         #region 消息显示
         private void ShowMessage(MessageData messageData)
         {
-            // 检查是否已初始化
-            if (panelInstance == null)
-            {
-                Debug.LogError("[MessageNotifier] 系统未正确初始化，无法显示消息");
-                return;
-            }
 
             // 高优先级消息可以中断当前消息
             if (isShowing && allowInterrupt && messageData.priority > 0)

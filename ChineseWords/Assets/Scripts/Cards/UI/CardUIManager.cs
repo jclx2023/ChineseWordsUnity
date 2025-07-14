@@ -117,10 +117,6 @@ namespace Cards.UI
             {
                 StartCoroutine(DelayedInitialization());
             }
-            else
-            {
-                LogDebug($"跳过Start初始化调用 - 已初始化: {isInitialized}, 正在初始化: {isInitializing}");
-            }
         }
 
         private void Update()
@@ -199,8 +195,6 @@ namespace Cards.UI
             CardNetworkManager networkManager,
             CardUIComponents uiComponents)
         {
-            LogDebug("开始依赖注入");
-
             this.cardEffectSystem = effectSystem;
             this.playerCardManager = playerCardManager;
             this.cardConfig = cardConfig;
@@ -248,32 +242,24 @@ namespace Cards.UI
         /// </summary>
         private IEnumerator DelayedInitialization()
         {
-            // 🔧 检查是否已经初始化或正在初始化
+            // 检查是否已经初始化或正在初始化
             if (isInitialized || isInitializing)
             {
                 LogDebug($"跳过重复初始化 - 已初始化: {isInitialized}, 正在初始化: {isInitializing}");
                 yield break;
             }
 
-            // 🔧 设置初始化锁定
+            // 设置初始化锁定
             isInitializing = true;
             LogDebug("开始延迟初始化");
 
             // 等待一帧确保所有系统完全就绪
             yield return null;
 
-            // 🔧 再次检查，防止在等待期间状态改变
+            // 再次检查，防止在等待期间状态改变
             if (isInitialized)
             {
                 LogDebug("在等待期间已完成初始化，退出");
-                isInitializing = false;
-                yield break;
-            }
-
-            // 验证依赖
-            if (!ValidateDependencies())
-            {
-                LogError("依赖验证失败，无法初始化UI");
                 isInitializing = false;
                 yield break;
             }
@@ -486,34 +472,6 @@ namespace Cards.UI
         }
 
         /// <summary>
-        /// 验证依赖
-        /// </summary>
-        private bool ValidateDependencies()
-        {
-            bool isValid = true;
-
-            if (cardConfig == null)
-            {
-                LogError("CardConfig未注入");
-                isValid = false;
-            }
-
-            if (playerCardManager == null)
-            {
-                LogError("PlayerCardManager未注入");
-                isValid = false;
-            }
-
-            if (cardUIComponents == null)
-            {
-                LogError("CardUIComponents未注入");
-                isValid = false;
-            }
-
-            return isValid;
-        }
-
-        /// <summary>
         /// 设置Canvas
         /// </summary>
         private void SetupCanvas()
@@ -580,8 +538,6 @@ namespace Cards.UI
             }
             else
             {
-                LogDebug("找到了子对象中的CardDisplayUI实例");
-
                 // 确保现有的CardDisplayUI也在正确的父对象下
                 if (cardDisplayUI.transform.parent != cardUICanvas.transform)
                 {
@@ -602,11 +558,6 @@ namespace Cards.UI
             {
                 myPlayerId = NetworkManager.Instance.ClientId;
                 LogDebug($"确定我的玩家ID: {myPlayerId}");
-            }
-            else
-            {
-                LogWarning("NetworkManager不可用，无法确定玩家ID");
-                myPlayerId = 1; // 默认值
             }
         }
 
@@ -805,36 +756,23 @@ namespace Cards.UI
 
         #region 箭头事件处理
 
-        /// <summary>
-        /// 箭头检测到有效玩家目标
-        /// </summary>
         private void OnArrowValidPlayerTarget(ushort playerId)
         {
             LogDebug($"箭头指向有效玩家目标: {playerId}");
         }
 
-        /// <summary>
-        /// 箭头检测到有效中央区域
-        /// </summary>
         private void OnArrowValidCenterArea()
         {
             LogDebug("箭头指向有效中央区域");
         }
 
-        /// <summary>
-        /// 箭头检测到无效目标
-        /// </summary>
         private void OnArrowInvalidTarget()
         {
             LogDebug("箭头指向无效目标");
         }
 
-        /// <summary>
-        /// 箭头无目标
-        /// </summary>
         private void OnArrowNoTarget()
         {
-            // 不打印日志，避免频繁输出
         }
 
         #endregion
@@ -1226,36 +1164,6 @@ namespace Cards.UI
         #region 公共接口
 
         /// <summary>
-        /// 手动设置箭头预制体（可选，用于运行时修改）
-        /// </summary>
-        public void SetArrowPrefab(GameObject prefab)
-        {
-            arrowPrefab = prefab;
-            LogDebug($"手动设置箭头预制体: {prefab?.name}");
-
-            // 如果ArrowManager已存在，更新其预制体引用
-            if (arrowManager != null)
-            {
-                arrowManager.SetArrowPrefab(prefab);
-            }
-        }
-
-        /// <summary>
-        /// 重新加载箭头预制体（调试用）
-        /// </summary>
-        public void ReloadArrowPrefab()
-        {
-            arrowPrefab = null;
-            LoadArrowPrefab();
-
-            if (arrowManager != null && arrowPrefab != null)
-            {
-                arrowManager.SetArrowPrefab(arrowPrefab);
-                LogDebug("箭头预制体重新加载完成");
-            }
-        }
-
-        /// <summary>
         /// 显示扇形展示
         /// </summary>
         public void ShowFanDisplay()
@@ -1367,45 +1275,6 @@ namespace Cards.UI
             LogDebug("清理所有显示");
             HideCardUI();
             currentHandCards.Clear();
-        }
-
-        /// <summary>
-        /// 强制禁用卡牌UI（答题期间调用）
-        /// </summary>
-        public void DisableCardUI()
-        {
-            LogDebug("强制禁用卡牌UI");
-
-            // 取消任何进行中的操作
-            if (currentUIState == UIState.ArrowTargeting)
-            {
-                CancelArrowTargeting();
-            }
-
-            if (currentUIState == UIState.FanDisplay)
-            {
-                if (cardDisplayUI != null)
-                {
-                    cardDisplayUI.HideCardDisplay();
-                }
-            }
-
-            SetUIState(UIState.Disabled);
-        }
-
-        /// <summary>
-        /// 启用卡牌UI
-        /// </summary>
-        public void EnableCardUI()
-        {
-            LogDebug("启用卡牌UI");
-
-            if (currentUIState == UIState.Disabled)
-            {
-                SetUIState(UIState.Thumbnail);
-                RefreshAndShowThumbnailWithDebounce();
-                UpdateUIAvailability();
-            }
         }
 
         #endregion
