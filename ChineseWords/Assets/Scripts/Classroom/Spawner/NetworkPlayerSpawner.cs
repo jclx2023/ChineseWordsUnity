@@ -6,18 +6,18 @@ using System.Collections.Generic;
 using System.Linq;
 using Classroom.Scene;
 using Core.Network;
+using RoomScene.PlayerModel; // 引用PlayerModelData
 
 namespace Classroom.Player
 {
     /// <summary>
-    /// 网络玩家生成器 - 负责根据房间玩家数动态生成座位和角色
-    /// 修改为被动响应ClassroomManager的调用，不再自动初始化
-    /// 保留网络事件监听但不自动触发重新生成
+    /// 网络玩家生成器 - 支持根据玩家模型选择生成个性化角色
+    /// 使用静态资源加载，不依赖PlayerModelManager实例
     /// </summary>
     public class NetworkPlayerSpawner : MonoBehaviour
     {
         [Header("核心配置")]
-        [SerializeField] private GameObject playerCharacterPrefab; // 玩家角色预制体（带Humanoid骨骼）
+        [SerializeField] private GameObject playerCharacterPrefab; // 默认角色预制体（回退使用）
         [SerializeField] private CircularSeatingSystem seatingSystem; // 座位系统引用
         [SerializeField] private float spawnDelay = 1f; // 生成延迟（等待场景稳定）
 
@@ -25,12 +25,20 @@ namespace Classroom.Player
         [SerializeField] private float characterHeight = 1.8f; // 角色高度
         [SerializeField] private Vector3 characterScale = Vector3.one; // 角色缩放
 
+        [Header("模型资源配置")]
+        [SerializeField] private string modelDataResourcesPath = "PlayerModels"; // Resources文件夹中模型数据的路径
+        [SerializeField] private int defaultModelId = 0; // 默认模型ID
+
         [Header("同步配置")]
         [SerializeField] private float sceneLoadTimeout = 10f; // 场景加载超时时间
         [SerializeField] private bool waitForAllPlayersReady = true; // 是否等待所有玩家准备就绪
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
+
+        // 静态模型数据缓存
+        private static Dictionary<int, PlayerModelData> modelDataCache = new Dictionary<int, PlayerModelData>();
+        private static bool modelDataLoaded = false;
 
         // 玩家-座位绑定数据
         private Dictionary<ushort, int> playerToSeatMap = new Dictionary<ushort, int>(); // PlayerID -> SeatIndex
@@ -75,6 +83,9 @@ namespace Classroom.Player
                 return;
             }
 
+            // 预加载模型数据
+            LoadModelDataIfNeeded();
+
             isInitialized = true;
             LogDebug("NetworkPlayerSpawner已初始化");
         }
@@ -91,6 +102,67 @@ namespace Classroom.Player
         private void OnDestroy()
         {
             UnsubscribeFromNetworkEvents();
+        }
+
+        #endregion
+
+        #region 静态模型数据加载
+
+        /// <summary>
+        /// 加载模型数据（如果尚未加载）
+        /// </summary>
+        private void LoadModelDataIfNeeded()
+        {
+            if (modelDataLoaded) return;
+
+            try
+            {
+                LogDebug($"开始从Resources加载模型数据: {modelDataResourcesPath}");
+
+                // 加载所有PlayerModelData资产
+                PlayerModelData[] allModelData = Resources.LoadAll<PlayerModelData>(modelDataResourcesPath);
+
+                if (allModelData == null || allModelData.Length == 0)
+                {
+                    Debug.LogWarning($"[NetworkPlayerSpawner] 未在 Resources/{modelDataResourcesPath} 中找到PlayerModelData资产");
+                    return;
+                }
+
+                // 建立ID映射
+                modelDataCache.Clear();
+                foreach (var modelData in allModelData)
+                {
+                    if (modelData != null && modelData.IsValid())
+                    {
+                        modelDataCache[modelData.modelId] = modelData;
+                        LogDebug($"加载模型数据: ID={modelData.modelId}, Name={modelData.modelName}");
+                    }
+                }
+
+                modelDataLoaded = true;
+                LogDebug($"模型数据加载完成，共加载 {modelDataCache.Count} 个模型");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[NetworkPlayerSpawner] 加载模型数据时发生错误: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 获取模型数据
+        /// </summary>
+        private static PlayerModelData GetModelData(int modelId)
+        {
+            return modelDataCache.TryGetValue(modelId, out PlayerModelData data) ? data : null;
+        }
+
+        /// <summary>
+        /// 获取模型的游戏预制体
+        /// </summary>
+        private static GameObject GetModelGamePrefab(int modelId)
+        {
+            var modelData = GetModelData(modelId);
+            return modelData?.GetGamePrefab();
         }
 
         #endregion
@@ -140,6 +212,9 @@ namespace Classroom.Player
 
             LogDebug("开始生成座位和角色...");
 
+            // 确保模型数据已加载
+            LoadModelDataIfNeeded();
+
             // 获取当前房间所有玩家
             var allPlayers = PhotonNetwork.PlayerList.OrderBy(p => p.ActorNumber).ToList();
             int playerCount = allPlayers.Count;
@@ -188,6 +263,9 @@ namespace Classroom.Player
 
             // 等待场景稳定
             yield return new WaitForSeconds(spawnDelay);
+
+            // 确保模型数据已加载
+            LoadModelDataIfNeeded();
 
             // 等待所有玩家准备就绪（如果启用）
             if (waitForAllPlayersReady)
@@ -277,12 +355,6 @@ namespace Classroom.Player
         /// </summary>
         private void SpawnAllCharacters()
         {
-            if (playerCharacterPrefab == null)
-            {
-                Debug.LogError("[NetworkPlayerSpawner] 角色预制体未设置");
-                return;
-            }
-
             LogDebug("开始生成所有角色");
 
             foreach (var kvp in playerToSeatMap)
@@ -299,7 +371,7 @@ namespace Classroom.Player
         }
 
         /// <summary>
-        /// 为指定玩家生成角色
+        /// 为指定玩家生成角色 - 修改版：支持个性化模型
         /// </summary>
         private void SpawnCharacterForPlayer(ushort playerId, int seatIndex)
         {
@@ -322,8 +394,14 @@ namespace Classroom.Player
             Quaternion spawnRotation = seatIdentifier.GetSeatRotation();
             spawnRotation *= Quaternion.Euler(0, 180, 0);
 
-            // 生成角色
-            GameObject character = Instantiate(playerCharacterPrefab, spawnPosition, spawnRotation);
+            // 生成角色（使用个性化模型）
+            GameObject character = CreatePlayerCharacter(playerId, spawnPosition, spawnRotation);
+            if (character == null)
+            {
+                Debug.LogError($"[NetworkPlayerSpawner] 为玩家 {playerId} 创建角色失败");
+                return;
+            }
+
             character.name = $"Player_{playerId:D2}_Character";
             character.transform.localScale = characterScale;
 
@@ -334,7 +412,58 @@ namespace Classroom.Player
             playerCharacters[playerId] = character;
 
             OnCharacterSpawned?.Invoke(playerId, character);
-            LogDebug($"为玩家 {playerId} 在座位 {seatIndex} 生成角色");
+            LogDebug($"为玩家 {playerId} 在座位 {seatIndex} 生成角色（模型ID: {GetPlayerModelId(playerId)}）");
+        }
+
+        /// <summary>
+        /// 创建玩家角色 - 修改版：使用静态资源加载
+        /// </summary>
+        private GameObject CreatePlayerCharacter(ushort playerId, Vector3 position, Quaternion rotation)
+        {
+            // 获取玩家选择的模型ID
+            int modelId = GetPlayerModelId(playerId);
+
+            // 尝试通过静态资源加载获取模型预制体
+            GameObject modelPrefab = GetModelGamePrefab(modelId);
+            if (modelPrefab != null)
+            {
+                GameObject modelCharacter = Instantiate(modelPrefab, position, rotation);
+                LogDebug($"通过静态资源为玩家 {playerId} 创建模型 {modelId} 成功");
+                return modelCharacter;
+            }
+            else
+            {
+                LogDebug($"静态资源中未找到模型 {modelId}，使用默认预制体");
+            }
+
+            // 回退：使用默认预制体
+            if (playerCharacterPrefab != null)
+            {
+                GameObject defaultCharacter = Instantiate(playerCharacterPrefab, position, rotation);
+                LogDebug($"为玩家 {playerId} 使用默认预制体创建角色");
+                return defaultCharacter;
+            }
+
+            Debug.LogError($"[NetworkPlayerSpawner] 无法为玩家 {playerId} 创建角色：缺少默认预制体");
+            return null;
+        }
+
+        /// <summary>
+        /// 获取玩家模型ID
+        /// </summary>
+        private int GetPlayerModelId(ushort playerId)
+        {
+            // 从NetworkManager获取玩家模型ID
+            if (NetworkManager.Instance != null)
+            {
+                int modelId = NetworkManager.Instance.GetPlayerModelId(playerId);
+                LogDebug($"从NetworkManager获取玩家 {playerId} 模型ID: {modelId}");
+                return modelId;
+            }
+
+            // 回退：使用默认模型ID
+            LogDebug($"NetworkManager不可用，为玩家 {playerId} 使用默认模型ID: {defaultModelId}");
+            return defaultModelId;
         }
 
         /// <summary>
@@ -343,6 +472,7 @@ namespace Classroom.Player
         private void SetupCharacterForPlayer(GameObject character, ushort playerId)
         {
             LogDebug($"设置角色 {playerId}, 本地ClientId: {NetworkManager.Instance.ClientId}, 是否匹配: {playerId == NetworkManager.Instance.ClientId}");
+
             // 添加PlayerCameraController（仅本地玩家）
             if (playerId == NetworkManager.Instance.ClientId)
             {
@@ -351,6 +481,7 @@ namespace Classroom.Player
                 {
                     cameraController = character.AddComponent<PlayerCameraController>();
                 }
+
                 // 获取对应的座位信息设置摄像机
                 int seatIndex = playerToSeatMap[playerId];
                 var seatData = seatingSystem.GetSeatData(seatIndex);
@@ -364,6 +495,7 @@ namespace Classroom.Player
                 cameraController.SetCameraMount(null, rotatedRotation);
                 LogDebug($"为本地玩家 {playerId} 设置摄像机控制器，已应用180°Y轴旋转");
             }
+
             // 添加其他角色组件（如动画、网络同步等）
             var networkSync = character.GetComponent<PlayerNetworkSync>();
             if (networkSync == null)
@@ -402,6 +534,9 @@ namespace Classroom.Player
             yield return new WaitUntil(() => seatingSystem.IsInitialized);
 
             LogDebug("开始处理同步数据");
+
+            // 确保模型数据已加载
+            LoadModelDataIfNeeded();
 
             // 清理现有数据
             ClearAllData();
@@ -550,7 +685,7 @@ namespace Classroom.Player
         {
             if (enableDebugLogs)
             {
-                //Debug.Log($"[NetworkPlayerSpawner] {message}");
+                Debug.Log($"[NetworkPlayerSpawner] {message}");
             }
         }
 

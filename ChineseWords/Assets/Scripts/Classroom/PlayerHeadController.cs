@@ -83,7 +83,7 @@ namespace Classroom.Player
             // 检查本地玩家状态
             CheckIfLocalPlayer();
 
-            if (isLocalPlayer || Application.isEditor) // 编辑器中也初始化，便于调试
+            if (isLocalPlayer) // 编辑器中也初始化，便于调试
             {
                 InitializeHeadController();
             }

@@ -1083,7 +1083,7 @@ namespace UI
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[RoomUIController] {message}");
+                //Debug.Log($"[RoomUIController] {message}");
             }
         }
 

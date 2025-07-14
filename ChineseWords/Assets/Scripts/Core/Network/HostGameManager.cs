@@ -815,11 +815,6 @@ namespace Core.Network
             // 使用CardConfig中配置的权重进行抽取
             var selectedCard = CardUtilities.DrawRandomCard(availableCards);
 
-            if (selectedCard != null)
-            {
-                LogDebug($"为玩家 {playerId} 抽取卡牌: {selectedCard.cardName} (权重: {selectedCard.drawWeight})");
-            }
-
             return selectedCard;
         }
 

@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: HPConfig
   m_EditorClassIdentifier: 
   currentHealth: 100
-  damagePerWrong: 10
-  configName: "\u9ED8\u8BA4HP\u914D\u7F6E"
+  damagePerWrong: 20
+  configName: HPConfig1
   configDescription: "\u6807\u51C6\u751F\u547D\u503C\u548C\u6263\u8840\u914D\u7F6E"

@@ -179,17 +179,6 @@ namespace RoomScene.Manager
         public GameObject ShowModelPreview(int modelId, Transform parentTransform)
         {
             var modelData = GetModelData(modelId);
-            if (modelData == null)
-            {
-                Debug.LogWarning($"[PlayerModelManager] 无法找到模型 {modelId}");
-                return null;
-            }
-
-            if (parentTransform == null)
-            {
-                Debug.LogWarning($"[PlayerModelManager] 父级容器为空");
-                return null;
-            }
 
             // 创建新的预览实例
             GameObject previewInstance = CreatePreviewInstance(modelId);
@@ -231,27 +220,8 @@ namespace RoomScene.Manager
             instance.name = $"Preview_{modelData.modelName}_{modelId}_{System.Guid.NewGuid().ToString("N")[..8]}";
             instance.SetActive(false);
 
-            // 移除可能的网络组件（预览不需要）
-            RemoveNetworkComponents(instance);
-
             LogDebug($"创建预览实例: {instance.name}");
             return instance;
-        }
-
-        /// <summary>
-        /// 移除网络组件
-        /// </summary>
-        private void RemoveNetworkComponents(GameObject instance)
-        {
-            var networkComponents = instance.GetComponentsInChildren<MonoBehaviour>();
-            foreach (var component in networkComponents)
-            {
-                if (component.GetType().Name.Contains("Network") ||
-                    component.GetType().Name.Contains("Photon"))
-                {
-                    Destroy(component);
-                }
-            }
         }
 
         /// <summary>
@@ -284,36 +254,6 @@ namespace RoomScene.Manager
                 animator.speed = modelData.animationSpeed;
                 animator.Play(modelData.idleAnimation.name);
             }
-        }
-
-        #endregion
-
-        #region 游戏模型实例化
-
-        /// <summary>
-        /// 为NetworkGameScene创建游戏模型
-        /// </summary>
-        public GameObject CreateGameModel(int modelId, Vector3 position, Quaternion rotation)
-        {
-            var modelData = GetModelData(modelId);
-            if (modelData == null)
-            {
-                Debug.LogError($"[PlayerModelManager] 无法创建游戏模型，模型ID {modelId} 不存在");
-                return null;
-            }
-
-            GameObject gamePrefab = modelData.GetGamePrefab();
-            if (gamePrefab == null)
-            {
-                Debug.LogError($"[PlayerModelManager] 模型 {modelData.modelName} 缺少游戏预制体");
-                return null;
-            }
-
-            GameObject gameInstance = Instantiate(gamePrefab, position, rotation);
-            gameInstance.name = $"GameModel_{modelData.modelName}_{modelId}";
-
-            LogDebug($"创建游戏模型: {modelData.modelName} at {position}");
-            return gameInstance;
         }
 
         #endregion

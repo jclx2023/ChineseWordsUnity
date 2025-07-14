@@ -15,7 +15,7 @@ MonoBehaviour:
   modelId: 1
   modelName: "\u5973\u5B66\u751F"
   modelDescription: 
-  modelPrefab: {fileID: 919132149155446097, guid: 809d0af018617a24f9e141f1db0440f6, type: 3}
+  modelPrefab: {fileID: 8951706202137534665, guid: 26f82bda787befc40afe53bc3bab9527, type: 3}
   previewPrefab: {fileID: 919132149155446097, guid: b5a579a71ad5b0a41987bc32fc009b8d, type: 3}
   previewScale: {x: 90, y: 90, z: 90}
   previewRotation: {x: 0, y: 180, z: 0}

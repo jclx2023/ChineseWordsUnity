@@ -568,8 +568,6 @@ namespace UI
 
         void IInRoomCallbacks.OnRoomPropertiesUpdate(ExitGames.Client.Photon.Hashtable propertiesThatChanged)
         {
-            LogDebug($" 房间属性更新: {string.Join(", ", propertiesThatChanged.Keys)}");
-
             // 关键修复：检查游戏开始信号
             if (ShouldTriggerGameStart(propertiesThatChanged))
             {
@@ -577,17 +575,6 @@ namespace UI
                 HandleGameStartSignal();
             }
 
-            // 输出所有变化的属性（调试用）
-            foreach (var prop in propertiesThatChanged)
-            {
-                LogDebug($"  - {prop.Key} = {prop.Value}");
-
-                // 特别关注游戏状态相关的属性
-                if (prop.Key.ToString().Contains("game") || prop.Key.ToString().Contains("state"))
-                {
-                    LogDebug($"游戏状态相关属性: {prop.Key} = {prop.Value}");
-                }
-            }
         }
 
         #endregion
@@ -832,7 +819,7 @@ namespace UI
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[RoomSceneController] {message}");
+                //Debug.Log($"[RoomSceneController] {message}");
             }
         }
 

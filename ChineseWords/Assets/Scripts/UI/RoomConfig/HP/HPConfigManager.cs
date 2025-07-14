@@ -332,7 +332,7 @@ namespace Core
             LogDebug("尝试加载默认HP配置");
 
             // 方法1：从你的具体路径加载
-            var resourceConfig = Resources.Load<HPConfig>("Questions/HPConfig");
+            var resourceConfig = Resources.Load<HPConfig>("QuestionConfigs/HPConfig");
             if (resourceConfig != null)
             {
                 Config = resourceConfig;

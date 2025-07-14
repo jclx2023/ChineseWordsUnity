@@ -26,7 +26,7 @@ namespace Classroom.Player
         [SerializeField] private bool invertYAxis = false; // 反转Y轴
 
         [Header("视角限制")]
-        [SerializeField] private float horizontalAngleLimit = 180f; // 水平角度限制（左右各180°，允许完整转动）
+        [SerializeField] private float horizontalAngleLimit = 75f;
         [SerializeField] private float verticalUpLimit = 60f; // 向上角度限制
         [SerializeField] private float verticalDownLimit = 30f; // 向下角度限制
 

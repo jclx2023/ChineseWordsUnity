@@ -613,7 +613,7 @@ namespace Cards.UI
         {
             if (enableDebugLogs)
             {
-                Debug.Log($"[ArrowManager] {message}");
+                //Debug.Log($"[ArrowManager] {message}");
             }
         }
 
