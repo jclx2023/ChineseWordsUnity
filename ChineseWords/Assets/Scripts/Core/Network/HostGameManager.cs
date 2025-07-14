@@ -3,12 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Photon.Pun;
-using UI;
 using GameLogic.FillBlank;
 using Photon.Realtime;
 using Cards.Player;
 using Cards.Core;
-using Classroom.Teacher;
 
 namespace Core.Network
 {

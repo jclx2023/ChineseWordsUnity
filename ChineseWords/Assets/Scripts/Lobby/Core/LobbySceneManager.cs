@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
 using Core;
-using Core.Network;
 using Lobby.Data;
 using Lobby.UI;
 using Photon.Pun;

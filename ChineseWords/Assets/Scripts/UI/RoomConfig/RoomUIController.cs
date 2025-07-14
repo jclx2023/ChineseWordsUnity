@@ -33,7 +33,7 @@ namespace UI
         [SerializeField] private Button leaveRoomButton;             // 只保留离开房间按钮，开始游戏合并到各自的actionButton
 
         [Header("布局配置")]
-        [SerializeField] private Vector2 playerItemSize = new Vector2(300, 320);    // 单个玩家项尺寸
+        [SerializeField] private Vector2 playerItemSize = new Vector2(300, 360);    // 单个玩家项尺寸
         [SerializeField] private Vector2 singleRowSpacing = new Vector2(68, 0);     // 单行布局间距
         [SerializeField] private Vector2 doubleRowSpacing = new Vector2(84, 62);    // 双行布局间距
         [SerializeField] private int singleRowMaxPlayers = 4;                       // 单行布局最大玩家数

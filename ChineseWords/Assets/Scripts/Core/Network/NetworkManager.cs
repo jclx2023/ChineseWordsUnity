@@ -8,7 +8,6 @@ using Hashtable = ExitGames.Client.Photon.Hashtable;
 using System.Collections.Generic;
 using Cards.Player;
 using UI.MessageSystem;
-using Classroom.Teacher;
 using System.Collections;
 
 namespace Core.Network

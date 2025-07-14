@@ -120,10 +120,6 @@ namespace Lobby.Network
             if (roomInfo.PlayerCount >= roomInfo.MaxPlayers)
                 return LobbyRoomData.RoomStatus.Full;
 
-            // 这里可以根据自定义属性判断是否在游戏中
-            // if (customProps.TryGetValue("inGame", out object inGame) && (bool)inGame)
-            //     return LobbyRoomData.RoomStatus.InGame;
-
             return LobbyRoomData.RoomStatus.Waiting;
         }
 
@@ -191,22 +187,6 @@ namespace Lobby.Network
             return customProps;
         }
 
-        /// <summary>
-        /// 为玩家创建自定义属性
-        /// </summary>
-        public static Hashtable CreatePlayerProperties(LobbyPlayerData playerData)
-        {
-            if (playerData == null)
-                return new Hashtable();
-
-            var playerProps = new Hashtable();
-            playerProps["playerName"] = playerData.playerName;
-            playerProps["avatarIndex"] = playerData.avatarIndex;
-            playerProps["playerColor"] = ColorToString(playerData.playerColor);
-
-            return playerProps;
-        }
-
         #endregion
 
         #region 辅助方法
@@ -217,48 +197,6 @@ namespace Lobby.Network
         private static string ColorToString(Color color)
         {
             return $"{color.r:F2},{color.g:F2},{color.b:F2},{color.a:F2}";
-        }
-
-        /// <summary>
-        /// 字符串转颜色
-        /// </summary>
-        public static Color StringToColor(string colorString)
-        {
-            try
-            {
-                var parts = colorString.Split(',');
-                if (parts.Length >= 4)
-                {
-                    return new Color(
-                        float.Parse(parts[0]),
-                        float.Parse(parts[1]),
-                        float.Parse(parts[2]),
-                        float.Parse(parts[3])
-                    );
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"[PhotonLobbyDataConverter] 颜色字符串解析失败: {colorString}, {e.Message}");
-            }
-
-            return Color.white;
-        }
-
-        /// <summary>
-        /// 验证房间名称是否符合Photon要求
-        /// </summary>
-        public static bool IsValidPhotonRoomName(string roomName)
-        {
-            if (string.IsNullOrEmpty(roomName))
-                return false;
-
-            // Photon房间名限制
-            if (roomName.Length > 50) // Photon限制
-                return false;
-
-            // 检查特殊字符（Photon不允许某些字符）
-            return !roomName.Contains("\n") && !roomName.Contains("\r");
         }
 
         /// <summary>
@@ -277,21 +215,6 @@ namespace Lobby.Network
                 roomName = roomName.Substring(0, 47) + "...";
 
             return roomName;
-        }
-
-        #endregion
-
-        #region 调试方法
-
-        /// <summary>
-        /// 打印房间信息对比
-        /// </summary>
-        public static void DebugPrintRoomComparison(RoomInfo photonRoom, LobbyRoomData lobbyRoom)
-        {
-            Debug.Log("=== 房间数据对比 ===");
-            Debug.Log($"Photon房间: {photonRoom.Name} ({photonRoom.PlayerCount}/{photonRoom.MaxPlayers})");
-            Debug.Log($"Lobby房间: {lobbyRoom.roomName} ({lobbyRoom.currentPlayers}/{lobbyRoom.maxPlayers})");
-            Debug.Log($"状态: {lobbyRoom.status}");
         }
 
         #endregion

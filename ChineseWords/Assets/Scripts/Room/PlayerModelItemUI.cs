@@ -4,8 +4,6 @@ using TMPro;
 using RoomScene.Data;
 using RoomScene.Manager;
 using Core.Network;
-using Photon.Pun;
-using System.Linq;
 
 namespace UI
 {
@@ -23,7 +21,7 @@ namespace UI
 
         [Header("玩家信息区域")]
         [SerializeField] private TMP_Text playerNameText;
-        [SerializeField] private TMP_Text hostIndicatorText;          // 课代表标识文本
+        [SerializeField] private Image hostIndicatorImage;           // 课代表标识图片
         [SerializeField] private Image playerBackgroundImage;
 
         [Header("行动控制区域")]
@@ -273,18 +271,9 @@ namespace UI
         /// </summary>
         private void UpdateHostIndicator()
         {
-            if (hostIndicatorText != null)
+            if (hostIndicatorImage != null)
             {
-                if (playerData.isHost)
-                {
-                    hostIndicatorText.text = "课代表";
-                    hostIndicatorText.color = Color.yellow;
-                    hostIndicatorText.gameObject.SetActive(true);
-                }
-                else
-                {
-                    hostIndicatorText.gameObject.SetActive(false);
-                }
+                hostIndicatorImage.gameObject.SetActive(playerData.isHost);
             }
         }
 

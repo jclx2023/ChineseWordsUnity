@@ -3,9 +3,7 @@ using System;
 using System.Collections;
 using Photon.Pun;
 using Photon.Realtime;
-using Hashtable = ExitGames.Client.Photon.Hashtable;
 using UnityEngine.SceneManagement;
-using Core.Network;
 
 namespace Core.Network
 {
