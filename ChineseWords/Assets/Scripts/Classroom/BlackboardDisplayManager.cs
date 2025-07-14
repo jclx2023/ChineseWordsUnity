@@ -5,6 +5,7 @@ using Core;
 using Core.Network;
 using System.Collections;
 using Classroom.Player;
+using Photon.Pun;
 
 namespace UI.Blackboard
 {
@@ -297,17 +298,6 @@ namespace UI.Blackboard
                 }
             }
 
-            // 方式3: 查找名称为"PlayerCamera"的摄像机
-            Camera[] allCameras = FindObjectsOfType<Camera>();
-            foreach (var cam in allCameras)
-            {
-                if (cam.gameObject.name == "PlayerCamera" && cam.enabled)
-                {
-                    LogDebug($"通过名称找到PlayerCamera: {cam.name}");
-                    return cam;
-                }
-            }
-
             return null;
         }
 
@@ -450,12 +440,34 @@ namespace UI.Blackboard
                     break;
             }
 
-            // 显示状态
-            UpdateDisplayStatus("请按下鼠标右键作答", statusColor);
+            // 根据是否为答题玩家显示不同状态信息
+            UpdateQuestionDisplayStatus();
 
             // 强制更新布局
             StartCoroutine(RefreshLayout());
         }
+
+        private void UpdateQuestionDisplayStatus()
+        {
+            bool isMyTurn = IsCurrentPlayerTurn();
+
+            if (isMyTurn)
+            {
+                // 当前玩家需要答题
+                UpdateDisplayStatus("请按下鼠标右键作答", statusColor);
+            }
+            else
+            {
+                // 其他玩家观看状态
+                UpdateDisplayStatus("可以按下E键打开卡牌背包", statusColor);
+            }
+        }
+
+        private bool IsCurrentPlayerTurn()
+        {
+            return NetworkQuestionManagerController.Instance.IsMyTurn;
+        }
+
 
         /// <summary>
         /// 显示选择题

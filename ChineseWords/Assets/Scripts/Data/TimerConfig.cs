@@ -221,50 +221,6 @@ namespace Core
         }
 
         /// <summary>
-        /// 验证整个配置的有效性
-        /// </summary>
-        public bool ValidateConfig()
-        {
-            if (questionTypeTimers == null || questionTypeTimers.Length == 0)
-            {
-                Debug.LogError("[TimerConfig] 题型时间配置为空");
-                return false;
-            }
-
-            bool isValid = true;
-
-            foreach (var timer in questionTypeTimers)
-            {
-                if (timer == null)
-                {
-                    Debug.LogError("[TimerConfig] 发现空的时间配置项");
-                    isValid = false;
-                    continue;
-                }
-
-                if (!timer.IsValid())
-                {
-                    Debug.LogError($"[TimerConfig] 题型 {timer.questionType} 的时间配置无效");
-                    isValid = false;
-                }
-            }
-
-            if (timeUpDelay < 0)
-            {
-                Debug.LogError("[TimerConfig] 时间到延迟不能为负数");
-                isValid = false;
-            }
-
-            if (warningThreshold <= 0 || criticalThreshold <= 0 || criticalThreshold > warningThreshold)
-            {
-                Debug.LogError("[TimerConfig] 警告阈值配置无效");
-                isValid = false;
-            }
-
-            return isValid;
-        }
-
-        /// <summary>
         /// 重置为默认配置
         /// </summary>
         public void ResetToDefault()
@@ -390,27 +346,5 @@ namespace Core
                 criticalThreshold = warningThreshold;
             }
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示配置摘要")]
-        public void ShowConfigSummary()
-        {
-            Debug.Log(GetConfigSummary());
-        }
-
-        [ContextMenu("验证配置")]
-        public void ValidateConfigEditor()
-        {
-            bool isValid = ValidateConfig();
-            Debug.Log($"[TimerConfig] 配置验证结果: {(isValid ? "通过" : "失败")}");
-        }
-
-        [ContextMenu("重置为默认配置")]
-        public void ResetToDefaultEditor()
-        {
-            ResetToDefault();
-            Debug.Log("[TimerConfig] 已重置为默认配置");
-        }
-#endif
     }
 }

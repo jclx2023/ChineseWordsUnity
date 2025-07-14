@@ -624,11 +624,6 @@ namespace Core.Network
                 {
                     float originalTimeLimit = question.timeLimit;
                     Cards.Integration.CardGameBridge.Instance.OnTimerStarting(currentTurnPlayerId, ref question.timeLimit);
-
-                    if (question.timeLimit != originalTimeLimit)
-                    {
-                        LogDebug($"时间限制已调整: {originalTimeLimit}秒 → {question.timeLimit}秒");
-                    }
                 }
             }
             catch (System.Exception e)

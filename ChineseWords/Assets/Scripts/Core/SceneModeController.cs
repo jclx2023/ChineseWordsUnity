@@ -89,13 +89,6 @@ namespace Core
         /// </summary>
         private void FindEssentialComponents()
         {
-            // 查找GameCanvas
-            if (gameCanvas == null)
-            {
-                gameCanvas = FindGameCanvasByNames();
-                LogDebug($"找到GameCanvas: {gameCanvas?.name ?? "未找到"}");
-            }
-
             // 查找NetworkUI
             if (networkUI == null)
             {
@@ -114,24 +107,6 @@ namespace Core
                 LogDebug($"找到NetworkCanvas: {networkCanvas?.name ?? "未找到"}");
             }
 
-        }
-
-        /// <summary>
-        /// 按常见名称查找GameCanvas
-        /// </summary>
-        private GameObject FindGameCanvasByNames()
-        {
-            string[] possibleNames = { "GameCanvas", "Canvas", "MainCanvas", "UICanvas" };
-
-            foreach (string name in possibleNames)
-            {
-                GameObject canvas = GameObject.Find(name);
-                if (canvas != null)
-                {
-                    return canvas;
-                }
-            }
-            return null;
         }
 
         #endregion

@@ -20,34 +20,3 @@ namespace Core
         QuestionType QuestionType { get; }
     }
 }
-
-namespace Core
-{
-    /// <summary>
-    /// 网络题目数据（扩展现有的NetworkQuestionData）
-    /// </summary>
-    public static class NetworkQuestionDataExtensions
-    {
-        /// <summary>
-        /// 从本地题目管理器创建网络题目数据
-        /// </summary>
-        public static NetworkQuestionData CreateFromLocalData(
-            QuestionType questionType,
-            string questionText,
-            string correctAnswer,
-            string[] options = null,
-            float timeLimit = 30f,
-            string additionalData = null)
-        {
-            return new NetworkQuestionData
-            {
-                questionType = questionType,
-                questionText = questionText,
-                correctAnswer = correctAnswer,
-                options = options ?? new string[0],
-                timeLimit = timeLimit,
-                additionalData = additionalData ?? "{}"
-            };
-        }
-    }
-}

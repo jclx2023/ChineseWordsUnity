@@ -519,43 +519,6 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 验证配置有效性
-        /// </summary>
-        public bool ValidateConfig()
-        {
-            return currentConfig?.ValidateConfig() ?? false;
-        }
-
-        /// <summary>
-        /// 获取配置摘要
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            return currentConfig?.GetConfigSummary() ?? "未配置";
-        }
-
-        /// <summary>
-        /// 重置为默认配置
-        /// </summary>
-        public void ResetToDefault()
-        {
-            if (currentConfig != null)
-            {
-                try
-                {
-                    LogDebug("重置Timer配置为默认值");
-                    currentConfig.ResetToDefault();
-                    RefreshDisplay();
-                    OnConfigChanged?.Invoke();
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"[TimerConfigPanel] 重置配置失败: {e.Message}");
-                }
-            }
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -581,32 +544,5 @@ namespace UI.RoomConfig
                 Debug.LogError($"[TimerConfigPanel] 销毁时清理失败: {e.Message}");
             }
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示组件状态")]
-        private void EditorShowComponentStatus()
-        {
-            string status = "=== Timer配置面板组件状态 ===\n";
-            status += $"Timer项容器: {(timerItemsContainer != null ? "✓" : "✗")}\n";
-            status += $"Timer滑条预制体: {(timerSliderItemPrefab != null ? "✓" : "✗")}\n";
-            status += $"当前配置: {(currentConfig != null ? "✓" : "✗")}\n";
-            status += $"Timer项数量: {timerItems.Count}\n";
-            status += $"状态文本: {(statusText != null ? "✓" : "✗")}\n";
-            status += $"初始化完成: {isInitialized}\n";
-            status += $"外部管理: {isExternallyManaged}\n";
-            status += $"防重复初始化: {preventDuplicateInit}\n";
-            LogDebug(status);
-        }
-
-        [ContextMenu("重置初始化状态")]
-        private void EditorResetInitState()
-        {
-            if (Application.isPlaying)
-            {
-                isInitialized = false;
-                LogDebug("初始化状态已重置");
-            }
-        }
-#endif
     }
 }

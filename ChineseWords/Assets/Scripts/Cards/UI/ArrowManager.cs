@@ -1,7 +1,4 @@
 ﻿using UnityEngine;
-using UnityEngine.UI;
-using System.Collections.Generic;
-using System.Linq;
 using Cards.Core;
 using UI;
 
@@ -120,7 +117,6 @@ namespace Cards.UI
         public void SetArrowPrefab(GameObject prefab)
         {
             arrowPrefab = prefab;
-            LogDebug($"箭头预制体已设置: {prefab?.name}");
         }
 
         /// <summary>
@@ -153,20 +149,6 @@ namespace Cards.UI
         /// </summary>
         public bool StartArrowTargeting(Vector2 startPosition, CardData cardData)
         {
-            if (!IsInitialized())
-            {
-                LogError("ArrowManager未正确初始化，无法开始箭头目标选择");
-                return false;
-            }
-
-            if (isArrowActive)
-            {
-                LogWarning("箭头已经处于激活状态，无法重复开始");
-                return false;
-            }
-
-            LogDebug($"开始箭头目标选择 - 起点: {startPosition}, 卡牌: {cardData?.cardName}");
-
             // 保存状态
             arrowStartPosition = startPosition;
             currentCardData = cardData;
@@ -192,13 +174,6 @@ namespace Cards.UI
         public TargetDetectionResult EndArrowTargeting(out ushort targetPlayerId)
         {
             targetPlayerId = 0;
-
-            if (!isArrowActive)
-            {
-                LogWarning("箭头未激活，无法结束目标选择");
-                return TargetDetectionResult.None;
-            }
-
             LogDebug($"结束箭头目标选择 - 最终目标类型: {currentTargetType}");
 
             // 保存最终结果
@@ -244,11 +219,6 @@ namespace Cards.UI
 
             currentArrowRenderer = currentArrowInstance.GetComponent<BezierArrowRenderer>();
             RectTransform arrowRect = currentArrowInstance.GetComponent<RectTransform>();
-            if (arrowRect != null)
-            {
-                LogDebug($"箭头RectTransform设置: 锚点({arrowRect.anchorMin}, {arrowRect.anchorMax}), 轴心({arrowRect.pivot}), 位置({arrowRect.anchoredPosition})");
-            }
-
             // 启用外部控制模式
             currentArrowRenderer.EnableExternalControl(arrowStartPosition, arrowStartPosition);
 
@@ -586,25 +556,6 @@ namespace Cards.UI
             }
         }
 
-        /// <summary>
-        /// 根据目标类型获取箭头颜色
-        /// </summary>
-        private Color GetArrowColorForTarget()
-        {
-            switch (currentTargetType)
-            {
-                case TargetDetectionResult.PlayerConsole:
-                case TargetDetectionResult.CenterArea:
-                    return validTargetColor;
-
-                case TargetDetectionResult.Invalid:
-                    return invalidTargetColor;
-
-                default:
-                    return normalArrowColor;
-            }
-        }
-
         #endregion
 
         #region 调试工具
@@ -633,10 +584,6 @@ namespace Cards.UI
         #endregion
 
         #region 公共属性和接口
-
-        public bool IsArrowActive => isArrowActive;
-        public TargetDetectionResult CurrentTargetType => currentTargetType;
-        public ushort CurrentTargetPlayerId => currentTargetPlayerId;
 
         /// <summary>
         /// 静态工厂方法 - 由CardUIManager调用创建ArrowManager实例

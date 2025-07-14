@@ -515,7 +515,6 @@ namespace UI.RoomConfig
                     LogDebug("已通知RoomConfigManager权重配置变更");
                 }
 
-                LogDebug($"权重配置已确认应用: {config.GetConfigSummary()}");
                 return true;
             }
             catch (System.Exception e)

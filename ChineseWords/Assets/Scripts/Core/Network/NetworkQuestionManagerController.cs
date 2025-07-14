@@ -506,7 +506,6 @@ namespace Core.Network
         private QuestionManagerBase CreateQuestionManager(QuestionType questionType, bool isNetworkMode)
         {
             GameObject managerObj = new GameObject($"{questionType}Manager");
-            managerObj.AddComponent<UIEnvironmentMarker>();
 
             var manager = QuestionManagerFactory.CreateManagerOnGameObject(
                 managerObj,
@@ -802,32 +801,6 @@ namespace Core.Network
             {
                 Debug.Log($"[NQMC] {message}");
             }
-        }
-
-        #endregion
-
-        #region 状态查询和调试
-        public string GetStatusInfo()
-        {
-            var info = "=== NQMC (修复版) 状态 ===\n";
-            info += $"已初始化: {isInitialized}\n";
-            info += $"游戏已开始: {gameStarted}\n";
-            info += $"我的回合: {isMyTurn}\n";
-            info += $"显示状态: {currentDisplayState}\n";
-            info += $"当前回合玩家ID: {currentTurnPlayerId}\n";
-            info += $"已收到回合变更: {hasReceivedTurnChange}\n";
-            info += $"当前管理器: {(currentManager != null ? currentManager.GetType().Name : "无")}\n";
-
-            // Photon网络状态
-            info += $"Photon连接: {PhotonNetwork.IsConnected}\n";
-            info += $"在房间中: {PhotonNetwork.InRoom}\n";
-            info += $"我的ActorNumber: {(PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0)}\n";
-            info += $"是否MasterClient: {PhotonNetwork.IsMasterClient}\n";
-
-            if (timerManager != null)
-                info += $"计时器状态: {(timerManager.IsRunning ? "运行中" : "已停止")}\n";
-
-            return info;
         }
 
         #endregion

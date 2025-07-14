@@ -66,11 +66,6 @@ namespace UI.RoomConfig
                 questionType = type;
                 itemObject = obj;
                 itemScript = obj.GetComponent<WeightSliderItem>();
-
-                if (itemScript == null)
-                {
-                    Debug.LogError($"WeightSliderItem预制体上没有WeightSliderItem脚本: {obj.name}");
-                }
             }
 
             public void SetupFromConfig(QuestionWeightConfig config)
@@ -349,12 +344,6 @@ namespace UI.RoomConfig
 
             currentConfig = config;
 
-            if (currentConfig == null)
-            {
-                LogDebug("警告：传入的配置为空");
-                return;
-            }
-
             try
             {
                 // 如果是外部管理模式，先准备组件
@@ -364,26 +353,12 @@ namespace UI.RoomConfig
                     AutoFindComponents();
                 }
 
-                // 检查必要组件
-                if (weightItemsContainer == null)
-                {
-                    Debug.LogError("[QuestionWeightConfigPanel] weightItemsContainer未找到，无法创建权重项");
-                    return;
-                }
-
-                if (weightSliderItemPrefab == null)
-                {
-                    Debug.LogError("[QuestionWeightConfigPanel] weightSliderItemPrefab未设置，无法创建权重项");
-                    return;
-                }
-
                 // 清空现有内容并创建新的权重项
                 ClearWeightItems();
                 CreateWeightItems();
                 RefreshDisplay();
 
                 isInitialized = true;
-                LogDebug($"权重配置面板初始化完成，创建了 {weightItems.Count} 个权重项");
             }
             catch (System.Exception e)
             {
@@ -598,67 +573,6 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 重置为默认配置
-        /// </summary>
-        public void ResetToDefault()
-        {
-            if (currentConfig != null)
-            {
-                try
-                {
-                    foreach (var type in SupportedQuestionTypes)
-                    {
-                        currentConfig.SetEnabled(type, true);
-                        currentConfig.SetWeight(type, 1f);
-                    }
-
-                    RefreshDisplay();
-                    OnConfigChanged?.Invoke();
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"[QuestionWeightConfigPanel] 重置配置失败: {e.Message}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// 验证配置有效性
-        /// </summary>
-        public bool ValidateConfig()
-        {
-            if (currentConfig == null) return false;
-
-            try
-            {
-                var weights = currentConfig.GetWeights();
-                return weights.Count > 0;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 获取配置摘要
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            if (currentConfig == null) return "未配置";
-
-            try
-            {
-                var weights = currentConfig.GetWeights();
-                return $"已启用 {weights.Count}/{SupportedQuestionTypes.Length} 种题型";
-            }
-            catch
-            {
-                return "配置读取失败";
-            }
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -683,18 +597,5 @@ namespace UI.RoomConfig
                 Debug.LogError($"[QuestionWeightConfigPanel] 销毁时清理失败: {e.Message}");
             }
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示组件状态")]
-        private void EditorShowComponentStatus()
-        {
-            string status = "=== 组件状态 ===\n";
-            status += $"权重项容器: {(weightItemsContainer != null ? "✓" : "✗")}\n";
-            status += $"权重滑条预制体: {(weightSliderItemPrefab != null ? "✓" : "✗")}\n";
-            status += $"当前配置: {(currentConfig != null ? "✓" : "✗")}\n";
-            status += $"权重项数量: {weightItems.Count}\n";
-            LogDebug(status);
-        }
-#endif
     }
 }

@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
-using Core;
 
 namespace Core.Network
 {
@@ -85,12 +84,6 @@ namespace Core.Network
         {
             var weights = GetWeights();
 
-            if (weights.Count == 0)
-            {
-                Debug.LogError("[QuestionWeightConfig] 没有启用的题型");
-                return QuestionType.ExplanationChoice; // 默认返回
-            }
-
             float total = weights.Values.Sum();
             float random = Random.value * total;
             float accumulator = 0f;
@@ -100,20 +93,12 @@ namespace Core.Network
                 accumulator += pair.Value;
                 if (random <= accumulator)
                 {
-                    if (showDebugLogs)
-                    {
-                        Debug.Log($"[QuestionWeightConfig] 选择题型: {pair.Key} (权重: {pair.Value})");
-                    }
                     return pair.Key;
                 }
             }
 
             // 回退到第一个启用的题型
             var firstType = weights.Keys.First();
-            if (showDebugLogs)
-            {
-                Debug.Log($"[QuestionWeightConfig] 回退到第一个题型: {firstType}");
-            }
             return firstType;
         }
 
@@ -194,67 +179,6 @@ namespace Core.Network
                     weight.weight = 0f;
             }
         }
-
-        /// <summary>
-        /// 获取配置摘要
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            var summary = "=== 题目权重配置 ===\n";
-            var weights = GetWeights();
-
-            if (weights.Count == 0)
-            {
-                summary += "没有启用的题型\n";
-                return summary;
-            }
-
-            float totalWeight = weights.Values.Sum();
-            summary += $"总权重: {totalWeight:F2}\n";
-            summary += "题型分布:\n";
-
-            foreach (var pair in weights.OrderByDescending(p => p.Value))
-            {
-                float percentage = (pair.Value / totalWeight) * 100f;
-                summary += $"  - {pair.Key}: {pair.Value:F2} ({percentage:F1}%)\n";
-            }
-
-            return summary;
-        }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示配置摘要")]
-        public void ShowConfigSummary()
-        {
-            Debug.Log(GetConfigSummary());
-        }
-
-        [ContextMenu("测试随机选择")]
-        public void TestRandomSelection()
-        {
-            if (!Application.isPlaying) return;
-
-            var testCounts = new Dictionary<QuestionType, int>();
-            const int testRounds = 1000;
-
-            for (int i = 0; i < testRounds; i++)
-            {
-                var selectedType = SelectRandomType();
-                testCounts[selectedType] = testCounts.ContainsKey(selectedType)
-                    ? testCounts[selectedType] + 1
-                    : 1;
-            }
-
-            var result = $"=== 随机选择测试结果 ({testRounds}次) ===\n";
-            foreach (var pair in testCounts.OrderByDescending(p => p.Value))
-            {
-                float percentage = (pair.Value / (float)testRounds) * 100f;
-                result += $"{pair.Key}: {pair.Value}次 ({percentage:F1}%)\n";
-            }
-
-            Debug.Log(result);
-        }
-#endif
     }
 
     /// <summary>
@@ -290,14 +214,6 @@ namespace Core.Network
         public static QuestionType SelectRandomQuestionType()
         {
             return Config.SelectRandomType();
-        }
-
-        /// <summary>
-        /// 获取权重字典
-        /// </summary>
-        public static Dictionary<QuestionType, float> GetWeights()
-        {
-            return Config.GetWeights();
         }
 
         /// <summary>

@@ -104,12 +104,12 @@ namespace Core.Network
                 }
 
                 LogDebug($"无法获取 {questionType} 的题目数据，使用备用题目");
-                return CreateFallbackQuestion(questionType);
+                return null;
             }
             catch (Exception e)
             {
                 Debug.LogError($"[QuestionDataService] 获取题目数据失败: {e.Message}");
-                return CreateFallbackQuestion(questionType);
+                return null;
             }
         }
 
@@ -245,77 +245,6 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 创建备用题目（当获取失败时）
-        /// </summary>
-        private NetworkQuestionData CreateFallbackQuestion(QuestionType questionType)
-        {
-            float timeLimit = GetTimeLimitForQuestionType(questionType);
-
-            return NetworkQuestionDataExtensions.CreateFromLocalData(
-                questionType,
-                $"这是一个{questionType}类型的测试题目",
-                "测试答案",
-                questionType == QuestionType.ExplanationChoice || questionType == QuestionType.SimularWordChoice
-                    ? new string[] { "选项A", "测试答案", "选项C", "选项D" }
-                    : null,
-                timeLimit,
-                "{\"source\": \"fallback\", \"isDefault\": true}"
-            );
-        }
-        /// <summary>
-        /// 设置Timer配置
-        /// </summary>
-        public void SetTimerConfig(TimerConfig config)
-        {
-            timerConfig = config;
-            LogDebug($"Timer配置已设置: {(config != null ? config.ConfigName : "null")}");
-        }
-
-        /// <summary>
-        /// 获取指定题型的时间限制
-        /// </summary>
-        private float GetTimeLimitForQuestionType(QuestionType questionType)
-        {
-            if (timerConfig != null)
-            {
-                float timeLimit = timerConfig.GetTimeLimitForQuestionType(questionType);
-                LogDebug($"从Timer配置获取时间限制 {questionType}: {timeLimit}秒");
-                return timeLimit;
-            }
-
-            // 回退到默认时间
-            float defaultTime = GetDefaultTimeLimit(questionType);
-            LogDebug($"使用默认时间限制 {questionType}: {defaultTime}秒");
-            return defaultTime;
-        }
-
-        /// <summary>
-        /// 获取默认时间限制（当没有TimerConfig时使用）
-        /// </summary>
-        private float GetDefaultTimeLimit(QuestionType questionType)
-        {
-            switch (questionType)
-            {
-                case QuestionType.ExplanationChoice:
-                case QuestionType.SimularWordChoice:
-                case QuestionType.IdiomChain:
-                    return 20f;
-                case QuestionType.HardFill:
-                    return 30f;
-                case QuestionType.SoftFill:
-                case QuestionType.TextPinyin:
-                    return 25f;
-                case QuestionType.SentimentTorF:
-                case QuestionType.UsageTorF:
-                    return 15f;
-                case QuestionType.HandWriting:
-                    return 60f;
-                default:
-                    return 30f;
-            }
-        }
-
-        /// <summary>
         /// 清理资源
         /// </summary>
         public void ClearCache()
@@ -396,37 +325,5 @@ namespace Core.Network
                 Instance = null;
             }
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("预加载所有数据提供者")]
-        public void EditorPreloadAll()
-        {
-            if (Application.isPlaying)
-                PreloadAllProviders();
-        }
-
-        [ContextMenu("清理缓存")]
-        public void EditorClearCache()
-        {
-            if (Application.isPlaying)
-                ClearCache();
-        }
-
-        [ContextMenu("显示缓存状态")]
-        public void EditorShowCacheStatus()
-        {
-            Debug.Log($"=== 数据提供者缓存状态 ===");
-            Debug.Log($"缓存的提供者数量: {cachedProviders?.Count ?? 0}");
-            Debug.Log($"临时对象数量: {temporaryProviderObjects?.Count ?? 0}");
-
-            if (cachedProviders != null)
-            {
-                foreach (var pair in cachedProviders)
-                {
-                    Debug.Log($"- {pair.Key}: {(pair.Value != null ? "✓" : "✗")}");
-                }
-            }
-        }
-#endif
     }
 }

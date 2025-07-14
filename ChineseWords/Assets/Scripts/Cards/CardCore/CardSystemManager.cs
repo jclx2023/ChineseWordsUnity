@@ -72,11 +72,9 @@ namespace Cards.Core
             if (Instance == null)
             {
                 Instance = this;
-                LogDebug("CardSystemManager实例已创建");
             }
             else
             {
-                LogError("发现重复的CardSystemManager实例");
                 Destroy(gameObject);
                 return;
             }
@@ -157,10 +155,6 @@ namespace Cards.Core
             if (cardConfig == null)
             {
                 cardConfig = Resources.Load<CardConfig>("QuestionConfigs/CardConfig");
-                if (cardConfig == null)
-                {
-                    throw new InvalidOperationException("无法加载CardConfig资源");
-                }
             }
 
             if (!cardConfig.ValidateConfig())
@@ -294,10 +288,6 @@ namespace Cards.Core
                 {
                     cardNetworkManager.Initialize();
                     LogDebug("网络系统初始化完成");
-                }
-                else
-                {
-                    LogDebug("网络管理器不存在，跳过初始化");
                 }
             }
             catch (Exception e)
@@ -613,8 +603,6 @@ namespace Cards.Core
 
         private void HandlePlayerHandChanged(int playerId, int newHandSize)
         {
-            //LogDebug($"玩家{playerId}手牌数量变化: {newHandSize}");
-
             // 通知UI更新
             RequestUIUpdate(playerId);
         }
@@ -791,45 +779,9 @@ namespace Cards.Core
         {
             return playerCardManager;
         }
-        public CardGameBridge GetCardGameBridge()
-        {
-            return cardGameBridge;
-        }
-        public CardUIComponents GetCardUIComponents()
-        {
-            return cardUIComponents;
-        }
-        public CardUIManager GetCardUIManager()
-        {
-            return cardUIManager;
-        }
         public CardConfig GetCardConfig()
         {
             return cardConfig;
-        }
-
-        #endregion
-
-        #region 静态访问接口
-        public static PlayerCardManager GetPlayerCardManagerStatic()
-        {
-            return Instance?.playerCardManager;
-        }
-        public static CardConfig GetCardConfigStatic()
-        {
-            return Instance?.cardConfig;
-        }
-        public static CardUIManager GetCardUIManagerStatic()
-        {
-            return Instance?.cardUIManager;
-        }
-        public static CardUIComponents GetCardUIComponentsStatic()
-        {
-            return Instance?.cardUIComponents;
-        }
-        public static bool IsSystemReadyStatic()
-        {
-            return Instance?.IsSystemReady() == true;
         }
 
         #endregion

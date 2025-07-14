@@ -61,22 +61,6 @@ namespace Cards.Core
         }
 
         /// <summary>
-        /// 根据效果类型获取卡牌列表
-        /// </summary>
-        public List<CardData> GetCardsByEffectType(EffectType effectType)
-        {
-            return allCards.FindAll(card => card.effectType == effectType);
-        }
-
-        /// <summary>
-        /// 根据稀有度获取卡牌列表
-        /// </summary>
-        public List<CardData> GetCardsByRarity(CardRarity rarity)
-        {
-            return allCards.FindAll(card => card.rarity == rarity);
-        }
-
-        /// <summary>
         /// 根据卡牌类型获取卡牌列表
         /// </summary>
         public List<CardData> GetCardsByType(CardType cardType)
@@ -92,14 +76,6 @@ namespace Cards.Core
             return GetCardsByType(CardType.SelfTarget);
         }
 
-        /// <summary>
-        /// 获取所有指向型卡牌
-        /// </summary>
-        public List<CardData> GetPlayerTargetCards()
-        {
-            return GetCardsByType(CardType.PlayerTarget);
-        }
-
         #endregion
 
         #region 验证和初始化
@@ -109,36 +85,11 @@ namespace Cards.Core
         /// </summary>
         public bool ValidateConfig()
         {
-            if (allCards == null || allCards.Count == 0)
-            {
-                Debug.LogWarning($"{CardConstants.LOG_TAG} 卡牌配置为空");
-                return false;
-            }
-
             // 检查卡牌ID唯一性
             HashSet<int> cardIds = new HashSet<int>();
             foreach (var card in allCards)
             {
-                if (card.cardId <= 0)
-                {
-                    Debug.LogError($"{CardConstants.LOG_TAG} 卡牌 {card.cardName} 的ID无效: {card.cardId}");
-                    return false;
-                }
-
-                if (cardIds.Contains(card.cardId))
-                {
-                    Debug.LogError($"{CardConstants.LOG_TAG} 重复的卡牌ID: {card.cardId}");
-                    return false;
-                }
-
                 cardIds.Add(card.cardId);
-            }
-
-            // 验证抽卡设置
-            if (!drawSettings.Validate())
-            {
-                Debug.LogError($"{CardConstants.LOG_TAG} 抽卡设置验证失败");
-                return false;
             }
 
             Debug.Log($"{CardConstants.LOG_TAG} 卡牌配置验证成功，共{allCards.Count}张卡牌");

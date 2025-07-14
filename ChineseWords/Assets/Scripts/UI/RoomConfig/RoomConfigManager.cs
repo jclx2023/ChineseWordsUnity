@@ -1,8 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
-using Core.Network;
-using TMPro;
 using UnityEngine.UI;
 using UI.RoomConfig;
 using Photon.Pun;
@@ -183,21 +181,6 @@ namespace Core.Network
         /// </summary>
         private bool IsCurrentPlayerHost()
         {
-            // 开发模式特权
-            if (Application.isEditor && forceAllowInEditor)
-            {
-                LogDebug("编辑器模式，允许配置访问");
-                return true;
-            }
-
-            // 使用Photon的MasterClient机制
-            if (PhotonNetwork.InRoom)
-            {
-                bool isMaster = PhotonNetwork.IsMasterClient;
-                LogDebug($"Photon房间中，是否为MasterClient: {isMaster}");
-                return isMaster;
-            }
-
             // 如果不在Photon房间中，检查是否有其他网络管理器
             if (NetworkManager.Instance != null)
             {
@@ -211,91 +194,10 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 获取当前玩家ID - Photon版本
-        /// </summary>
-        private int GetCurrentPlayerId()
-        {
-            if (PhotonNetwork.InRoom)
-            {
-                return PhotonNetwork.LocalPlayer.ActorNumber;
-            }
-
-            if (NetworkManager.Instance != null)
-            {
-                return NetworkManager.Instance.ClientId;
-            }
-
-            return 0;
-        }
-
-        /// <summary>
-        /// 检查是否在允许的场景中
-        /// </summary>
-        private bool IsInAllowedScene()
-        {
-            if (allowInAllScenes)
-            {
-                LogDebug("允许在所有场景中使用配置");
-                return true;
-            }
-
-            string currentScene = SceneManager.GetActiveScene().name;
-
-            foreach (string allowedScene in allowedScenes)
-            {
-                if (currentScene.Contains(allowedScene))
-                {
-                    LogDebug($"当前场景 {currentScene} 在允许列表中");
-                    return true;
-                }
-            }
-
-            LogDebug($"当前场景 {currentScene} 不在允许列表中: [{string.Join(", ", allowedScenes)}]");
-            return false;
-        }
-
-        /// <summary>
-        /// 检查是否在房间环境中
-        /// </summary>
-        private bool IsInRoomEnvironment()
-        {
-            // 优先检查Photon房间状态
-            if (PhotonNetwork.InRoom)
-            {
-                LogDebug("在Photon房间中");
-                return true;
-            }
-
-            // 备用检查：RoomManager状态
-            if (RoomManager.Instance != null && RoomManager.Instance.IsInRoom)
-            {
-                LogDebug("RoomManager显示在房间中");
-                return true;
-            }
-
-            LogDebug("不在房间环境中");
-            return false;
-        }
-
-        /// <summary>
         /// 检查操作权限 - 简化版
         /// </summary>
         private bool CheckPermissions()
         {
-            // 检查场景权限
-            if (!IsInAllowedScene())
-            {
-                LogDebug("当前场景不允许打开配置UI");
-                return false;
-            }
-
-            // 检查房间环境（可选）
-            if (!allowInAllScenes && !IsInRoomEnvironment())
-            {
-                LogDebug("不在房间环境中，无法打开配置UI");
-                return false;
-            }
-
             // 检查房主权限
             if (!IsCurrentPlayerHost())
             {
@@ -309,55 +211,6 @@ namespace Core.Network
         #endregion
 
         #region 配置管理
-
-        /// <summary>
-        /// 获取当前Timer配置
-        /// </summary>
-        public TimerConfig GetCurrentTimerConfig()
-        {
-            return runtimeConfig?.GetEffectiveTimerConfig();
-        }
-
-        /// <summary>
-        /// 设置Timer配置
-        /// </summary>
-        public void SetTimerConfig(TimerConfig timerConfig)
-        {
-            if (runtimeConfig == null)
-            {
-                LogDebug("运行时配置为空，无法设置Timer配置");
-                return;
-            }
-
-            runtimeConfig.SetTimerConfig(timerConfig);
-
-            // 同时更新TimerConfigManager
-            TimerConfigManager.SetConfig(timerConfig);
-
-            LogDebug($"Timer配置已更新: {timerConfig?.ConfigName ?? "null"}");
-        }
-
-        /// <summary>
-        /// 获取配置摘要信息
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            if (runtimeConfig == null)
-                return "配置未加载";
-
-            var summary = runtimeConfig.GetConfigSummary();
-
-            // 添加权限和场景信息
-            summary += $"\n权限状态: 房主={IsCurrentPlayerHost()}, 场景={IsInAllowedScene()}, 房间={IsInRoomEnvironment()}";
-            summary += $"\n玩家ID: {GetCurrentPlayerId()}";
-
-            if (PhotonNetwork.InRoom)
-            {
-                summary += $"\nPhoton房间: {PhotonNetwork.CurrentRoom.Name}, MasterClient: {PhotonNetwork.MasterClient?.ActorNumber}";
-            }
-
-            return summary;
-        }
 
         /// <summary>
         /// 应用配置更改
@@ -379,54 +232,10 @@ namespace Core.Network
                 }
 
                 LogDebug("配置已应用");
-
-                // 如果在房间中，可以考虑广播配置更新
-                BroadcastConfigUpdate();
             }
             else
             {
                 Debug.LogError("[RoomConfigManager] 配置验证失败，无法应用更改");
-            }
-        }
-
-        /// <summary>
-        /// 重置为默认配置
-        /// </summary>
-        public void ResetToDefault()
-        {
-            LogDebug("重置为默认配置");
-
-            if (runtimeConfig != null)
-            {
-                runtimeConfig.ResetToDefault();
-            }
-            else
-            {
-                LoadDefaultConfig();
-            }
-
-            // 重置Timer配置
-            InitializeTimerConfig();
-        }
-
-        /// <summary>
-        /// 获取传递给游戏场景的配置
-        /// </summary>
-        public RoomGameConfig GetGameSceneConfig()
-        {
-            return currentConfig?.CreateCopy();
-        }
-
-        /// <summary>
-        /// 广播配置更新（如果在多人房间中）
-        /// </summary>
-        private void BroadcastConfigUpdate()
-        {
-            if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
-            {
-                // 可以通过房间属性或RPC广播配置更新
-                // 这里是扩展点，具体实现取决于需求
-                LogDebug("房主配置更新，可以广播给其他玩家");
             }
         }
 
@@ -617,53 +426,6 @@ namespace Core.Network
 
         #endregion
 
-        #region 公共接口
-
-        /// <summary>
-        /// 强制打开配置UI（忽略权限检查，调试用）
-        /// </summary>
-        public void ForceOpenConfigUI()
-        {
-            LogDebug("强制打开配置UI（调试模式）");
-
-            if (configUIInstance == null)
-            {
-                CreateConfigUIInstance();
-            }
-
-            if (configUIInstance != null)
-            {
-                configUIInstance.SetActive(true);
-                isUIOpen = true;
-
-                if (configUIComponent != null)
-                {
-                    configUIComponent.Initialize();
-                }
-            }
-        }
-
-        /// <summary>
-        /// 检查当前是否有权限访问配置
-        /// </summary>
-        public bool HasConfigPermission()
-        {
-            return CheckPermissions();
-        }
-
-        /// <summary>
-        /// 获取权限状态详情
-        /// </summary>
-        public string GetPermissionStatus()
-        {
-            return $"房主权限: {IsCurrentPlayerHost()}, " +
-                   $"场景权限: {IsInAllowedScene()}, " +
-                   $"房间环境: {IsInRoomEnvironment()}, " +
-                   $"整体权限: {CheckPermissions()}";
-        }
-
-        #endregion
-
         #region 调试方法
 
         /// <summary>
@@ -676,76 +438,6 @@ namespace Core.Network
                 Debug.Log($"[RoomConfigManager] {message}");
             }
         }
-
-        [ContextMenu("强制打开配置UI")]
-        public void DebugForceOpenConfigUI()
-        {
-            ForceOpenConfigUI();
-        }
-
-        [ContextMenu("显示当前配置")]
-        public void DebugShowCurrentConfig()
-        {
-            Debug.Log("=== 当前配置 ===\n" + GetConfigSummary());
-        }
-
-        [ContextMenu("显示Timer配置")]
-        public void DebugShowTimerConfig()
-        {
-            var timerConfig = GetCurrentTimerConfig();
-            if (timerConfig != null)
-            {
-                Debug.Log($"=== Timer配置 ===\n{timerConfig.GetConfigSummary()}");
-            }
-            else
-            {
-                Debug.Log("没有Timer配置");
-            }
-        }
-
-        [ContextMenu("显示权限状态")]
-        public void DebugShowPermissionStatus()
-        {
-            Debug.Log($"=== 权限状态 ===\n{GetPermissionStatus()}");
-        }
-
-        [ContextMenu("测试权限检查")]
-        public void DebugTestPermissions()
-        {
-            bool hasPermission = CheckPermissions();
-            Debug.Log($"权限检查结果: {(hasPermission ? "通过" : "失败")}");
-            Debug.Log(GetPermissionStatus());
-        }
-
-        [ContextMenu("重置配置")]
-        public void DebugResetConfig()
-        {
-            ResetToDefault();
-            Debug.Log("配置已重置为默认值");
-        }
-
-        [ContextMenu("应用配置")]
-        public void DebugApplyConfig()
-        {
-            ApplyConfigChanges();
-            Debug.Log("配置已应用");
-        }
-
-        [ContextMenu("测试Timer配置设置")]
-        public void DebugTestTimerConfigSetting()
-        {
-            var timerConfig = TimerConfigManager.Config;
-            if (timerConfig != null)
-            {
-                SetTimerConfig(timerConfig);
-                LogDebug("测试Timer配置设置完成");
-            }
-            else
-            {
-                LogDebug("没有可用的Timer配置进行测试");
-            }
-        }
-
         #endregion
     }
 }

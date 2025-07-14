@@ -64,12 +64,6 @@ namespace Cards.UI
             {
                 LogWarning("预制体为空，尝试重新加载");
                 LoadCardUIPrefab();
-
-                if (cardUIPrefab == null)
-                {
-                    LogError("卡牌UI预制体加载失败，无法创建UI");
-                    return null;
-                }
             }
 
             // 实例化预制体

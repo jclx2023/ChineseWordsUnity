@@ -1,5 +1,4 @@
 using UnityEngine;
-using Core;
 
 namespace Core
 {

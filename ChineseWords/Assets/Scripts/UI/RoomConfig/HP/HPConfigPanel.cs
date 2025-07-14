@@ -52,11 +52,6 @@ namespace UI.RoomConfig
         private void Awake()
         {
             CheckExternalManagement();
-
-            if (!isExternallyManaged)
-            {
-                ValidateManualBindings();
-            }
         }
 
         private void Start()
@@ -80,46 +75,6 @@ namespace UI.RoomConfig
                 }
                 parent = parent.parent;
             }
-        }
-
-        /// <summary>
-        /// 验证手动绑定的组件
-        /// </summary>
-        private void ValidateManualBindings()
-        {
-            bool isValid = true;
-
-            if (healthSlider == null)
-            {
-                Debug.LogError("[HPConfigPanel] healthSlider未绑定！");
-                isValid = false;
-            }
-
-            if (damageSlider == null)
-            {
-                Debug.LogError("[HPConfigPanel] damageSlider未绑定！");
-                isValid = false;
-            }
-
-            if (healthValueText == null)
-            {
-                Debug.LogError("[HPConfigPanel] healthValueText未绑定！");
-                isValid = false;
-            }
-
-            if (damageValueText == null)
-            {
-                Debug.LogError("[HPConfigPanel] damageValueText未绑定！");
-                isValid = false;
-            }
-
-            if (previewText == null)
-            {
-                Debug.LogError("[HPConfigPanel] previewText未绑定！");
-                isValid = false;
-            }
-
-            LogDebug($"手动绑定验证完成 - {(isValid ? "✓ 通过" : "✗ 失败")}");
         }
 
         /// <summary>
@@ -243,8 +198,6 @@ namespace UI.RoomConfig
                 float health = Mathf.Round(value);
                 currentConfig.SetCurrentHealth(health);
 
-                LogDebug($"生命值变更: {health}");
-
                 UpdateValueTexts();
                 if (updatePreviewRealtime)
                     UpdatePreviewText();
@@ -268,8 +221,6 @@ namespace UI.RoomConfig
             {
                 float damage = Mathf.Round(value);
                 currentConfig.SetDamagePerWrong(damage);
-
-                LogDebug($"扣血量变更: {damage}");
 
                 UpdateValueTexts();
                 if (updatePreviewRealtime)
@@ -324,42 +275,6 @@ namespace UI.RoomConfig
             }
         }
 
-        /// <summary>
-        /// 重置为默认配置
-        /// </summary>
-        public void ResetToDefault()
-        {
-            if (currentConfig != null)
-            {
-                try
-                {
-                    LogDebug("重置HP配置为默认值");
-                    currentConfig.ResetToDefault();
-                    RefreshDisplay();
-                    OnConfigChanged?.Invoke();
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"[HPConfigPanel] 重置配置失败: {e.Message}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// 验证配置有效性
-        /// </summary>
-        public bool ValidateConfig()
-        {
-            return currentConfig?.ValidateConfig() ?? false;
-        }
-
-        /// <summary>
-        /// 获取配置摘要
-        /// </summary>
-        public string GetConfigSummary()
-        {
-            return currentConfig?.GetConfigSummary() ?? "未配置";
-        }
 
         /// <summary>
         /// 创建默认配置
@@ -395,42 +310,5 @@ namespace UI.RoomConfig
 
             LogDebug("HP配置面板已销毁");
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示组件状态")]
-        private void EditorShowComponentStatus()
-        {
-            string status = "=== HP配置面板组件状态 ===\n";
-            status += $"生命值滑条: {(healthSlider != null ? "✓" : "✗")}\n";
-            status += $"扣血量滑条: {(damageSlider != null ? "✓" : "✗")}\n";
-            status += $"生命值文本: {(healthValueText != null ? "✓" : "✗")}\n";
-            status += $"扣血量文本: {(damageValueText != null ? "✓" : "✗")}\n";
-            status += $"预览文本: {(previewText != null ? "✓" : "✗")}\n";
-            status += $"当前配置: {(currentConfig != null ? "✓" : "✗")}\n";
-            status += $"初始化完成: {isInitialized}\n";
-            status += $"外部管理: {isExternallyManaged}\n";
-            LogDebug(status);
-        }
-
-        [ContextMenu("重置初始化状态")]
-        private void EditorResetInitState()
-        {
-            if (Application.isPlaying)
-            {
-                isInitialized = false;
-                LogDebug("初始化状态已重置");
-            }
-        }
-
-        [ContextMenu("测试刷新显示")]
-        private void EditorTestRefreshDisplay()
-        {
-            if (Application.isPlaying)
-            {
-                RefreshDisplay();
-                LogDebug("测试刷新显示完成");
-            }
-        }
-#endif
     }
 }

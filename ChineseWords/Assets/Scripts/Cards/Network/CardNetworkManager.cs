@@ -162,10 +162,6 @@ namespace Cards.Network
 
                     LogDebug("已订阅NetworkManager事件");
                 }
-                else
-                {
-                    LogWarning("NetworkManager不存在，无法订阅网络事件");
-                }
             }
             catch (System.Exception e)
             {
@@ -209,10 +205,6 @@ namespace Cards.Network
             {
                 CardSystemManager.Instance.OnPlayerJoined(playerId, $"Player{playerId}");
             }
-            else
-            {
-                LogWarning("CardSystemManager不可用，无法处理玩家加入");
-            }
         }
 
         /// <summary>
@@ -225,10 +217,6 @@ namespace Cards.Network
             if (CardSystemManager.Instance != null)
             {
                 CardSystemManager.Instance.OnPlayerLeft(playerId);
-            }
-            else
-            {
-                LogWarning("CardSystemManager不可用，无法处理玩家离开");
             }
         }
 

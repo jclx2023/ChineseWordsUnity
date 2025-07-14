@@ -341,23 +341,10 @@ namespace Cards.UI
         /// </summary>
         private void SetupArrowManager()
         {
-            // 🔧 检查是否已经创建了ArrowManager
-            if (arrowManager != null)
-            {
-                LogDebug("ArrowManager已存在，跳过重复创建");
-                return;
-            }
-
             // 加载箭头预制体（如果未在Inspector中设置）
             if (arrowPrefab == null)
             {
                 LoadArrowPrefab();
-            }
-
-            if (arrowPrefab == null)
-            {
-                LogError("箭头预制体未设置且加载失败，无法创建ArrowManager");
-                return;
             }
 
             CleanupExistingArrowManagers();
@@ -380,10 +367,6 @@ namespace Cards.UI
                 arrowManager.OnNoTargetDetected += OnArrowNoTarget;
 
                 LogDebug("ArrowManager创建并配置完成");
-            }
-            else
-            {
-                LogError("ArrowManager创建失败");
             }
         }
         private void CleanupExistingArrowManagers()

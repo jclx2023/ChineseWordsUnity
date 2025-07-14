@@ -77,26 +77,7 @@ namespace Core
         protected virtual void LoadNetworkQuestion(NetworkQuestionData networkData)
         {
             Debug.Log($"加载网络题目: {networkData.questionType} - {networkData.questionText}");
-
-            // 默认实现：直接调用本地加载逻辑
-            // 子类可以重写此方法来使用网络数据
             LoadLocalQuestion();
-        }
-
-        /// <summary>
-        /// 获取当前网络题目数据
-        /// </summary>
-        protected NetworkQuestionData GetNetworkQuestionData()
-        {
-            return networkQuestionData;
-        }
-
-        /// <summary>
-        /// 判断是否为网络模式
-        /// </summary>
-        protected bool IsNetworkMode()
-        {
-            return isNetworkMode;
         }
     }
 }

@@ -239,22 +239,6 @@ namespace UI.RoomConfig
         }
 
         /// <summary>
-        /// 获取组件状态信息
-        /// </summary>
-        public string GetComponentStatus()
-        {
-            var status = "=== WeightSliderItem组件状态 ===\n";
-            status += $"Toggle: {(enableToggle != null ? "✓" : "✗")}\n";
-            status += $"Slider: {(weightSlider != null ? "✓" : "✗")}\n";
-            status += $"名称标签(TMPro): {(nameLabel_TMP != null ? "✓" : "✗")}\n";
-            status += $"百分比标签(TMPro): {(percentLabel_TMP != null ? "✓" : "✗")}\n";
-            status += $"名称标签(Legacy): {(nameLabel_Legacy != null ? "✓" : "✗")}\n";
-            status += $"百分比标签(Legacy): {(percentLabel_Legacy != null ? "✓" : "✗")}\n";
-            status += $"初始化完成: {isInitialized}\n";
-            return status;
-        }
-
-        /// <summary>
         /// 调试日志
         /// </summary>
         private void LogDebug(string message)
@@ -279,33 +263,5 @@ namespace UI.RoomConfig
 
             LogDebug("WeightSliderItem已销毁");
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("显示组件状态")]
-        private void EditorShowComponentStatus()
-        {
-            LogDebug(GetComponentStatus());
-        }
-
-        [ContextMenu("测试设置值")]
-        private void EditorTestSetValues()
-        {
-            if (Application.isPlaying)
-            {
-                SetName("测试题型");
-                SetValues(5.0f, true);
-                SetPercentage(25.5f);
-            }
-        }
-
-        [ContextMenu("重新查找组件")]
-        private void EditorRefindComponents()
-        {
-            if (Application.isPlaying)
-            {
-                AutoFindComponents();
-            }
-        }
-#endif
     }
 }

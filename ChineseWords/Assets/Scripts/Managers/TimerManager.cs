@@ -104,7 +104,6 @@ namespace Managers
         private void OnDestroy()
         {
             StopTimer();
-            UnsubscribeFromEvents();
         }
 
         #endregion
@@ -142,19 +141,10 @@ namespace Managers
                 initialPointerRotation = clockPointer.localEulerAngles;
                 LogDebug($"时钟指针初始化完成: {clockPointer.name}");
             }
-            else
-            {
-                Debug.LogWarning("[TimerManager] 未设置时钟指针引用");
-            }
-
             if (clockFace != null)
             {
                 clockFaceImage = clockFace.GetComponent<UnityEngine.UI.Image>();
                 LogDebug($"时钟表盘初始化完成: {clockFace.name}");
-            }
-            else
-            {
-                Debug.LogWarning("[TimerManager] 未设置时钟表盘引用");
             }
 
             // 设置初始可见性
@@ -182,11 +172,6 @@ namespace Managers
 
             // 更新显示
             UpdateClock();
-        }
-
-        private void UnsubscribeFromEvents()
-        {
-            LogDebug("取消事件订阅");
         }
 
         #endregion
@@ -297,41 +282,6 @@ namespace Managers
             LogDebug("倒计时已重置");
         }
 
-        /// <summary>
-        /// 添加时间
-        /// </summary>
-        public void AddTime(float seconds)
-        {
-            if (seconds <= 0) return;
-
-            currentTime += seconds;
-            LogDebug($"添加时间 {seconds}秒，当前剩余: {currentTime}秒");
-
-            UpdateClock();
-            OnTimeChanged?.Invoke(currentTime);
-        }
-
-        /// <summary>
-        /// 减少时间
-        /// </summary>
-        public void ReduceTime(float seconds)
-        {
-            if (seconds <= 0) return;
-
-            currentTime -= seconds;
-            if (currentTime < 0) currentTime = 0;
-
-            LogDebug($"减少时间 {seconds}秒，当前剩余: {currentTime}秒");
-
-            UpdateClock();
-            OnTimeChanged?.Invoke(currentTime);
-
-            if (currentTime <= 0 && isRunning)
-            {
-                HandleTimeUp();
-            }
-        }
-
         #endregion
 
         #region 时钟控制
@@ -423,18 +373,10 @@ namespace Managers
             {
                 targetColor = warningColor;
             }
-
-            // 应用颜色到指针
-            if (clockPointerImage != null)
+            if (clockFaceImage != null)
             {
-                clockPointerImage.color = targetColor;
+                clockFaceImage.color = Color.Lerp(Color.white, targetColor, 0.3f);
             }
-
-            // 可选：也可以应用到表盘
-            // if (clockFaceImage != null)
-            // {
-            //     clockFaceImage.color = Color.Lerp(Color.white, targetColor, 0.3f);
-            // }
         }
 
         /// <summary>
@@ -527,101 +469,6 @@ namespace Managers
             OnTimeUp?.Invoke();
         }
 
-        private void HandleTimeoutAnswerSubmission()
-        {
-            LogDebug("超时自动提交答案");
-            SubmitTimeoutAnswer();
-        }
-
-        private void SubmitTimeoutAnswer()
-        {
-            if (NetworkManager.Instance != null)
-            {
-                NetworkManager.Instance.SubmitAnswer("");
-            }
-        }
-
-        #endregion
-
-        #region 新增功能接口
-
-        /// <summary>
-        /// 启用/禁用时钟
-        /// </summary>
-        public void SetClockEnabled(bool enabled)
-        {
-            enableClock = enabled;
-            UpdateClockVisibility();
-            LogDebug($"时钟{(enabled ? "已启用" : "已禁用")}");
-        }
-
-        /// <summary>
-        /// 设置时钟组件引用
-        /// </summary>
-        public void SetClockSprites(RectTransform face, RectTransform pointer)
-        {
-            clockFace = face;
-            clockPointer = pointer;
-
-            if (Application.isPlaying)
-            {
-                InitializeClock();
-            }
-
-            LogDebug("时钟Sprite引用已设置");
-        }
-
-        /// <summary>
-        /// 设置指针旋转模式
-        /// </summary>
-        public void SetRotationMode(PointerRotationMode mode)
-        {
-            rotationMode = mode;
-            LogDebug($"指针旋转模式设置为: {mode}");
-        }
-
-        /// <summary>
-        /// 手动设置指针角度（用于测试）
-        /// </summary>
-        public void SetPointerAngle(float remainingSeconds)
-        {
-            if (!enableClock || clockPointer == null) return;
-
-            float angle = CalculatePointerAngle(remainingSeconds);
-            Vector3 rotation = initialPointerRotation + new Vector3(0, 0, angle);
-            clockPointer.localEulerAngles = rotation;
-        }
-
-        /// <summary>
-        /// 启用/禁用颜色反馈
-        /// </summary>
-        public void SetColorFeedbackEnabled(bool enabled)
-        {
-            enableColorFeedback = enabled;
-            if (!enabled && clockPointerImage != null)
-            {
-                clockPointerImage.color = Color.white; // 重置为白色
-            }
-            LogDebug($"颜色反馈{(enabled ? "已启用" : "已禁用")}");
-        }
-
-        #endregion
-
-        #region 公共接口 - 保持原有接口
-
-        public float CurrentTime => currentTime;
-        public float RemainingTime => currentTime;
-        public float TimeLimit => timeLimit;
-        public bool IsRunning => isRunning;
-        public bool IsPaused => isPaused;
-        public float Progress => timeLimit > 0 ? (timeLimit - currentTime) / timeLimit : 0f;
-        public float RemainingPercentage => timeLimit > 0 ? currentTime / timeLimit : 0f;
-
-        // 新增属性
-        public bool IsClockEnabled => enableClock;
-        public PointerRotationMode RotationMode => rotationMode;
-        public bool IsColorFeedbackEnabled => enableColorFeedback;
-
         #endregion
 
         #region 调试工具
@@ -632,52 +479,6 @@ namespace Managers
             {
                 Debug.Log($"[TimerManager] {message}");
             }
-        }
-
-        [ContextMenu("📊 显示状态信息")]
-        public void ShowStatusInfo()
-        {
-            Debug.Log("=== TimerManager（纯时钟版）状态信息 ===");
-            Debug.Log($"时间限制: {timeLimit}秒");
-            Debug.Log($"当前时间: {currentTime}秒");
-            Debug.Log($"运行状态: {(isRunning ? "运行中" : "已停止")}");
-            Debug.Log($"暂停状态: {(isPaused ? "已暂停" : "正常")}");
-            Debug.Log($"时钟启用: {enableClock}");
-            Debug.Log($"旋转模式: {rotationMode}");
-            Debug.Log($"颜色反馈: {enableColorFeedback}");
-            Debug.Log($"时钟表盘: {(clockFace != null ? clockFace.name : "未设置")}");
-            Debug.Log($"时钟指针: {(clockPointer != null ? clockPointer.name : "未设置")}");
-        }
-
-        [ContextMenu("🧪 测试指针旋转")]
-        public void TestPointerRotation()
-        {
-            if (!enableClock) return;
-
-            StartCoroutine(TestRotationCoroutine());
-        }
-
-        private IEnumerator TestRotationCoroutine()
-        {
-            LogDebug("开始测试指针旋转...");
-
-            // 测试倒计时：从60秒到0秒
-            for (float t = 60; t >= 0; t -= 3f)
-            {
-                SetPointerAngle(t);
-                yield return new WaitForSeconds(0.2f);
-            }
-
-            // 重置到初始位置
-            SetPointerAngle(0f);
-            LogDebug("指针旋转测试完成");
-        }
-
-        [ContextMenu("🔄 重置时钟位置")]
-        public void ResetClockPosition()
-        {
-            ResetClock();
-            LogDebug("时钟位置已重置");
         }
 
         #endregion
