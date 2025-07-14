@@ -783,11 +783,6 @@ namespace UI
         /// </summary>
         private void CreatePlayerUI(ushort playerId)
         {
-            if (playerModelItemPrefab == null || playerListParent == null)
-            {
-                Debug.LogError("[RoomUIController] 缺少必要的UI预制体或父级");
-                return;
-            }
 
             if (playerUIItems.ContainsKey(playerId))
             {
@@ -801,10 +796,6 @@ namespace UI
 
             // 获取PlayerModelItemUI组件
             var itemUI = uiItem.GetComponent<PlayerModelItemUI>();
-            if (itemUI == null)
-            {
-                itemUI = uiItem.AddComponent<PlayerModelItemUI>();
-            }
 
             // 初始化UI项
             var playerData = playerDataCache[playerId];

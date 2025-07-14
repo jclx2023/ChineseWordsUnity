@@ -6,17 +6,14 @@ using RoomScene.PlayerModel;
 namespace RoomScene.Manager
 {
     /// <summary>
-    /// 玩家模型管理器 - 负责模型数据管理和预览实例化
+    /// 玩家模型管理器 - 修复版，移除预览缓存机制
+    /// 负责模型数据管理和预览实例化，每次创建独立的预览实例
     /// </summary>
     public class PlayerModelManager : MonoBehaviour
     {
         [Header("模型配置")]
         [SerializeField] private PlayerModelData[] availableModels;
         [SerializeField] private int defaultModelId = 0;
-
-        [Header("预览设置")]
-        [SerializeField] private Transform previewParent;
-        // 移除 previewCamera 和 previewLight，避免意外禁用主摄像机
 
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -26,13 +23,6 @@ namespace RoomScene.Manager
 
         // 模型数据映射
         private Dictionary<int, PlayerModelData> modelDataMap = new Dictionary<int, PlayerModelData>();
-
-        // 预览实例缓存
-        private Dictionary<int, GameObject> previewInstances = new Dictionary<int, GameObject>();
-
-        // 当前预览的模型
-        private GameObject currentPreviewInstance;
-        private int currentPreviewModelId = -1;
 
         // 事件
         public static event System.Action<int> OnModelChanged;
@@ -52,18 +42,12 @@ namespace RoomScene.Manager
             }
         }
 
-        private void Start()
-        {
-            SetupPreviewEnvironment();
-        }
-
         private void OnDestroy()
         {
             if (Instance == this)
             {
                 Instance = null;
             }
-            ClearAllPreviewInstances();
         }
 
         #endregion
@@ -98,22 +82,6 @@ namespace RoomScene.Manager
             }
 
             LogDebug($"模型管理器初始化完成，共加载 {modelDataMap.Count} 个模型");
-        }
-
-        /// <summary>
-        /// 设置预览环境
-        /// </summary>
-        private void SetupPreviewEnvironment()
-        {
-            if (previewParent == null)
-            {
-                // 创建预览容器
-                GameObject previewContainer = new GameObject("ModelPreviewContainer");
-                previewContainer.transform.SetParent(transform);
-                previewParent = previewContainer.transform;
-            }
-
-            LogDebug("预览环境设置完成");
         }
 
         #endregion
@@ -206,9 +174,9 @@ namespace RoomScene.Manager
         #region 预览管理
 
         /// <summary>
-        /// 显示模型预览
+        /// 显示模型预览 - 每次创建新实例
         /// </summary>
-        public GameObject ShowModelPreview(int modelId, Transform parentTransform = null)
+        public GameObject ShowModelPreview(int modelId, Transform parentTransform)
         {
             var modelData = GetModelData(modelId);
             if (modelData == null)
@@ -217,68 +185,64 @@ namespace RoomScene.Manager
                 return null;
             }
 
-            // 隐藏当前预览
-            HideCurrentPreview();
+            if (parentTransform == null)
+            {
+                Debug.LogWarning($"[PlayerModelManager] 父级容器为空");
+                return null;
+            }
 
-            // 获取或创建预览实例
-            GameObject previewInstance = GetOrCreatePreviewInstance(modelId);
+            // 创建新的预览实例
+            GameObject previewInstance = CreatePreviewInstance(modelId);
             if (previewInstance == null) return null;
 
             // 设置父级
-            Transform targetParent = parentTransform ?? previewParent;
-            previewInstance.transform.SetParent(targetParent, false);
+            previewInstance.transform.SetParent(parentTransform, false);
 
             // 应用预览配置
             ApplyPreviewSettings(previewInstance, modelData);
 
             // 激活预览
             previewInstance.SetActive(true);
-            currentPreviewInstance = previewInstance;
-            currentPreviewModelId = modelId;
 
             // 播放选择动画
             PlaySelectAnimation(previewInstance, modelData);
 
-            LogDebug($"显示模型预览: {modelData.modelName} (ID: {modelId})");
+            LogDebug($"创建模型预览: {modelData.modelName} (ID: {modelId}) 到容器: {parentTransform.name}");
             return previewInstance;
         }
 
         /// <summary>
-        /// 隐藏当前预览
+        /// 创建预览实例
         /// </summary>
-        public void HideCurrentPreview()
+        private GameObject CreatePreviewInstance(int modelId)
         {
-            if (currentPreviewInstance != null)
-            {
-                currentPreviewInstance.SetActive(false);
-                currentPreviewInstance = null;
-                currentPreviewModelId = -1;
-            }
-        }
-
-        /// <summary>
-        /// 获取或创建预览实例
-        /// </summary>
-        private GameObject GetOrCreatePreviewInstance(int modelId)
-        {
-            // 检查缓存
-            if (previewInstances.TryGetValue(modelId, out GameObject cachedInstance))
-            {
-                return cachedInstance;
-            }
-
-            // 创建新实例
             var modelData = GetModelData(modelId);
             if (modelData == null) return null;
 
             GameObject previewPrefab = modelData.GetPreviewPrefab();
-            if (previewPrefab == null) return null;
+            if (previewPrefab == null)
+            {
+                Debug.LogWarning($"[PlayerModelManager] 模型 {modelData.modelName} 没有预览预制体");
+                return null;
+            }
 
-            GameObject instance = Instantiate(previewPrefab, previewParent);
-            instance.name = $"Preview_{modelData.modelName}_{modelId}";
+            // 创建新实例
+            GameObject instance = Instantiate(previewPrefab);
+            instance.name = $"Preview_{modelData.modelName}_{modelId}_{System.Guid.NewGuid().ToString("N")[..8]}";
             instance.SetActive(false);
 
             // 移除可能的网络组件（预览不需要）
+            RemoveNetworkComponents(instance);
+
+            LogDebug($"创建预览实例: {instance.name}");
+            return instance;
+        }
+
+        /// <summary>
+        /// 移除网络组件
+        /// </summary>
+        private void RemoveNetworkComponents(GameObject instance)
+        {
             var networkComponents = instance.GetComponentsInChildren<MonoBehaviour>();
             foreach (var component in networkComponents)
             {
@@ -288,12 +252,6 @@ namespace RoomScene.Manager
                     Destroy(component);
                 }
             }
-
-            // 缓存实例
-            previewInstances[modelId] = instance;
-
-            LogDebug($"创建模型预览实例: {modelData.modelName}");
-            return instance;
         }
 
         /// <summary>
@@ -326,23 +284,6 @@ namespace RoomScene.Manager
                 animator.speed = modelData.animationSpeed;
                 animator.Play(modelData.idleAnimation.name);
             }
-        }
-
-        /// <summary>
-        /// 清空所有预览实例
-        /// </summary>
-        private void ClearAllPreviewInstances()
-        {
-            foreach (var instance in previewInstances.Values)
-            {
-                if (instance != null)
-                {
-                    Destroy(instance);
-                }
-            }
-            previewInstances.Clear();
-            currentPreviewInstance = null;
-            currentPreviewModelId = -1;
         }
 
         #endregion
