@@ -569,6 +569,82 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: d3026e134e518574098e7ec1a223c284, type: 3}
   m_PrefabInstance: {fileID: 667567531}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &479828696
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1348247648}
+    m_Modifications:
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.695
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 2.067
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.078
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7435937433134463447, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_Name
+      value: Bubble_0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7435937433134463447, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+--- !u!4 &479828697 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3435647307878562308, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+  m_PrefabInstance: {fileID: 479828696}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &479828698 stripped
+Animator:
+  m_CorrespondingSourceObject: {fileID: 1046019014959861710, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+  m_PrefabInstance: {fileID: 479828696}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &479828699 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 7419000972993664987, guid: 75b519908f2e5274f8dd563c33744130, type: 3}
+  m_PrefabInstance: {fileID: 479828696}
+  m_PrefabAsset: {fileID: 0}
 --- !u!114 &495861053 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 8264194202927962137, guid: 9ba2d7a5cc8bc8048b7b9c9080a96e62, type: 3}
@@ -2636,6 +2712,9 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: a7a85f9f38301514e94aeff1dc1f58fa, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 479828697}
     - targetCorrespondingSourceObject: {fileID: 1852576806548013000, guid: a7a85f9f38301514e94aeff1dc1f58fa, type: 3}
       insertIndex: -1
       addedObject: {fileID: 521792798}
@@ -2643,6 +2722,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a7a85f9f38301514e94aeff1dc1f58fa, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1348247652}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a7a85f9f38301514e94aeff1dc1f58fa, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1348247654}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a7a85f9f38301514e94aeff1dc1f58fa, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1348247653}
   m_SourcePrefab: {fileID: 100100000, guid: a7a85f9f38301514e94aeff1dc1f58fa, type: 3}
 --- !u!4 &1348247648 stripped
 Transform:
@@ -2682,6 +2767,92 @@ MonoBehaviour:
   turnSpeed: 2
   throwForce: 15
   recoverDelay: 2
+  enableDebugLogs: 1
+--- !u!114 &1348247653
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1348247650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae8fc5f37e25897448dcef3d243ac7ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableAnnouncement: 1
+  announceAnswerResults: 1
+  announceCardUsage: 1
+  announceGameEvents: 1
+  announcementTexts:
+    correctAnswers:
+    - "\u5F88\u597D\uFF01"
+    - "\u7B54\u5F97\u4E0D\u9519\uFF01"
+    - "\u6B63\u786E\uFF01"
+    - "\u4F18\u79C0\uFF01"
+    - "\u7EE7\u7EED\u4FDD\u6301\uFF01"
+    wrongAnswers:
+    - "\u8FD9\u4F60\u90FD\u80FD\u7B54\u9519\uFF01"
+    - "\u518D\u4ED4\u7EC6\u60F3\u60F3\uFF01"
+    - "\u4E0B\u6B21\u8981\u8BA4\u771F\u4E00\u70B9\uFF01"
+    - "\u56DE\u53BB\u597D\u597D\u590D\u4E60\uFF01"
+    - "\u8FD9\u4E48\u7B80\u5355\u90FD\u4E0D\u4F1A\uFF1F"
+    gameStart:
+    - "\u6E38\u620F\u5F00\u59CB\u4E86\uFF01\u5927\u5BB6\u52A0\u6CB9\uFF01"
+    - "\u8BA9\u6211\u4EEC\u5F00\u59CB\u4ECA\u5929\u7684\u8BFE\u5802\u95EE\u7B54\uFF01"
+    - "\u51C6\u5907\u597D\u4E86\u5417\uFF1F\u5F00\u59CB\u7B54\u9898\uFF01"
+    playerJoined:
+    - "\u6B22\u8FCE\u65B0\u540C\u5B66\uFF01"
+    - "\u53C8\u6765\u4E86\u4E00\u4F4D\u540C\u5B66\uFF01"
+    - "\u6B22\u8FCE\u52A0\u5165\u8BFE\u5802\uFF01"
+    playerLeft:
+    - "\u6709\u540C\u5B66\u79BB\u5F00\u4E86"
+    - "\u518D\u89C1\uFF01"
+    - "\u4E0B\u6B21\u518D\u6765\uFF01"
+    gameVictory:
+    - "\u606D\u559C\u83B7\u5F97\u80DC\u5229\uFF01"
+    - "\u8868\u73B0\u4F18\u79C0\uFF01"
+    - "\u4F60\u662F\u4ECA\u5929\u7684\u51A0\u519B\uFF01"
+    - "\u592A\u68D2\u4E86\uFF01"
+    playerEliminated:
+    - "\u5F88\u9057\u61BE\u88AB\u6DD8\u6C70\u4E86\uFF01"
+    - "\u4E0B\u6B21\u52A0\u6CB9\uFF01"
+    - "\u51FA\u5C40\u4E86\uFF01"
+    - "\u7EE7\u7EED\u52AA\u529B\uFF01"
+    cardUsageGeneral:
+    - "\u4F7F\u7528\u4E86\u7279\u6B8A\u5361\u724C\uFF01"
+    - "\u6709\u8DA3\u7684\u7B56\u7565\uFF01"
+    - "\u5361\u724C\u6548\u679C\u53D1\u52A8\uFF01"
+    cardUsageTargeted:
+    - "\u5BF9{0}\u4F7F\u7528\u4E86{1}\uFF01"
+    - "\u5411{0}\u53D1\u52A8\u4E86{1}\uFF01"
+    - "{0}\u6210\u4E3A\u4E86{1}\u7684\u76EE\u6807\uFF01"
+--- !u!114 &1348247654
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1348247650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3ef4bf5820b62854fbefabf196144517, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  bubbleRenderer: {fileID: 479828699}
+  bubbleText: {fileID: 0}
+  bubbleSprite: {fileID: -1516356890, guid: 34410d7ee3695524690d27a8ebe74cef, type: 3}
+  bubbleAnimator: {fileID: 479828698}
+  offset: {x: 0, y: 0, z: 0}
+  billboardToCamera: 1
+  fadeSpeed: 3
+  defaultDuration: 3
+  normalColor: {r: 0.1509434, g: 0.1509434, b: 0.1509434, a: 1}
+  warningColor: {r: 1, g: 0.6, b: 0.6, a: 1}
+  encouragementColor: {r: 0.6, g: 1, b: 0.6, a: 1}
+  systemColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
+  cardActionColor: {r: 0.8, g: 0.6, b: 1, a: 1}
+  excitedColor: {r: 1, g: 0.8, b: 0.4, a: 1}
   enableDebugLogs: 1
 --- !u!1 &1376928478
 GameObject:

@@ -77,7 +77,6 @@ namespace Classroom.Teacher
         private void OnPlayerAnswerResult(ushort playerId, bool isCorrect, string answer)
         {
             LogDebug($"收到答题结果: 玩家{playerId}, 正确:{isCorrect}, 答案:{answer}");
-
             if (isCorrect || currentState != TeacherState.Idle)
             {
                 LogDebug($"跳过处理: 正确答案({isCorrect}) 或 忙碌状态({currentState})");
@@ -107,7 +106,6 @@ namespace Classroom.Teacher
         private IEnumerator ExecuteChalkThrowSequence(ushort targetPlayerId)
         {
             LogDebug($"=== 开始扔粉笔序列，目标玩家: {targetPlayerId} ===");
-
             // 重置投掷标志
             hasThrown = false;
 

@@ -8,6 +8,8 @@ using Cards.Player;
 using Cards.Network;
 using Cards.Integration;
 using Cards.UI;
+using Classroom.Teacher;
+using Core.Network;
 
 namespace Cards.Core
 {
@@ -565,13 +567,29 @@ namespace Cards.Core
         {
             LogDebug($"玩家{playerId}使用卡牌{cardId}, 目标:{targetPlayerId}");
 
+            // 从cardConfig获取卡牌数据
+            var cardData = cardConfig?.GetCardById(cardId);
+            string cardName = cardData?.cardName ?? $"卡牌{cardId}";
+
+            // 从NetworkManager获取玩家名称
+            string playerName = GetPlayerName((ushort)playerId);
+            string targetName = targetPlayerId > 0 ? GetPlayerName((ushort)targetPlayerId) : null;
+
+            // 播报卡牌使用
+            TeacherSpeechAnnouncer.AnnounceCard(playerName, cardName, targetName);
+
             if (cardNetworkManager != null && cardNetworkManager.CanSendRPC())
             {
                 cardNetworkManager.BroadcastCardUsed((ushort)playerId, cardId, (ushort)targetPlayerId);
             }
-
             // 通知UI更新
             RequestUIUpdate(playerId);
+        }
+
+        // 辅助方法：从NetworkManager获取玩家名称
+        private string GetPlayerName(ushort playerId)
+        {
+            return NetworkManager.Instance?.GetPlayerName(playerId) ?? $"玩家{playerId}";
         }
 
         private void HandlePlayerCardAcquired(int playerId, int cardId, string cardName)

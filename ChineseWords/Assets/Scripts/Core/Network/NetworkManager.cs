@@ -232,24 +232,6 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 获取房间状态信息（供UI显示）
-        /// </summary>
-        public string GetRoomStatusInfo()
-        {
-            if (!IsConnected) return "未连接";
-
-            int readyCount = GetReadyPlayerCount();
-            int nonHostCount = GetNonHostPlayerCount();
-            bool gameStarted = GetRoomProperty("gameStarted", false);
-
-            return $"房间: {RoomName}, " +
-                   $"玩家: {PlayerCount}/{MaxPlayers}, " +
-                   $"准备: {readyCount}/{nonHostCount}, " +
-                   $"房主: {(IsHost ? "是" : "否")}, " +
-                   $"游戏状态: {(gameStarted ? "进行中" : "等待中")}";
-        }
-
-        /// <summary>
         /// 检查房间是否可以开始游戏
         /// </summary>
         public bool CanStartGame(int minPlayers = 2)
