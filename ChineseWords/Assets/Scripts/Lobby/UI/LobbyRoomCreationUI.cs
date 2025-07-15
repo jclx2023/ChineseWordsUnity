@@ -303,7 +303,7 @@ namespace Lobby.UI
             // 获取表单数据
             string roomName = roomNameInput.text.Trim();
             int maxPlayers = int.Parse(maxPlayersInput.text);
-            string password = passwordInput.text.Trim();
+            string password = "";
 
             LogDebug($"调用LobbyNetworkManager.CreateRoom...");
 

@@ -96,14 +96,6 @@ namespace Core.Network
 
         private void Start()
         {
-            // 只有在NetworkGameScene且为MasterClient时才启动
-            if (!PhotonNetwork.InRoom)
-            {
-                Debug.LogError("[HostGameManager] 未在Photon房间中，禁用组件");
-                this.enabled = false;
-                return;
-            }
-
             if (!PhotonNetwork.IsMasterClient)
             {
                 LogDebug("非MasterClient，禁用HostGameManager");
@@ -187,16 +179,6 @@ namespace Core.Network
                 yield return new WaitForSeconds(0.1f);
                 elapsed += 0.1f;
             }
-
-            if (NetworkManager.Instance == null)
-            {
-                Debug.LogError("[HostGameManager] NetworkManager初始化超时");
-                this.enabled = false;
-            }
-            else
-            {
-                LogDebug("NetworkManager已准备就绪");
-            }
         }
 
         /// <summary>
@@ -225,9 +207,6 @@ namespace Core.Network
                 hpManager.Initialize(hpConfig, useCustomHPConfig);
                 hpManager.OnHealthChanged += OnPlayerHealthChanged;
                 hpManager.OnPlayerDied += OnPlayerDied;
-
-                //初始化卡牌管理器
-                //InitializeCardGameBridge();
 
                 LogDebug("所有管理器初始化完成");
             }
@@ -285,8 +264,6 @@ namespace Core.Network
 
                 LogDebug($"同步玩家: {playerName} (ID: {playerId}, Host: {isHost})");
             }
-
-            LogDebug($"玩家同步完成，总计: {PlayerCount}");
         }
 
         #endregion
@@ -309,13 +286,6 @@ namespace Core.Network
                 LogDebug("游戏已在进行中");
                 return;
             }
-
-            if (PlayerCount == 0)
-            {
-                Debug.LogError("[HostGameManager] 没有玩家，无法开始游戏");
-                return;
-            }
-
             LogDebug($"开始游戏 - 玩家数: {PlayerCount}");
 
             gameInProgress = true;
@@ -342,7 +312,6 @@ namespace Core.Network
             }
             else
             {
-                Debug.LogError("[HostGameManager] 没有存活玩家，无法开始游戏");
                 gameInProgress = false;
             }
         }
@@ -1530,44 +1499,6 @@ namespace Core.Network
             currentIdiomChainWord = null;
             idiomChainCount = 0;
             LogDebug("成语接龙状态已重置");
-        }
-
-        /// <summary>
-        /// 获取游戏统计信息
-        /// </summary>
-        public string GetGameStats()
-        {
-            var stats = "=== 优化后的游戏统计 ===\n";
-            stats += $"游戏状态: {(gameInProgress ? "进行中" : "未开始")}\n";
-            stats += $"初始化状态: {isInitialized}\n";
-            stats += $"当前回合玩家: {currentTurnPlayerId}\n";
-            stats += $"当前题目编号: {currentQuestionNumber}\n";
-            stats += $"玩家总数: {PlayerCount}\n";
-            stats += $"存活玩家数: {playerStateManager?.GetAlivePlayerCount() ?? 0}\n";
-            stats += $"成语接龙活跃: {isIdiomChainActive}\n";
-            stats += $"成语接龙计数: {idiomChainCount}\n";
-            stats += $"当前成语: {currentIdiomChainWord ?? "无"}\n";
-
-            if (currentQuestion != null)
-            {
-                stats += $"当前题目类型: {currentQuestion.questionType}\n";
-                stats += $"当前题目时限: {currentQuestion.timeLimit}秒\n";
-            }
-
-            return stats;
-        }
-
-        /// <summary>
-        /// 获取简化状态信息
-        /// </summary>
-        public string GetStatusInfo()
-        {
-            return $"Initialized: {isInitialized}, " +
-                   $"GameInProgress: {gameInProgress}, " +
-                   $"PlayerCount: {PlayerCount}, " +
-                   $"CurrentTurn: {currentTurnPlayerId}, " +
-                   $"QuestionNumber: {currentQuestionNumber}, " +
-                   $"IsMasterClient: {PhotonNetwork.IsMasterClient}";
         }
 
         #endregion
