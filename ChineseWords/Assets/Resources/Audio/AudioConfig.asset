@@ -13,19 +13,6 @@ MonoBehaviour:
   m_Name: AudioConfig
   m_EditorClassIdentifier: Assembly-CSharp:Audio:AudioConfig
   audioClips:
-  - id: BGMMain
-    clip: {fileID: 8300000, guid: 73c90af3ca430334b80e72d0532012a5, type: 3}
-    type: 0
-    volume: 1
-    pitch: 1
-    loop: 1
-    delay: 0
-    is3D: 0
-    maxDistance: 50
-    randomizeVolume: 0
-    volumeVariation: 0.1
-    randomizePitch: 0
-    pitchVariation: 0.1
   - id: SFX_false
     clip: {fileID: 8300000, guid: c69c9fd6e0b65744ca0e0297b63c8bb2, type: 3}
     type: 1
@@ -71,6 +58,19 @@ MonoBehaviour:
     volume: 1
     pitch: 1
     loop: 0
+    delay: 0
+    is3D: 0
+    maxDistance: 50
+    randomizeVolume: 0
+    volumeVariation: 0.1
+    randomizePitch: 0
+    pitchVariation: 0.1
+  - id: BGMMain
+    clip: {fileID: 8300000, guid: 73c90af3ca430334b80e72d0532012a5, type: 3}
+    type: 0
+    volume: 1
+    pitch: 1
+    loop: 1
     delay: 0
     is3D: 0
     maxDistance: 50
@@ -131,7 +131,7 @@ MonoBehaviour:
     randomizePitch: 0
     pitchVariation: 0.1
   masterVolume: 1
-  musicVolume: 0.40317768
+  musicVolume: 0.7
   sfxVolume: 0.8
   voiceVolume: 1
   uiVolume: 0.6

@@ -1002,6 +1002,18 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6404265407235943348, guid: f3657b3b290ab1b47ba1dc39ea63f8f9, type: 3}
+      propertyPath: m_Color.b
+      value: 0.9411765
+      objectReference: {fileID: 0}
+    - target: {fileID: 6404265407235943348, guid: f3657b3b290ab1b47ba1dc39ea63f8f9, type: 3}
+      propertyPath: m_Color.g
+      value: 0.972549
+      objectReference: {fileID: 0}
+    - target: {fileID: 6404265407235943348, guid: f3657b3b290ab1b47ba1dc39ea63f8f9, type: 3}
+      propertyPath: m_Color.r
+      value: 0.99607843
+      objectReference: {fileID: 0}
     - target: {fileID: 8364181063767696631, guid: f3657b3b290ab1b47ba1dc39ea63f8f9, type: 3}
       propertyPath: m_Name
       value: ActionButton

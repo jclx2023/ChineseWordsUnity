@@ -1501,7 +1501,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &347531342
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4289,7 +4289,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e742e7c553dc339409b75371b4b0917b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  audioConfig: {fileID: 11400000, guid: f79c8b474d337f449ab80febc6918f17, type: 2}
+  audioConfig: {fileID: 11400000, guid: 38f00ea98a509e942b76c54aded6f5ef, type: 2}
   autoLoadConfig: 1
   configPath: Audio/AudioConfig
   enableDebugLogs: 1

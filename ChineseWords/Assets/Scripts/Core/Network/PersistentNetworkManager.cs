@@ -26,6 +26,9 @@ namespace Core.Network
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
+        [Header("启动加载UI")]
+        [SerializeField] private StartupLoadingUI startupLoadingUI;
+
         public static PersistentNetworkManager Instance { get; private set; }
 
         // 连接状态管理
@@ -70,6 +73,10 @@ namespace Core.Network
         {
             if (Instance == this)
             {
+                if (startupLoadingUI == null)
+                {
+                    startupLoadingUI = FindObjectOfType<StartupLoadingUI>();
+                }
                 StartCoroutine(DelayedInitialization());
             }
         }
@@ -314,6 +321,12 @@ namespace Core.Network
                 if (PhotonNetwork.IsConnected)
                 {
                     LogDebug("已连接到Photon，连接流程完成");
+
+                    if (startupLoadingUI != null)
+                    {
+                        startupLoadingUI.OnConnectionSuccess();
+                    }
+
                     yield break;
                 }
 
@@ -366,13 +379,20 @@ namespace Core.Network
                 if (PhotonNetwork.IsConnectedAndReady)
                 {
                     LogDebug("✓ Photon连接成功！");
-
+                    if (startupLoadingUI != null)
+                    {
+                        startupLoadingUI.OnConnectionSuccess();
+                    }
                     // 通知LobbyNetworkManager同步状态
                     NotifyLobbyManagerConnectionSuccess();
                 }
                 else
                 {
                     Debug.LogError($"✗ Photon连接超时！最终状态: {PhotonNetwork.NetworkClientState}");
+                    if (startupLoadingUI != null)
+                    {
+                        startupLoadingUI.OnConnectionFailed("连接超时");
+                    }
                 }
             }
             finally
@@ -485,59 +505,6 @@ namespace Core.Network
         }
 
         /// <summary>
-        /// 检查是否连接到Photon
-        /// </summary>
-        public bool IsConnectedToPhoton()
-        {
-            return PhotonNetwork.IsConnected;
-        }
-
-        /// <summary>
-        /// 检查是否在房间中
-        /// </summary>
-        public bool IsInRoom()
-        {
-            return PhotonNetwork.InRoom;
-        }
-
-        /// <summary>
-        /// 获取当前房间名称
-        /// </summary>
-        public string GetCurrentRoomName()
-        {
-            return PhotonNetwork.CurrentRoom?.Name ?? "";
-        }
-
-        /// <summary>
-        /// 获取网络状态信息
-        /// </summary>
-        public string GetNetworkStatus()
-        {
-            string status = "=== 持久化网络管理器状态 ===\n";
-            status += $"初始化状态: {isInitialized}\n";
-            status += $"连接中: {isConnecting}\n";
-            status += $"已尝试连接: {hasAttemptedConnection}\n";
-            status += $"PhotonAdapter: {(photonAdapter != null ? "✓" : "✗")}\n";
-            status += $"LobbyNetwork: {(lobbyNetworkManager != null ? "✓" : "✗")}\n";
-            status += $"GameNetwork: {(networkManager != null ? "✓" : "✗")}\n";
-
-            if (PhotonNetwork.IsConnected)
-            {
-                status += $"Photon状态: 已连接 ({PhotonNetwork.NetworkClientState})\n";
-                status += $"房间状态: {(PhotonNetwork.InRoom ? $"在房间 '{PhotonNetwork.CurrentRoom.Name}'" : "未在房间")}\n";
-                status += $"大厅状态: {(PhotonNetwork.InLobby ? "在大厅" : "未在大厅")}\n";
-                status += $"玩家ID: {PhotonNetwork.LocalPlayer?.ActorNumber}\n";
-            }
-            else
-            {
-                status += $"Photon状态: 未连接 ({PhotonNetwork.NetworkClientState})\n";
-            }
-
-            status += $"下一个PhotonView ID: {nextViewID}";
-            return status;
-        }
-
-        /// <summary>
         /// 强制重新初始化
         /// </summary>
         public void ForceReinitialize()
@@ -553,26 +520,6 @@ namespace Core.Network
 
         #endregion
 
-        #region 场景切换支持
-
-        /// <summary>
-        /// 场景切换前的准备工作
-        /// </summary>
-        public void PrepareForSceneTransition(string targetScene)
-        {
-            LogDebug($"准备切换到场景: {targetScene}");
-        }
-
-        /// <summary>
-        /// 场景切换后的恢复工作
-        /// </summary>
-        public void OnSceneTransitionComplete(string currentScene)
-        {
-            LogDebug($"场景切换完成: {currentScene}");
-        }
-
-        #endregion
-
         #region 调试方法
 
         private void LogDebug(string message)
@@ -581,40 +528,6 @@ namespace Core.Network
             {
                 Debug.Log($"[PersistentNetworkManager] {message}");
             }
-        }
-
-        [ContextMenu("显示网络状态")]
-        public void ShowNetworkStatus()
-        {
-            Debug.Log(GetNetworkStatus());
-        }
-
-        [ContextMenu("强制连接Photon")]
-        public void ForceConnectToPhoton()
-        {
-            ConnectToPhoton();
-        }
-
-        [ContextMenu("强制断开Photon")]
-        public void ForceDisconnectFromPhoton()
-        {
-            DisconnectFromPhoton();
-        }
-
-        [ContextMenu("重新初始化")]
-        public void ForceReinitializeDebug()
-        {
-            ForceReinitialize();
-        }
-
-        [ContextMenu("检查组件状态")]
-        public void CheckComponentStatus()
-        {
-            LogDebug($"=== 组件状态检查 ===");
-            LogDebug($"PhotonAdapter: {photonAdapter?.name ?? "null"}");
-            LogDebug($"LobbyNetwork: {lobbyNetworkManager?.name ?? "null"}");
-            LogDebug($"GameNetwork: {networkManager?.name ?? "null"}");
-            LogDebug($"PhotonNetwork状态: {PhotonNetwork.NetworkClientState}");
         }
 
         #endregion
