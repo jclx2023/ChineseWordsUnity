@@ -67,7 +67,7 @@ namespace UI
             // 播放菜单音乐
             if (playMenuMusic && !string.IsNullOrEmpty(menuMusicId))
             {
-                AudioManager.PlayMusic(menuMusicId);
+                AudioManager.PlayMusic(menuMusicId,true);
                 LogDebug($"开始播放菜单音乐: {menuMusicId}");
             }
         }

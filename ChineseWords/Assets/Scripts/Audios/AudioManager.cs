@@ -174,9 +174,24 @@ namespace Audio
         #endregion
 
         #region 静态接口
-        public static void PlayMusic(string musicId) => Instance.PlayMusicInternal(musicId);
+        /// <summary>
+        /// 播放音乐（可选择是否循环）
+        /// </summary>
+        public static void PlayMusic(string musicId, bool loop = true) => Instance.PlayMusicInternal(musicId, loop);
+
+        /// <summary>
+        /// 播放音效（通常不循环）
+        /// </summary>
         public static void PlaySFX(string sfxId) => Instance.PlaySFXInternal(sfxId);
+
+        /// <summary>
+        /// 播放语音（通常不循环）
+        /// </summary>
         public static void PlayVoice(string voiceId) => Instance.PlayVoiceInternal(voiceId);
+
+        /// <summary>
+        /// 播放UI音效（通常不循环）
+        /// </summary>
         public static void PlayUI(string uiId) => Instance.PlayUIInternal(uiId);
 
         public static void StopMusic() => Instance.StopMusicInternal();
@@ -382,16 +397,29 @@ namespace Audio
         #endregion
 
         #region 内部实现方法
-        private void PlayMusicInternal(string musicId)
+        private void PlayMusicInternal(string musicId, bool loop = true)
         {
             StopMusicInternal();
-            PlayAudio(musicId, AudioType.Music);
 
-            var activeMusicSources = activeAudioSources[AudioType.Music];
-            if (activeMusicSources.Count > 0)
+            if (!audioDatabase.TryGetValue(musicId, out AudioClipData clipData))
             {
-                currentMusicSource = activeMusicSources[activeMusicSources.Count - 1];
+                LogDebug($"未找到音乐: {musicId}");
+                return;
             }
+
+            var source = GetAudioSource(AudioType.Music);
+            if (source == null) return;
+
+            source.clip = clipData.clip;
+            source.loop = loop;  // 使用传入的loop参数
+            source.volume = clipData.volume * audioConfig.GetVolumeByType(AudioType.Music) * audioConfig.masterVolume;
+            source.pitch = clipData.pitch;
+            source.spatialBlend = 0f;  // 2D音效
+
+            source.Play();
+            currentMusicSource = source;
+
+            LogDebug($"播放音乐: {musicId} (循环: {source.loop})");
         }
 
         private void PlaySFXInternal(string sfxId)
