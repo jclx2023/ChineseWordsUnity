@@ -3,11 +3,12 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
 using System.Collections.Generic;
+using Audio; // 引入音频管理器命名空间
 
 namespace UI
 {
     /// <summary>
-    /// 简化的主菜单管理器 - 专为多人游戏设计，支持自定义按钮
+    /// 简化的主菜单管理器 - 专为多人游戏设计，支持自定义按钮和音频管理器
     /// 流程：MainMenu → LobbyScene → RoomScene → NetworkGameScene
     /// </summary>
     public class MainMenuManager : MonoBehaviour
@@ -20,7 +21,7 @@ namespace UI
         [SerializeField] private CustomButton exitButton;
 
         [Header("标题图片")]
-        [SerializeField] private GameObject titleImage;  // 新增：标题图片引用
+        [SerializeField] private GameObject titleImage;  // 标题图片引用
 
         [Header("设置面板")]
         [SerializeField] private GameObject settingsPanel;
@@ -37,14 +38,38 @@ namespace UI
         [Header("场景配置")]
         [SerializeField] private string lobbyScene = "LobbyScene";
 
+        [Header("音频配置")]
+        [SerializeField] private bool playMenuMusic = true;
+        [SerializeField] private string menuMusicId = "";
+        [SerializeField] private bool enableButtonSounds = true;
+        [SerializeField] private string buttonClickSFX = "button_click";
+        [SerializeField] private float musicFadeTime = 2f;
+
         [Header("调试设置")]
         [SerializeField] private bool enableDebugLogs = true;
 
         private void Start()
         {
             Application.runInBackground = true;
+            InitializeAudio();
             InitializeUI();
             ShowMainMenu();
+        }
+
+        /// <summary>
+        /// 初始化音频系统
+        /// </summary>
+        private void InitializeAudio()
+        {
+            // 同步音量设置到AudioManager
+            SyncAudioSettings();
+
+            // 播放菜单音乐
+            if (playMenuMusic && !string.IsNullOrEmpty(menuMusicId))
+            {
+                AudioManager.PlayMusic(menuMusicId, musicFadeTime);
+                LogDebug($"开始播放菜单音乐: {menuMusicId}");
+            }
         }
 
         /// <summary>
@@ -53,15 +78,62 @@ namespace UI
         private void InitializeUI()
         {
             // 绑定主菜单自定义按钮事件
-            enterLobbyButton.AddClickListener(OnEnterLobbyClicked);
-            settingsButton.AddClickListener(OnSettingsClicked);
-            creditsButton.AddClickListener(OnCreditsClicked);
-            exitButton.AddClickListener(OnExitClicked);
+            if (enterLobbyButton != null)
+                enterLobbyButton.AddClickListener(OnEnterLobbyClicked);
+            if (settingsButton != null)
+                settingsButton.AddClickListener(OnSettingsClicked);
+            if (creditsButton != null)
+                creditsButton.AddClickListener(OnCreditsClicked);
+            if (exitButton != null)
+                exitButton.AddClickListener(OnExitClicked);
+
+            // 设置按钮悬停音效
+            SetupButtonHoverEffects();
 
             // 初始化设置
             InitializeSettings();
 
             LogDebug("MainMenuManager 初始化完成");
+        }
+
+        /// <summary>
+        /// 设置按钮悬停音效
+        /// </summary>
+        private void SetupButtonHoverEffects()
+        {
+            // 简化：不添加悬停音效，避免过于频繁的音效播放
+            // 如果需要悬停音效，可以取消注释以下代码
+
+            /*
+            if (!enableButtonSounds || string.IsNullOrEmpty(buttonClickSFX)) return;
+
+            // 为每个按钮添加悬停音效（使用点击音效，音量降低）
+            AddHoverEffect(enterLobbyButton?.GetComponent<Button>());
+            AddHoverEffect(settingsButton?.GetComponent<Button>());
+            AddHoverEffect(creditsButton?.GetComponent<Button>());
+            AddHoverEffect(exitButton?.GetComponent<Button>());
+            */
+        }
+
+        /// <summary>
+        /// 为按钮添加悬停音效（备用方法）
+        /// </summary>
+        private void AddHoverEffect(Button button)
+        {
+            if (button == null) return;
+
+            // 添加EventTrigger组件处理悬停事件
+            var eventTrigger = button.GetComponent<UnityEngine.EventSystems.EventTrigger>();
+            if (eventTrigger == null)
+                eventTrigger = button.gameObject.AddComponent<UnityEngine.EventSystems.EventTrigger>();
+
+            // 添加鼠标进入事件（使用点击音效，音量降低）
+            var pointerEnter = new UnityEngine.EventSystems.EventTrigger.Entry();
+            pointerEnter.eventID = UnityEngine.EventSystems.EventTriggerType.PointerEnter;
+            pointerEnter.callback.AddListener((data) => {
+                AudioManager.PlaySFX(buttonClickSFX, 0.3f); // 降低音量的悬停效果
+            });
+            eventTrigger.triggers.Add(pointerEnter);
         }
 
         /// <summary>
@@ -74,7 +146,7 @@ namespace UI
         }
 
         /// <summary>
-        /// 初始化音量设置
+        /// 初始化音量设置 - 支持反向滑块
         /// </summary>
         private void InitializeVolumeSettings()
         {
@@ -82,28 +154,30 @@ namespace UI
             if (masterVolumeSlider != null)
             {
                 float savedMasterVolume = PlayerPrefs.GetFloat("MasterVolume", 0.8f);
-                masterVolumeSlider.value = savedMasterVolume;
-                AudioListener.volume = savedMasterVolume;
+                // 反转滑块值：滑块显示值 = 1 - 实际音量
+                masterVolumeSlider.value = 1f - savedMasterVolume;
                 masterVolumeSlider.onValueChanged.AddListener(OnMasterVolumeChanged);
-                LogDebug($"主音量初始化: {savedMasterVolume:F2}");
+                LogDebug($"主音量初始化: {savedMasterVolume:F2} (滑块值: {masterVolumeSlider.value:F2})");
             }
 
             // 音乐音量设置
             if (musicVolumeSlider != null)
             {
                 float savedMusicVolume = PlayerPrefs.GetFloat("MusicVolume", 0.7f);
-                musicVolumeSlider.value = savedMusicVolume;
+                // 反转滑块值：滑块显示值 = 1 - 实际音量
+                musicVolumeSlider.value = 1f - savedMusicVolume;
                 musicVolumeSlider.onValueChanged.AddListener(OnMusicVolumeChanged);
-                LogDebug($"音乐音量初始化: {savedMusicVolume:F2}");
+                LogDebug($"音乐音量初始化: {savedMusicVolume:F2} (滑块值: {musicVolumeSlider.value:F2})");
             }
 
             // 音效音量设置
             if (sfxVolumeSlider != null)
             {
                 float savedSFXVolume = PlayerPrefs.GetFloat("SFXVolume", 0.8f);
-                sfxVolumeSlider.value = savedSFXVolume;
+                // 反转滑块值：滑块显示值 = 1 - 实际音量
+                sfxVolumeSlider.value = 1f - savedSFXVolume;
                 sfxVolumeSlider.onValueChanged.AddListener(OnSFXVolumeChanged);
-                LogDebug($"音效音量初始化: {savedSFXVolume:F2}");
+                LogDebug($"音效音量初始化: {savedSFXVolume:F2} (滑块值: {sfxVolumeSlider.value:F2})");
             }
         }
 
@@ -170,6 +244,17 @@ namespace UI
         }
 
         /// <summary>
+        /// 播放按钮点击音效
+        /// </summary>
+        private void PlayButtonClickSound()
+        {
+            if (enableButtonSounds && !string.IsNullOrEmpty(buttonClickSFX))
+            {
+                AudioManager.PlayUI(buttonClickSFX);
+            }
+        }
+
+        /// <summary>
         /// 显示设置面板（保持主菜单显示，隐藏标题图片）
         /// </summary>
         private void ShowSettingsPanel()
@@ -209,7 +294,12 @@ namespace UI
         /// </summary>
         private void OnEnterLobbyClicked()
         {
+            PlayButtonClickSound();
             LogDebug("进入大厅");
+
+            //// 淡出菜单音乐
+            //if (playMenuMusic)
+            //    AudioManager.StopMusic(musicFadeTime);
 
             // 进入大厅场景
             LoadLobbyScene();
@@ -220,6 +310,7 @@ namespace UI
         /// </summary>
         private void OnSettingsClicked()
         {
+            PlayButtonClickSound();
             LogDebug("打开设置面板");
             ShowSettingsPanel();
         }
@@ -229,6 +320,7 @@ namespace UI
         /// </summary>
         private void OnCreditsClicked()
         {
+            PlayButtonClickSound();
             LogDebug("打开制作名单");
             ShowCreditsPanel();
             LoadCreditsContent();
@@ -239,7 +331,11 @@ namespace UI
         /// </summary>
         private void OnExitClicked()
         {
+            PlayButtonClickSound();
             LogDebug("退出游戏");
+
+            // 停止所有音频
+            AudioManager.StopAll();
 
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
@@ -250,58 +346,42 @@ namespace UI
 
         #endregion
 
-        #region 输入事件处理
+        #region 输入事件处理 - 反向滑块支持
 
         /// <summary>
-        /// 主音量滑条变更
+        /// 主音量滑条变更 - 支持反向滑块
         /// </summary>
-        private void OnMasterVolumeChanged(float volume)
+        private void OnMasterVolumeChanged(float sliderValue)
         {
-            AudioListener.volume = volume;
-            PlayerPrefs.SetFloat("MasterVolume", volume);
-            LogDebug($"主音量设置为: {volume:F2}");
+            // 反转滑块值：实际音量 = 1 - 滑块值
+            float actualVolume = 1f - sliderValue;
+            AudioManager.SetMasterVolume(actualVolume);
+            PlayerPrefs.SetFloat("MasterVolume", actualVolume);
+            LogDebug($"主音量设置为: {actualVolume:F2} (滑块值: {sliderValue:F2})");
         }
 
         /// <summary>
-        /// 音乐音量滑条变更
+        /// 音乐音量滑条变更 - 支持反向滑块
         /// </summary>
-        private void OnMusicVolumeChanged(float volume)
+        private void OnMusicVolumeChanged(float sliderValue)
         {
-            PlayerPrefs.SetFloat("MusicVolume", volume);
-
-            // 通知音乐管理器更新音量
-            GameObject musicManager = GameObject.FindWithTag("MusicManager");
-            if (musicManager != null)
-            {
-                var audioSource = musicManager.GetComponent<AudioSource>();
-                if (audioSource != null)
-                {
-                    audioSource.volume = volume;
-                }
-            }
-
-            LogDebug($"音乐音量设置为: {volume:F2}");
+            // 反转滑块值：实际音量 = 1 - 滑块值
+            float actualVolume = 1f - sliderValue;
+            AudioManager.SetMusicVolume(actualVolume);
+            PlayerPrefs.SetFloat("MusicVolume", actualVolume);
+            LogDebug($"音乐音量设置为: {actualVolume:F2} (滑块值: {sliderValue:F2})");
         }
 
         /// <summary>
-        /// 音效音量滑条变更
+        /// 音效音量滑条变更 - 支持反向滑块
         /// </summary>
-        private void OnSFXVolumeChanged(float volume)
+        private void OnSFXVolumeChanged(float sliderValue)
         {
-            PlayerPrefs.SetFloat("SFXVolume", volume);
-
-            // 通知音效管理器更新音量
-            GameObject sfxManager = GameObject.FindWithTag("SFXManager");
-            if (sfxManager != null)
-            {
-                var audioSources = sfxManager.GetComponents<AudioSource>();
-                foreach (var audioSource in audioSources)
-                {
-                    audioSource.volume = volume;
-                }
-            }
-
-            LogDebug($"音效音量设置为: {volume:F2}");
+            // 反转滑块值：实际音量 = 1 - 滑块值
+            float actualVolume = 1f - sliderValue;
+            AudioManager.SetSFXVolume(actualVolume);
+            PlayerPrefs.SetFloat("SFXVolume", actualVolume);
+            LogDebug($"音效音量设置为: {actualVolume:F2} (滑块值: {sliderValue:F2})");
         }
 
         /// <summary>
@@ -393,7 +473,7 @@ namespace UI
 策划: Alexa
 程序: Alexa
 美术: Alexa
-音效: [音效师名称]
+音效: https://opengameart.org/
 
 <color=#4A90E2><b>特别感谢：</b></color></size>
 所有测试玩家
@@ -407,6 +487,22 @@ Photon PUN2
 
 © 2025 语文课堂开发团队
 保留所有权利";
+        }
+
+        /// <summary>
+        /// 同步音频设置到AudioManager
+        /// </summary>
+        private void SyncAudioSettings()
+        {
+            float masterVolume = PlayerPrefs.GetFloat("MasterVolume", 0.8f);
+            float musicVolume = PlayerPrefs.GetFloat("MusicVolume", 0.7f);
+            float sfxVolume = PlayerPrefs.GetFloat("SFXVolume", 0.8f);
+
+            AudioManager.SetMasterVolume(masterVolume);
+            AudioManager.SetMusicVolume(musicVolume);
+            AudioManager.SetSFXVolume(sfxVolume);
+
+            LogDebug("音频设置已同步到AudioManager");
         }
 
         #endregion
@@ -453,29 +549,32 @@ Photon PUN2
         }
 
         /// <summary>
-        /// 重置所有设置为默认值
+        /// 重置所有设置为默认值 - 支持反向滑块
         /// </summary>
         public void ResetToDefaults()
         {
             LogDebug("重置所有设置为默认值");
 
-            // 重置音量设置
+            // 重置音量设置（注意反转）
             if (masterVolumeSlider != null)
             {
-                masterVolumeSlider.value = 0.8f;
-                OnMasterVolumeChanged(0.8f);
+                float defaultMasterVolume = 0.8f;
+                masterVolumeSlider.value = 1f - defaultMasterVolume; // 反转滑块值
+                OnMasterVolumeChanged(masterVolumeSlider.value);
             }
 
             if (musicVolumeSlider != null)
             {
-                musicVolumeSlider.value = 0.7f;
-                OnMusicVolumeChanged(0.7f);
+                float defaultMusicVolume = 0.7f;
+                musicVolumeSlider.value = 1f - defaultMusicVolume; // 反转滑块值
+                OnMusicVolumeChanged(musicVolumeSlider.value);
             }
 
             if (sfxVolumeSlider != null)
             {
-                sfxVolumeSlider.value = 0.8f;
-                OnSFXVolumeChanged(0.8f);
+                float defaultSFXVolume = 0.8f;
+                sfxVolumeSlider.value = 1f - defaultSFXVolume; // 反转滑块值
+                OnSFXVolumeChanged(sfxVolumeSlider.value);
             }
 
             // 重置显示设置
@@ -504,6 +603,28 @@ Photon PUN2
             {
                 // 保存当前设置
                 PlayerPrefs.Save();
+
+                // 暂停音频
+                AudioManager.PauseAll();
+            }
+            else
+            {
+                // 恢复音频
+                AudioManager.ResumeAll();
+            }
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus)
+            {
+                // 失去焦点时暂停音频
+                AudioManager.PauseAll();
+            }
+            else
+            {
+                // 获得焦点时恢复音频
+                AudioManager.ResumeAll();
             }
         }
 
