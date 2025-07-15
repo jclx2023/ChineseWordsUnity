@@ -67,7 +67,7 @@ namespace UI
             // 播放菜单音乐
             if (playMenuMusic && !string.IsNullOrEmpty(menuMusicId))
             {
-                AudioManager.PlayMusic(menuMusicId, musicFadeTime);
+                AudioManager.PlayMusic(menuMusicId);
                 LogDebug($"开始播放菜单音乐: {menuMusicId}");
             }
         }
@@ -131,7 +131,7 @@ namespace UI
             var pointerEnter = new UnityEngine.EventSystems.EventTrigger.Entry();
             pointerEnter.eventID = UnityEngine.EventSystems.EventTriggerType.PointerEnter;
             pointerEnter.callback.AddListener((data) => {
-                AudioManager.PlaySFX(buttonClickSFX, 0.3f); // 降低音量的悬停效果
+                AudioManager.PlaySFX(buttonClickSFX); // 降低音量的悬停效果
             });
             eventTrigger.triggers.Add(pointerEnter);
         }

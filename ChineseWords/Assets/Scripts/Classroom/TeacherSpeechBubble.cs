@@ -223,7 +223,7 @@ namespace Classroom.Teacher
                 GameObject textGO = new GameObject("SpeechText");
                 textGO.transform.SetParent(bubbleRenderer.transform);
                 textGO.transform.localPosition = Vector3.zero;
-                textGO.transform.localRotation = Quaternion.Euler(0, 180, 0); // Y轴旋转180度修正朝向
+                textGO.transform.localRotation = Quaternion.Euler(0, 0, 0); // Y轴旋转180度修正朝向
 
                 bubbleText = textGO.AddComponent<TextMeshPro>();
                 bubbleText.text = "";

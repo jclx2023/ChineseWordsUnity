@@ -493,7 +493,7 @@ namespace Core.Network
             OnAnswerResultReceived?.Invoke(isCorrect, correctAnswer);
             MessageNotifier.Show($"回答{(isCorrect ? "正确" : "错误")} - {correctAnswer}",
                 isCorrect ? MessageType.Success : MessageType.Error);
-            AudioManager.PlayMusic(isCorrect ? "SFX_correct":"SFX_false", 0.1f);
+            AudioManager.PlaySFX(isCorrect ? "SFX_correct":"SFX_false");
         }
 
         public void BroadcastPlayerTurnChanged(ushort newTurnPlayerId)
@@ -879,8 +879,8 @@ namespace Core.Network
             OnGameVictory?.Invoke((ushort)winnerId, winnerName, reason);
             NotifyComponent<NetworkQuestionManagerController>("StopGame");
 
-            if (winnerId == ClientId) { AudioManager.PlayMusic("you_win", -0.2f); }
-            else { AudioManager.PlayMusic("you_lose", -0.2f); }
+            if (winnerId == ClientId) { AudioManager.PlaySFX("you_win"); }
+            else { AudioManager.PlaySFX("you_lose"); }
 
             // 新增：延迟重置房间状态
             if (IsHost)
